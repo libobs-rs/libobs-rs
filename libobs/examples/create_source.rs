@@ -13,7 +13,7 @@ fn main() {
             panic!("error: obs already initialized");
         }
         println!("OBS not yet initialized, continuing");
-
+        /*
         #[cfg(not(target_os = "windows"))]
         {
             println!("Setting NIX platform to X11_EGL");
@@ -23,14 +23,11 @@ fn main() {
             println!("X display pointer: {:?}", display);
             libobs::obs_set_nix_platform_display(display);
             println!("NIX platform display set");
-        }
+        } */
 
-        #[cfg(target_os = "windows")]
-        {
-            println!("Setting log handler on Windows");
-            libobs::base_set_log_handler(Some(log_handler), ptr::null_mut());
-            println!("Log handler set successfully");
-        }
+        println!("Setting log handler");
+        libobs::base_set_log_handler(Some(log_handler), ptr::null_mut());
+        println!("Log handler set successfully");
 
         println!("Retrieving libobs version string...");
         let version_ptr = libobs::obs_get_version_string();
@@ -165,15 +162,15 @@ fn main() {
     }
 }
 
-#[cfg(target_os = "windows")]
-pub(crate) unsafe extern "C" fn log_handler(
+pub(crate) unsafe extern "C" fn log_handler<V>(
     log_level: i32,
     msg: *const i8,
-    args: *mut i8,
+    args: *mut V,
     _params: *mut c_void,
 ) {
     // Simple logger that prints directly to console
     // In a real-world application, you would use vsnprintf to format the message properly
+    let log_level = log_level as libobs::_bindgen_ty_1;
     let level_str = match log_level {
         libobs::LOG_ERROR => "ERROR",
         libobs::LOG_WARNING => "WARNING",

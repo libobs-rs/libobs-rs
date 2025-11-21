@@ -1,3 +1,5 @@
+#![cfg(target_family = "windows")]
+
 /// Standalone reproduction for OBS crash when switching encoders
 ///
 /// Expected result: Crash eventually occurs on NVENC

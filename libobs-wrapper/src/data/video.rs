@@ -163,7 +163,7 @@ impl ObsVideoInfoBuilder {
     /// if the OS supports DX11 (Windows)
     /// or not (OpenGL on MacOS and Unix).
     pub fn new() -> Self {
-        let display_infos = DisplayInfo::all().unwrap();
+        let display_infos = DisplayInfo::all().unwrap_or_default();
         let (mut width, mut height) = (1920, 1080);
         for display_info in display_infos {
             if display_info.is_primary {

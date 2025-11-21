@@ -31,7 +31,11 @@ fn get_encoders_raw(
     encoder_type: ObsEncoderType,
     runtime: &ObsRuntime,
 ) -> Result<Vec<String>, ObsError> {
+    #[cfg(target_os = "windows")]
     let type_primitive = encoder_type.to_i32().unwrap();
+
+    #[cfg(not(target_os = "windows"))]
+    let type_primitive = encoder_type.to_u32().unwrap();
 
     run_with_obs!(runtime, move || {
         let mut n = 0;

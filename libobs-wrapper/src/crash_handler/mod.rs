@@ -39,14 +39,14 @@ lazy_static! {
         }
         #[cfg(not(feature="dialog_crash_handler"))]
         {
-            Mutex::new(Box::new(ConsoleCrashHandler {}))
+            Mutex::new(Box::new(ConsoleCrashHandler { _private: () }))
         }
     };
 }
 
-pub(crate) unsafe extern "C" fn main_crash_handler(
-    format: *const i8,
-    args: *mut i8,
+pub(crate) unsafe extern "C" fn main_crash_handler<V>(
+    format: *const std::os::raw::c_char,
+    args: *mut V,
     _params: *mut c_void,
 ) {
     let res = vsprintf::vsprintf(format, args);

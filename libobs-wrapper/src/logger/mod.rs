@@ -16,10 +16,10 @@ lazy_static! {
     pub static ref LOGGER: Mutex<Box<dyn ObsLogger>> = Mutex::new(Box::new(ConsoleLogger::new()));
 }
 
-pub(crate) unsafe extern "C" fn extern_log_callback(
+pub(crate) unsafe extern "C" fn extern_log_callback<V>(
     log_level: i32,
     msg: *const i8,
-    args: *mut i8,
+    args: *mut V,
     _params: *mut c_void,
 ) {
     let level = ObsLogLevel::from_i32(log_level);

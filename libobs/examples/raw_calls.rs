@@ -1,9 +1,11 @@
+#[cfg(windows)]
 use std::{
     env::current_exe,
     ffi::{c_void, CStr, CString},
     ptr,
 };
 
+#[cfg(windows)]
 fn main() {
     // STARTUP
     unsafe {
@@ -13,18 +15,18 @@ fn main() {
             panic!("error: obs already initialized");
         }
         println!("OBS not yet initialized, continuing");
-
-        #[cfg(not(target_os = "windows"))]
-        {
-            println!("Setting NIX platform to X11_EGL");
-            libobs::obs_set_nix_platform(libobs::obs_nix_platform_type_OBS_NIX_PLATFORM_X11_EGL);
-            println!("Opening X display");
-            let display = x_open_display(ptr::null_mut());
-            println!("X display pointer: {:?}", display);
-            libobs::obs_set_nix_platform_display(display);
-            println!("NIX platform display set");
-        }
-
+        /*
+               #[cfg(not(target_os = "windows"))]
+               {
+                   println!("Setting NIX platform to X11_EGL");
+                   libobs::obs_set_nix_platform(libobs::obs_nix_platform_type_OBS_NIX_PLATFORM_X11_EGL);
+                   println!("Opening X display");
+                   let display = x_open_display(ptr::null_mut());
+                   println!("X display pointer: {:?}", display);
+                   libobs::obs_set_nix_platform_display(display);
+                   println!("NIX platform display set");
+               }
+        */
         #[cfg(target_os = "windows")]
         {
             println!("Setting log handler on Windows");
@@ -319,16 +321,7 @@ fn main() {
     }
 }
 
-#[cfg(not(target_os = "windows"))]
-fn x_open_display(display: *mut c_void) -> *mut c_void {
-    extern "C" {
-        fn XOpenDisplay(display: *mut c_void) -> *mut c_void;
-    }
-
-    unsafe { XOpenDisplay(display) }
-}
-
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 pub(crate) unsafe extern "C" fn log_handler(
     log_level: i32,
     msg: *const i8,
@@ -351,4 +344,9 @@ pub(crate) unsafe extern "C" fn log_handler(
         return;
     }
     println!("[{}] {}", level_str, formatted.unwrap());
+}
+
+#[cfg(not(windows))]
+fn main() {
+    println!("This example is only supported on Windows.");
 }

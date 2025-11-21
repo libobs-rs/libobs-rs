@@ -168,6 +168,12 @@ pub fn install() -> anyhow::Result<()> {
 /// - Locking to prevent concurrent builds
 /// - Copying binaries to the target directory
 pub fn build_obs_binaries(config: ObsBuildConfig) -> anyhow::Result<()> {
+    //TODO For build scripts, we should actually check the TARGET env var instead of just erroring out on linux, but I don't think anyone will be cross-compiling
+
+    if cfg!(target_os = "linux") {
+        return Err(anyhow::anyhow!("You must build OBS Studio from source on Linux and install it. Instructions: https://github.com/obsproject/obs-studio/wiki/Build-Instructions-For-Linux"));
+    }
+
     let ObsBuildConfig {
         mut cache_dir,
         repo_id,

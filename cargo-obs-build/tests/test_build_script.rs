@@ -1,3 +1,5 @@
+#![cfg(not(target_os = "linux"))]
+
 #[test]
 fn test_build_script_project() {
     let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));

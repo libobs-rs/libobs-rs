@@ -73,6 +73,3 @@ fn main() {
     eprintln!("This binary requires the 'cli' feature to be enabled.");
     std::process::exit(1);
 }
-
-#[cfg(not(target_family = "windows"))]
-compile_error!("cargo-obs-build is only supported on Windows targets.");

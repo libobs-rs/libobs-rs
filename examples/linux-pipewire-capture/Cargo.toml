@@ -1,0 +1,10 @@
+[package]
+name = "linux-pipewire-capture"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+libobs-wrapper = { workspace = true }
+libobs-sources = { path = "../../libobs-sources" }
+anyhow = "1.0.98"

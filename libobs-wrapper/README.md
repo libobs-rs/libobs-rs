@@ -18,7 +18,9 @@ A safe, ergonomic Rust wrapper around the OBS (Open Broadcaster Software) Studio
 
 ## Prerequisites
 
-The library needs OBS binaries in your target directory. There are multiple ways to set this up:
+The library needs OBS binaries in your target directory for Windows and MacOS.
+If you want to target Linux, users (you included) must [build and install](https://github.com/obsproject/obs-studio/wiki/Build-Instructions-For-Linux) OBS Studio manually from source.
+For Windows and Macos, there are multiple ways to set this up:
 
 ### Option 1: Using cargo-obs-build (Recommended for development)
 

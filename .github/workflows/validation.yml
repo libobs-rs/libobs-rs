@@ -10,29 +10,136 @@ on:
 jobs:
   build-test:
     name: Build and Test
-    runs-on: windows-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest]
     steps:
       - uses: actions/checkout@v4
-      - name: Cache
+      - uses: Swatinem/rust-cache@v2
+      - name: Cache cargo-obs-build Installation
         uses: actions/cache@v4
+        if: matrix.os != 'ubuntu-latest'
+        id: cargo-obs-cacje
         with:
           path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
             obs-build
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-obs-build-${{ hashFiles('Cargo.toml') }}-v2
+      - name: Cache OBS Studio Installation
+        uses: actions/cache@v4
+        if: matrix.os == 'ubuntu-latest'
+        id: obs-cache
+        with:
+          path: |
+            /usr/lib/libobs*
+            /usr/lib/x86_64-linux-gnu/libobs*
+            /usr/lib/pkgconfig/libobs.pc
+            /usr/lib/x86_64-linux-gnu/pkgconfig/libobs.pc
+            /usr/include/obs
+            /usr/share/obs
+          key: ${{ runner.os }}-obs-studio-${{ hashFiles('.github/workflows/validation.yml') }}-v2
+          restore-keys: |
+            ${{ runner.os }}-obs-studio-
+
       - uses: taiki-e/install-action@nextest
+
+      - uses: awalsh128/cache-apt-pkgs-action@latest
+        if: matrix.os == 'ubuntu-latest'
+        with:
+          packages: cmake extra-cmake-modules ninja-build pkg-config clang clang-format build-essential curl ccache git zsh libavcodec-dev libavdevice-dev libavfilter-dev libavformat-dev libavutil-dev libswresample-dev libswscale-dev libx264-dev libcurl4-openssl-dev libmbedtls-dev libgl1-mesa-dev libjansson-dev libluajit-5.1-dev python3-dev libx11-dev libxcb-randr0-dev libxcb-shm0-dev libxcb-xinerama0-dev libxcb-composite0-dev libxcomposite-dev libxinerama-dev libxcb1-dev libx11-xcb-dev libxcb-xfixes0-dev swig libcmocka-dev libxss-dev libglvnd-dev libgles2-mesa-dev libwayland-dev librist-dev libsrt-openssl-dev libpci-dev libpipewire-0.3-dev libqrcodegencpp-dev uthash-dev libsimde-dev qt6-base-dev qt6-base-private-dev qt6-svg-dev qt6-wayland qt6-image-formats-plugins libasound2-dev libfdk-aac-dev libfontconfig-dev libfreetype6-dev libjack-jackd2-dev libpulse-dev libsndio-dev libspeexdsp-dev libudev-dev libv4l-dev libva-dev libvlc-dev libvpl-dev libdrm-dev nlohmann-json3-dev libwebsocketpp-dev libasio-dev libffmpeg-nvenc-dev xvfb ffmpeg libblas-dev libblas3 liblapack3
+          version: 1.0
+      - name: Symlink libraries
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo ln -sf /usr/lib/x86_64-linux-gnu/blas/libblas.so.3 /usr/lib/x86_64-linux-gnu/libblas.so.3
+          sudo ln -sf /usr/lib/x86_64-linux-gnu/lapack/liblapack.so.3 /usr/lib/x86_64-linux-gnu/liblapack.so.3
+
+      - name: Build and Install OBS Studio from Source
+        if: matrix.os == 'ubuntu-latest' && steps.obs-cache.outputs.cache-hit != 'true'
+        run: |
+          # Clone OBS Studio repository
+          git clone --recursive https://github.com/obsproject/obs-studio.git /tmp/obs-studio
+          cd /tmp/obs-studio
+
+          # Get the latest stable tag
+          git fetch --tags
+          LATEST_TAG=$(git describe --tags --abbrev=0)
+          echo "Building OBS Studio version: $LATEST_TAG"
+          git checkout $LATEST_TAG
+          git submodule update --init --recursive
+
+          # Configure build with CMAKE_INSTALL_PREFIX=/usr
+          cmake --preset ubuntu \
+            -DCMAKE_INSTALL_PREFIX=/usr \
+            -DENABLE_BROWSER=OFF
+
+          # Build OBS Studio
+          cmake --build build_ubuntu --parallel $(nproc)
+
+          # Install OBS Studio to /usr
+          sudo cmake --install build_ubuntu
+
       - name: Install cargo-obs-build from crates.io
         uses: baptiste0928/cargo-install@v3
+        if: matrix.os != 'ubuntu-latest'
         with:
           crate: cargo-obs-build
 
-      - name: Install OBS build dependencies
+      - name: Install cargo-hack from crates.io
+        uses: baptiste0928/cargo-install@v3
+        with:
+          crate: cargo-hack
+      - name: Install OBS build dependencies (Windows)
+        if: matrix.os != 'ubuntu-latest'
         run: cargo obs-build --out-dir target/debug/deps
 
-      - name: Install OBS build dependencies
+      - name: Install OBS build dependencies (Windows - nextest)
+        if: matrix.os != 'ubuntu-latest'
         run: cargo obs-build --out-dir target/nextest-all-features/debug/deps
+
+      - name: Set up virtual display for Linux
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          # Start virtual display
+          export DISPLAY=:99
+          Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
+
+          # Wait for Xvfb to start
+          sleep 3
+
+          # Set display environment variable for subsequent steps
+          echo "DISPLAY=:99" >> $GITHUB_ENV
+
+      - name: Set up OBS environment for Linux
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          # Update pkg-config path to include OBS libraries
+          echo "PKG_CONFIG_PATH=/usr/lib/pkgconfig:/usr/lib/x86_64-linux-gnu/pkgconfig:$PKG_CONFIG_PATH" >> $GITHUB_ENV
+          echo "LD_LIBRARY_PATH=/usr/lib:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH" >> $GITHUB_ENV
+
+          # Verify OBS installation
+          echo "=== OBS Installation Verification ==="
+          if [ -f "/usr/lib/pkgconfig/libobs.pc" ] || [ -f "/usr/lib/x86_64-linux-gnu/pkgconfig/libobs.pc" ]; then
+            echo "✓ OBS Studio pkg-config file found"
+            if pkg-config --exists libobs; then
+              echo "✓ libobs pkg-config validation passed"
+              echo "✓ libobs version: $(pkg-config --modversion libobs)"
+              echo "✓ libobs cflags: $(pkg-config --cflags libobs)"
+              echo "✓ libobs libs: $(pkg-config --libs libobs)"
+            else
+              echo "✗ libobs pkg-config validation failed"
+              exit 1
+            fi
+          else
+            echo "✗ libobs.pc not found in expected locations"
+            echo "Searching for libobs.pc..."
+            find /usr -name "libobs.pc" 2>/dev/null || echo "libobs.pc not found anywhere in /usr"
+            echo "Available .pc files:"
+            find /usr -name "*.pc" -path "*/pkgconfig/*" | grep -i obs || echo "No OBS-related .pc files found"
+            exit 1
+          fi
+          echo "======================================"
+
       # Check if formatting is correct
       - name: Check Rust formatting
         run: cargo fmt -- --check
@@ -41,11 +148,8 @@ jobs:
         run: cargo clippy -- -D warnings
       # Run cargo check to ensure code will compile
       - name: Check code compilation
-        run: cargo check --all
-        shell: pwsh
+        run: cargo hack check --feature-powerset --no-dev-deps --all --skip generate_bindings
       - name: Run tests (no default features)
         run: cargo nextest r --profile ci --no-default-features --features "__test_environment"
-        shell: pwsh
       - name: Run tests (with default features)
         run: cargo nextest r --profile ci --all-features --target-dir target/nextest-all-features
-        shell: pwsh

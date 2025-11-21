@@ -45,7 +45,10 @@ macro_rules! impl_from_property {
                     };
 
                     let number_type = unsafe { libobs::[<obs_property_ $obs_number_name _type >](pointer) };
+                    #[cfg(target_family="windows")]
                     let number_type = ObsNumberType::from_i32(number_type);
+                    #[cfg(not(target_family="windows"))]
+                    let number_type = ObsNumberType::from_u32(number_type);
                     if number_type.is_none() {
                         panic!("Invalid number type got none");
                     }

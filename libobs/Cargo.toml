@@ -17,8 +17,15 @@ license = "GPL-3.0"
 edition = "2021"
 build = "build.rs"
 
-[build-dependencies]
+[target.'cfg(target_family = "windows")'.build-dependencies]
 bindgen = { version = "0.72.1", optional = true }
+
+# For non-windows targets, bindgen is always required to generate bindings
+[target.'cfg(not(target_family = "windows"))'.build-dependencies]
+bindgen = "0.72.1"
+
+[target.'cfg(target_os = "linux")'.build-dependencies]
+pkg-config = "0.3"
 
 [features]
 default = []

@@ -82,7 +82,12 @@ pub(crate) fn get_properties_inner(
             let name = name.to_string_lossy().to_string();
 
             let p_type = unsafe { libobs::obs_property_get_type(property) };
+
+            #[cfg(target_family = "windows")]
             let p_type = ObsPropertyType::from_i32(p_type);
+
+            #[cfg(not(target_family = "windows"))]
+            let p_type = ObsPropertyType::from_u32(p_type);
 
             println!("Property: {:?}", name);
             match p_type {

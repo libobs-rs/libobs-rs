@@ -5,6 +5,8 @@
 
 A utility crate for automatically downloading and installing OBS (Open Broadcaster Software) Studio binaries at runtime. This crate is part of the libobs-rs ecosystem and is designed to make distributing OBS-based applications easier by handling the setup of OBS binaries.
 
+Note: This crate currently supports Windows and MacOS platforms. Linux users must [build and install](https://github.com/obsproject/obs-studio/wiki/Build-Instructions-For-Linux) OBS Studio from source.
+
 ## Features
 
 - **Automatic OBS Download**: Downloads appropriate OBS binaries at runtime

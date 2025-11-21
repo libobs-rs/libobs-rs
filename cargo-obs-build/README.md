@@ -2,6 +2,10 @@
 
 A library and CLI tool for building and installing libOBS binaries. It automatically downloads the correct version of OBS Studio binaries based on your `libobs` crate version, handling caching and version compatibility.
 
+Note: On Linux, you must build OBS Studio from source and install it manually. See [Build Instructions For Linux](https://github.com/obsproject/obs-studio/wiki/Build-Instructions-For-Linux).
+
+For Windows and macOS, this tool will download prebuilt binaries.
+
 ## Usage
 
 ### As a CLI Tool

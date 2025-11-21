@@ -29,6 +29,7 @@ pub enum ObsError {
     OutputPauseFailure(Option<String>),
     OutputNotFound,
     SourceNotFound,
+    SourceNotAvailable(String),
     /// Error converting a string between Rust and OBS
     StringConversionError,
 
@@ -50,6 +51,9 @@ pub enum ObsError {
 
     /// Encoder is still active, stop the attached output before proceeding
     EncoderActive,
+
+    /// Error during platform-specific initialization
+    PlatformInitError(String),
 }
 
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -72,6 +76,7 @@ impl Display for ObsError {
             ObsError::DisplayCreationError(e) => write!(f, "Native error from the Windows API when creating a display: {:?}", e),
             ObsError::OutputSaveBufferFailure(e) => write!(f, "Couldn't save output buffer: {:?}", e),
             ObsError::SourceNotFound => write!(f, "Source not found."),
+            ObsError::SourceNotAvailable(source_name) => write!(f, "Source {} is not available. See logs or similar to check why.", source_name),
             ObsError::InvocationError(e) => write!(f, "The obs thread couldn't be called: {:?}", e),
             ObsError::JsonParseError => write!(f, "Failed to parse JSON data."),
             ObsError::NoSenderError => write!(f, "Couldn't get the sender of the signal."),
@@ -81,6 +86,7 @@ impl Display for ObsError {
             ObsError::Unexpected(e) => write!(f, "Unexpected error: {:?}", e),
             ObsError::EncoderActive => write!(f, "Encoder is still active, stop the attached output before proceeding"),
             ObsError::StringConversionError => write!(f, "Error converting a string between Rust and OBS"),
+            ObsError::PlatformInitError(e) => write!(f, "Error during platform-specific initialization: {}", e),
         }
     }
 }

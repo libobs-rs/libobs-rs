@@ -1,10 +1,14 @@
+#![cfg(target_family = "windows")]
+
 use std::pin::Pin;
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
 
 use libobs_sources::windows::MonitorCaptureSourceBuilder;
 use libobs_wrapper::data::video::ObsVideoInfoBuilder;
-use libobs_wrapper::display::{ObsDisplayCreationData, ObsDisplayRef, WindowPositionTrait};
+use libobs_wrapper::display::{
+    ObsDisplayCreationData, ObsDisplayRef, ObsWindowHandle, WindowPositionTrait,
+};
 use libobs_wrapper::encoders::{ObsAudioEncoderType, ObsContextEncoders, ObsVideoEncoderType};
 use libobs_wrapper::sources::ObsSourceRef;
 use libobs_wrapper::unsafe_send::Sendable;
@@ -46,11 +50,16 @@ impl ApplicationHandler for App {
         };
 
         println!("Created window with hwnd size {width} {height}: {:?}", hwnd);
-        let hwnd = Sendable(hwnd);
         let w = self.window.clone();
         let d_rw = self.display.clone();
         let ctx = self.context.clone();
-        let data = ObsDisplayCreationData::new(hwnd.0.get(), 0, 0, width, height);
+        let data = ObsDisplayCreationData::new(
+            ObsWindowHandle::new_from_handle(hwnd.get() as *mut _),
+            0,
+            0,
+            width,
+            height,
+        );
 
         let display = ctx.write().unwrap().display(data).unwrap();
 

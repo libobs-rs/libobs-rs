@@ -5,27 +5,34 @@
 
 #![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 
-#[cfg(not(windows))]
-compile_error!("This library only supports windows!");
-
 #[cfg(not(target_pointer_width = "64"))]
 compile_error!("compilation is only allowed for 64-bit targets");
 
 #[cfg_attr(coverage_nightly, coverage(off))]
+#[cfg(windows)]
 mod game;
 #[cfg_attr(coverage_nightly, coverage(off))]
+#[cfg(windows)]
 mod monitor;
+#[cfg(windows)]
 mod util;
 #[cfg_attr(coverage_nightly, coverage(off))]
+#[cfg(windows)]
 mod window;
 
+#[cfg(windows)]
 pub use util::*;
 #[cfg(test)]
+#[cfg(windows)]
 mod test;
 
+#[cfg(windows)]
 pub use game::*;
+#[cfg(windows)]
 pub use helper::*;
+#[cfg(windows)]
 use win_iterator::{first_window, next_window};
+#[cfg(windows)]
 use windows::Win32::{Foundation::HWND, System::Console::GetConsoleWindow};
 
 /// Retrieves information about all windows based on the specified search mode and game check flag.
@@ -38,6 +45,7 @@ use windows::Win32::{Foundation::HWND, System::Console::GetConsoleWindow};
 /// # Returns
 ///
 /// A `Result` containing a vector of `WindowInfo` structs representing the retrieved window information, or an `anyhow::Error` if an error occurs.
+#[cfg(windows)]
 pub fn get_all_windows(mode: WindowSearchMode) -> anyhow::Result<Vec<WindowInfo>> {
     let mut use_find_window_ex = false;
 
@@ -67,7 +75,10 @@ pub fn get_all_windows(mode: WindowSearchMode) -> anyhow::Result<Vec<WindowInfo>
     Ok(out)
 }
 
+#[cfg(windows)]
 const OBS_PIPE_NAME: &str = "CaptureHook_Pipe";
+
+#[cfg(windows)]
 pub fn is_window_in_use_by_other_instance(window_pid: u32) -> std::io::Result<bool> {
     #[cfg(not(windows))]
     return false;

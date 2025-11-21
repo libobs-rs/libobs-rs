@@ -1,3 +1,6 @@
+.direnv
+.envrc
+
 target
 src/bindings.rs
 obs-build
@@ -7,3 +10,4 @@ win-capture
 *.mp4
 
 .idea
+obs-studio

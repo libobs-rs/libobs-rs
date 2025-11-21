@@ -1,14 +1,15 @@
-use libobs::{gs_init_data, gs_window};
+use libobs::gs_init_data;
 use num_traits::ToPrimitive;
 
-use crate::unsafe_send::Sendable;
+use crate::display::ObsWindowHandle;
 
 use super::{GsColorFormat, GsZstencilFormat};
 
+pub type RawDisplayHandle = *mut ::std::os::raw::c_void;
+
 #[derive(Clone)]
 pub struct ObsDisplayCreationData {
-    #[cfg(target_family = "windows")]
-    pub(super) window_handle: Sendable<windows::Win32::Foundation::HWND>,
+    pub(super) window_handle: ObsWindowHandle,
     pub(super) create_child: bool,
     pub(super) x: i32,
     pub(super) y: i32,
@@ -22,13 +23,9 @@ pub struct ObsDisplayCreationData {
 }
 
 impl ObsDisplayCreationData {
-    #[cfg(target_family = "windows")]
-    pub fn new(window_handle: isize, x: i32, y: i32, width: u32, height: u32) -> Self {
-        use std::os::raw::c_void;
-        use windows::Win32::Foundation::HWND;
-
+    pub fn new(window_handle: ObsWindowHandle, x: i32, y: i32, width: u32, height: u32) -> Self {
         Self {
-            window_handle: Sendable(HWND(window_handle as *mut c_void)),
+            window_handle,
             create_child: true,
             format: GsColorFormat::BGRA,
             zsformat: GsZstencilFormat::ZSNone,
@@ -67,18 +64,34 @@ impl ObsDisplayCreationData {
         self
     }
 
+    /// If enabled, creating the display will result in a child window being created inside the provided window handle. The display is attached to that child window. This is on by default.
+    ///
+    /// ## Platform
+    /// This is only applicable on Windows.
     pub fn set_create_child(mut self, should_create: bool) -> Self {
         self.create_child = should_create;
         self
     }
 
-    pub(super) fn build(self, window: gs_window) -> gs_init_data {
+    pub(super) fn build(self, window_override: Option<ObsWindowHandle>) -> gs_init_data {
         gs_init_data {
             cx: self.width,
             cy: self.height,
+            #[cfg(target_family = "windows")]
             format: self.format.to_i32().unwrap(),
+
+            #[cfg(not(target_family = "windows"))]
+            format: self.format.to_u32().unwrap(),
+
+            #[cfg(not(target_family = "windows"))]
+            zsformat: self.zsformat.to_u32().unwrap(),
+
+            #[cfg(target_family = "windows")]
             zsformat: self.zsformat.to_i32().unwrap(),
-            window,
+
+            window: window_override
+                .map(|s| s.0 .0)
+                .unwrap_or_else(|| self.window_handle.0 .0),
             adapter: self.adapter,
             num_backbuffers: self.backbuffers,
         }

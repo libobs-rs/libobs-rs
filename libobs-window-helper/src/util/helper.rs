@@ -23,7 +23,7 @@ pub struct WindowInfo {
     pub full_exe: String,
     /// The unique identifier of the window in OBS.
     pub obs_id: String,
-    #[cfg(not(feature = "serde"))]
+    #[cfg(all(not(feature = "serde"), not(feature = "specta")))]
     /// The handle to the window (only enabled when feature `serde` is disabled).
     pub handle: HWND,
     /// The process ID of the window.
@@ -101,7 +101,7 @@ pub fn get_window_info(wnd: HWND) -> AnyResult<WindowInfo> {
     Ok(WindowInfo {
         full_exe: full_exe.to_string_lossy().to_string(),
         obs_id,
-        #[cfg(not(feature = "serde"))]
+        #[cfg(all(not(feature = "serde"), not(feature = "specta")))]
         handle: wnd,
         pid: proc_id,
         title,

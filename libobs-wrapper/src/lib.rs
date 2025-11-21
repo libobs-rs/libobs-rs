@@ -2,9 +2,6 @@
 
 use getters0::Getters;
 
-#[cfg(not(windows))]
-compiler_error!("libobs-wrapper can only be used in windows");
-
 pub mod context;
 pub mod crash_handler;
 pub mod data;

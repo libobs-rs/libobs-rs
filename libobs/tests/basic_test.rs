@@ -1,3 +1,4 @@
+#[cfg(windows)]
 use std::{
     env::current_exe,
     ffi::{c_void, CStr, CString},
@@ -5,6 +6,7 @@ use std::{
 };
 
 #[test]
+#[cfg(windows)]
 fn test_create_source() {
     // STARTUP
     unsafe {

@@ -14,6 +14,7 @@ pub struct StartupInfo {
     pub(crate) obs_audio_info: ObsAudioInfo,
     // Option because logger is taken when creating
     pub(crate) logger: Option<Box<dyn ObsLogger + Sync + Send>>,
+    pub(crate) start_glib_loop: bool,
 }
 
 impl StartupInfo {
@@ -44,6 +45,12 @@ impl StartupInfo {
     }
 
     #[cfg_attr(coverage_nightly, coverage(off))]
+    pub fn set_start_glib_loop(mut self, start: bool) -> Self {
+        self.start_glib_loop = start;
+        self
+    }
+
+    #[cfg_attr(coverage_nightly, coverage(off))]
     pub fn start(self) -> Result<ObsContext, ObsError> {
         ObsContext::new(self)
     }
@@ -56,6 +63,7 @@ impl Default for StartupInfo {
             obs_video_info: ObsVideoInfo::default(),
             obs_audio_info: ObsAudioInfo::default(),
             logger: Some(Box::new(ConsoleLogger::new())),
+            start_glib_loop: true,
         }
     }
 }

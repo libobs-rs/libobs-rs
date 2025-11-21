@@ -1,5 +1,7 @@
 //! This is derived from the frontend/obs-main.cpp.
 
+use std::sync::Arc;
+
 use windows::{
     core::PCWSTR,
     Win32::{
@@ -12,7 +14,11 @@ use windows::{
     },
 };
 
-pub fn load_debug_privilege() {
+use crate::utils::ObsError;
+
+#[derive(Debug)]
+pub(crate) struct PlatformSpecificGuard {}
+pub fn platform_specific_setup() -> Result<Option<Arc<PlatformSpecificGuard>>, ObsError> {
     unsafe {
         let flags = TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY;
         let mut tp = TOKEN_PRIVILEGES::default();
@@ -20,7 +26,7 @@ pub fn load_debug_privilege() {
         let mut val = LUID::default();
 
         if OpenProcessToken(GetCurrentProcess(), flags, &mut token).is_err() {
-            return;
+            return Ok(None);
         }
 
         if LookupPrivilegeValueW(PCWSTR::null(), SE_DEBUG_NAME, &mut val).is_ok() {
@@ -64,4 +70,6 @@ pub fn load_debug_privilege() {
 
         let _ = CloseHandle(token);
     }
+
+    Ok(None)
 }

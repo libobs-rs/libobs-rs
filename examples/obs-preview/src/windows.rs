@@ -9,7 +9,7 @@ use libobs_sources::windows::{ObsGameCaptureMode, WindowSearchMode};
 use libobs_sources::ObsObjectUpdater;
 use libobs_wrapper::data::video::ObsVideoInfoBuilder;
 use libobs_wrapper::display::{
-    MiscDisplayTrait, ObsDisplayCreationData, ObsDisplayRef, WindowPositionTrait,
+    ObsDisplayCreationData, ObsDisplayRef, ObsWindowHandle, WindowPositionTrait,
 };
 use libobs_wrapper::encoders::{ObsAudioEncoderType, ObsContextEncoders, ObsVideoEncoderType};
 use libobs_wrapper::sources::ObsSourceRef;
@@ -52,11 +52,16 @@ impl ApplicationHandler for App {
         };
 
         println!("Created window with hwnd size {width} {height}: {:?}", hwnd);
-        let hwnd = Sendable(hwnd);
         let w = self.window.clone();
         let d_rw = self.display.clone();
         let ctx = self.context.clone();
-        let data = ObsDisplayCreationData::new(hwnd.0.get(), 0, 0, width, height);
+        let data = ObsDisplayCreationData::new(
+            ObsWindowHandle::new_from_handle(hwnd.get() as *mut _),
+            0,
+            0,
+            width,
+            height,
+        );
 
         let display = ctx.write().unwrap().display(data).unwrap();
 
@@ -206,8 +211,8 @@ pub fn main() -> anyhow::Result<()> {
 
     let mut scene = context.scene("Main Scene")?;
 
-    let btd = GameCaptureSourceBuilder::get_windows(WindowSearchMode::ExcludeMinimized)?;
-    let apex = btd
+    let apex = GameCaptureSourceBuilder::get_windows(WindowSearchMode::ExcludeMinimized)?;
+    let apex = apex
         .iter()
         .find(|e| e.title.is_some() && e.title.as_ref().unwrap().contains("Apex"));
 

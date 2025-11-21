@@ -1,3 +1,5 @@
+#![cfg(target_family = "windows")]
+
 mod common;
 
 use std::{process::Command, time::Duration};

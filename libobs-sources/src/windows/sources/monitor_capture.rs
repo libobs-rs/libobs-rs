@@ -20,7 +20,7 @@ use super::ObsDisplayCaptureMethod;
 
 // Usage example
 define_object_manager!(
-    /// Provides a easy to use builder for the monitor capture source.
+    /// Provides an easy-to-use builder for the monitor capture source.
     #[derive(Debug)]
     struct MonitorCaptureSource("monitor_capture") for ObsSourceRef {
         #[obs_property(type_t = "string", settings_key = "monitor_id")]

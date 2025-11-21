@@ -7,22 +7,9 @@ use windows::Win32::{
     },
 };
 
-use crate::{display::MiscDisplayTrait, utils::ObsError};
+use crate::display::window_manager::WindowPositionTrait;
+use crate::utils::ObsError;
 use crate::{display::ObsDisplayRef, run_with_obs};
-
-pub trait WindowPositionTrait {
-    fn set_render_at_bottom(&self, render_at_bottom: bool) -> Result<(), ObsError>;
-    fn get_render_at_bottom(&self) -> Result<bool, ObsError>;
-    fn set_pos(&self, x: i32, y: i32) -> Result<(), ObsError>;
-    fn set_size(&self, width: u32, height: u32) -> Result<(), ObsError>;
-    fn set_scale(&self, scale: f32) -> Result<(), ObsError>;
-
-    fn get_pos(&self) -> Result<(i32, i32), ObsError>;
-
-    fn get_size(&self) -> Result<(u32, u32), ObsError>;
-
-    fn get_scale(&self) -> Result<f32, ObsError>;
-}
 
 impl WindowPositionTrait for ObsDisplayRef {
     fn set_render_at_bottom(&self, render_at_bottom: bool) -> Result<(), ObsError> {
@@ -67,8 +54,16 @@ impl WindowPositionTrait for ObsDisplayRef {
         unsafe {
             let flags = SWP_NOCOPYBITS | SWP_NOSIZE | SWP_NOACTIVATE;
             // Just use dummy values as size is not changed
-            SetWindowPos(m.hwnd.0, Some(insert_after), x, y, 1_i32, 1_i32, flags)
-                .map_err(|e| ObsError::DisplayCreationError(format!("{:?}", e)))?;
+            SetWindowPos(
+                m.window_handle.get_hwnd(),
+                Some(insert_after),
+                x,
+                y,
+                1_i32,
+                1_i32,
+                flags,
+            )
+            .map_err(|e| ObsError::DisplayCreationError(format!("{:?}", e)))?;
         }
 
         // Update color space when window position changes
@@ -76,22 +71,6 @@ impl WindowPositionTrait for ObsDisplayRef {
 
         self.update_color_space()?;
         Ok(())
-    }
-
-    fn get_pos(&self) -> Result<(i32, i32), ObsError> {
-        let m = self
-            .manager
-            .read()
-            .map_err(|e| ObsError::LockError(format!("{:?}", e)))?;
-        Ok((m.x, m.y))
-    }
-
-    fn get_size(&self) -> Result<(u32, u32), ObsError> {
-        let m = self
-            .manager
-            .read()
-            .map_err(|e| ObsError::LockError(format!("{:?}", e)))?;
-        Ok((m.width, m.height))
     }
 
     fn set_size(&self, width: u32, height: u32) -> Result<(), ObsError> {
@@ -111,7 +90,7 @@ impl WindowPositionTrait for ObsDisplayRef {
         let pointer = m.obs_display.as_ref().unwrap().clone();
         unsafe {
             SetWindowPos(
-                m.hwnd.0,
+                m.window_handle.get_hwnd(),
                 None,
                 m.x,
                 m.y,
@@ -121,7 +100,12 @@ impl WindowPositionTrait for ObsDisplayRef {
             )
             .map_err(|e| ObsError::DisplayCreationError(format!("{:?}", e)))?;
 
-            let _ = RedrawWindow(Some(m.hwnd.0), None, None, RDW_ERASE | RDW_INVALIDATE);
+            let _ = RedrawWindow(
+                Some(m.window_handle.get_hwnd()),
+                None,
+                None,
+                RDW_ERASE | RDW_INVALIDATE,
+            );
         }
 
         run_with_obs!(self.runtime, (pointer), move || unsafe {
@@ -141,6 +125,22 @@ impl WindowPositionTrait for ObsDisplayRef {
             .map_err(|e| ObsError::LockError(format!("{:?}", e)))?;
         m.scale = scale;
         Ok(())
+    }
+
+    fn get_pos(&self) -> Result<(i32, i32), ObsError> {
+        let m = self
+            .manager
+            .read()
+            .map_err(|e| ObsError::LockError(format!("{:?}", e)))?;
+        Ok((m.x, m.y))
+    }
+
+    fn get_size(&self) -> Result<(u32, u32), ObsError> {
+        let m = self
+            .manager
+            .read()
+            .map_err(|e| ObsError::LockError(format!("{:?}", e)))?;
+        Ok((m.width, m.height))
     }
 
     fn get_scale(&self) -> Result<f32, ObsError> {

@@ -42,9 +42,9 @@ use std::{
     thread::ThreadId,
 };
 
+use crate::display::{ObsDisplayCreationData, ObsDisplayRef};
 use crate::{
     data::{output::ObsOutputRef, video::ObsVideoInfo, ObsData},
-    display::{ObsDisplayCreationData, ObsDisplayRef},
     enums::{ObsLogLevel, ObsResetVideoStatus},
     logger::LOGGER,
     run_with_obs,
@@ -113,6 +113,9 @@ pub struct ObsContext {
     /// that everything else has been freed already before the runtime
     /// shuts down
     pub(crate) runtime: ObsRuntime,
+
+    #[cfg(target_os = "linux")]
+    pub(crate) glib_loop: Arc<RwLock<Option<crate::utils::linux::LinuxGlibLoop>>>,
 }
 
 impl ObsContext {
@@ -138,6 +141,12 @@ impl ObsContext {
     pub fn new(info: StartupInfo) -> Result<ObsContext, ObsError> {
         // Spawning runtime, I'll keep this as function for now
         let (runtime, obs_modules, info) = ObsRuntime::startup(info)?;
+        #[cfg(target_os = "linux")]
+        let linux_opt = if info.start_glib_loop {
+            Some(crate::utils::linux::LinuxGlibLoop::new())
+        } else {
+            None
+        };
 
         Ok(Self {
             _obs_modules: Arc::new(obs_modules),
@@ -148,6 +157,9 @@ impl ObsContext {
             filters: Default::default(),
             runtime,
             startup_info: Arc::new(RwLock::new(info)),
+
+            #[cfg(target_os = "linux")]
+            glib_loop: Arc::new(RwLock::new(linux_opt)),
         })
     }
 
