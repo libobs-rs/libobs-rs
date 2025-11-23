@@ -6,9 +6,7 @@ use libobs_wrapper::{
 };
 
 use super::DisplayServerType;
-use crate::linux::sources::{
-    pipewire_capture::PipeWireCaptureSourceBuilder, xcomposite_input::XCompositeInputSourceBuilder,
-};
+use crate::linux::{PipeWireWindowCaptureSourceBuilder, sources::xcomposite_input::XCompositeInputSourceBuilder};
 
 /// General Linux window capture source that automatically selects the best capture method.
 ///
@@ -92,7 +90,7 @@ impl LinuxGeneralWindowCapture {
         runtime: ObsRuntime,
         name: &str,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        let builder = PipeWireCaptureSourceBuilder::new(name, runtime.clone())?;
+        let builder = PipeWireWindowCaptureSourceBuilder::new(name, runtime.clone())?;
         let info = builder.set_show_cursor(true).build()?;
         Ok(LinuxGeneralWindowCapture {
             info,

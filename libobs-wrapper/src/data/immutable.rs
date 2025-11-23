@@ -3,7 +3,7 @@ use std::{ffi::CStr, sync::Arc};
 use libobs::obs_data_t;
 
 use crate::{
-    impl_obs_drop, run_with_obs, runtime::ObsRuntime, unsafe_send::Sendable, utils::ObsError,
+    data::ObsDataGetters, impl_obs_drop, run_with_obs, runtime::ObsRuntime, unsafe_send::Sendable, utils::ObsError
 };
 
 use super::{ObsData, _ObsDataDropGuard};
@@ -59,6 +59,16 @@ impl ImmutableObsData {
     }
 
     pub fn as_ptr(&self) -> Sendable<*mut obs_data_t> {
+        self.ptr.clone()
+    }
+}
+
+impl ObsDataGetters for ImmutableObsData {
+    fn runtime(&self) -> &ObsRuntime {
+        &self.runtime
+    }
+
+    fn as_ptr(&self) -> Sendable<*mut obs_data_t> {
         self.ptr.clone()
     }
 }

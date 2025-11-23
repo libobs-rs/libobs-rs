@@ -153,6 +153,7 @@ impl ApplicationHandler for App {
 
                 match button {
                     #[cfg(windows)]
+                    // Technically we could also switch monitors on X11, but we would like to keep it simple for now...
                     MouseButton::Left => {
                         let tmp = self.source_ref.clone();
                         let monitor_index = self.monitor_index.clone();

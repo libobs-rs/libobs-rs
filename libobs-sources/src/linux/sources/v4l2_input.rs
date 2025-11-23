@@ -55,21 +55,15 @@ define_object_manager!(
         #[obs_property(type_t = "int")]
         dv_timing: i64,
 
-        /// Resolution (packed as width << 16 | height)
         #[obs_property(type_t = "int")]
         resolution: i64,
 
-        /// Framerate (packed as num << 16 | den)
         #[obs_property(type_t = "int")]
         framerate: i64,
 
         /// Color range setting
         #[obs_property(type_t = "int")]
         color_range: i64,
-
-        /// Enable buffering
-        #[obs_property(type_t = "bool")]
-        buffering: bool,
 
         /// Auto-reset on timeout
         #[obs_property(type_t = "bool")]

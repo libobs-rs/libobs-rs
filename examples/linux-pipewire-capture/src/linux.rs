@@ -1,7 +1,7 @@
 use std::thread;
 use std::time::Duration;
 
-use libobs_sources::linux::PipeWireCaptureSourceBuilder;
+use libobs_sources::linux::{PipeWireSourceExtTrait, PipeWireWindowCaptureSourceBuilder};
 use libobs_wrapper::context::ObsContext;
 use libobs_wrapper::encoders::ObsContextEncoders;
 use libobs_wrapper::sources::ObsSourceBuilder;
@@ -16,8 +16,8 @@ pub fn main() -> anyhow::Result<()> {
 
     let mut scene = context.scene("main")?;
 
-    let _window_capture = context
-        .source_builder::<PipeWireCaptureSourceBuilder, _>("PipeWire Capture")?
+    let window_capture = context
+        .source_builder::<PipeWireWindowCaptureSourceBuilder, _>("PipeWire Window Capture")?
         .set_show_cursor(false) // Usually don't show cursor for window capture
         .add_to_scene(&mut scene)?;
 
@@ -69,6 +69,8 @@ pub fn main() -> anyhow::Result<()> {
     // Stop recording
     output.stop()?;
     println!("Recording stopped. Output saved to linux-window-recording.mp4");
+    let restore_token = window_capture.get_restore_token()?;
+    println!("Restore Token: {:?}. You can use this when creating a source so the exact same window is captured again", restore_token);
 
     Ok(())
 }

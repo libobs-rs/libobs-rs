@@ -109,6 +109,10 @@ impl ObsSourceRef {
     pub fn signal_manager(&self) -> Arc<ObsSourceSignals> {
         self.signal_manager.clone()
     }
+
+    pub fn as_ptr(&self) -> *mut obs_source_t {
+        self.source.0
+    }
 }
 
 impl ObsUpdatable for ObsSourceRef {

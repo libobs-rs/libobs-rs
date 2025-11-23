@@ -1,4 +1,11 @@
-use libobs_wrapper::sources::{ObsSourceBuilder, ObsSourceRef};
+use libobs_source_macro::{obs_object_builder, obs_object_updater};
+use libobs_wrapper::{
+    data::ObsDataGetters,
+    run_with_obs,
+    sources::{ObsSourceBuilder, ObsSourceRef},
+    unsafe_send::Sendable,
+    utils::{traits::ObsUpdatable, ObsError},
+};
 
 use crate::macro_helper::define_object_manager;
 
@@ -10,7 +17,7 @@ pub enum ObsPipeWireSourceType {
     /// Camera capture via camera portal  
     CameraCapture,
 }
-
+/*
 define_object_manager!(
     #[derive(Debug)]
     /// A source for PipeWire screen/camera capture.
@@ -18,20 +25,53 @@ define_object_manager!(
     /// PipeWire is a modern multimedia framework for Linux that handles audio and video.
     /// This source can capture screen content through the desktop portal or camera
     /// content through the camera portal, providing sandboxed capture capabilities.
-    struct PipeWireCaptureSource("pipewire-desktop-capture-source") for ObsSourceRef {
+    struct PipeWireDesktopCaptureSource("pipewire-desktop-capture-source") for ObsSourceRef {
         /// Restore token for reconnecting to previous sessions
-        #[obs_property(type_t = "string")]
+        #[obs_property(type_t = "string", settings_key="RestoreToken")]
         restore_token: String,
 
-        /// Portal session token
-        #[obs_property(type_t = "string")]
-        session_token: String,
-
         /// Whether to show cursor (for screen capture)
-        #[obs_property(type_t = "bool")]
+        #[obs_property(type_t = "bool", settings_key="ShowCursor")]
         show_cursor: bool,
     }
 );
+ */
+
+#[obs_object_builder("pipewire-desktop-capture-source")]
+pub struct PipeWireDesktopCaptureSourceBuilder {
+    /// Restore token for reconnecting to previous sessions
+    #[obs_property(type_t = "string", settings_key = "RestoreToken")]
+    restore_token: String,
+
+    /// Whether to show cursor (for screen capture)
+    #[obs_property(type_t = "bool", settings_key = "ShowCursor")]
+    show_cursor: bool,
+}
+
+#[obs_object_updater("pipewire-desktop-capture-source", ObsSourceRef)]
+pub struct PipeWireDesktopCaptureSourceUpdater {
+    /// Whether to show cursor (for screen capture)
+    #[obs_property(type_t = "bool", settings_key = "ShowCursor")]
+    show_cursor: bool,
+}
+
+#[obs_object_builder("pipewire-window-capture-source")]
+pub struct PipeWireWindowCaptureSourceBuilder {
+    /// Restore token for reconnecting to previous sessions
+    #[obs_property(type_t = "string", settings_key = "RestoreToken")]
+    restore_token: String,
+
+    /// Whether to show cursor (for screen capture)
+    #[obs_property(type_t = "bool", settings_key = "ShowCursor")]
+    show_cursor: bool,
+}
+
+#[obs_object_updater("pipewire-window-capture-source", ObsSourceRef)]
+pub struct PipeWireWindowCaptureSourceUpdater {
+    /// Whether to show cursor (for screen capture)
+    #[obs_property(type_t = "bool", settings_key = "ShowCursor")]
+    show_cursor: bool,
+}
 
 define_object_manager!(
     #[derive(Debug)]
@@ -58,7 +98,36 @@ define_object_manager!(
     }
 );
 
-impl PipeWireCaptureSourceBuilder {
+/// This trait provides additional methods for PipeWire sources.
+pub trait PipeWireSourceExtTrait {
+    /// Gets the restore token used for reconnecting to previous sessions for `pipewire-desktop-capture-source` and `pipewire-window-capture-source` sources.
+    ///
+    /// As of right now, there is no callback or signal to notify when the token has been set, you have to call this method to get the restore token.
+    ///
+    /// The restore token will most probably be of `Some(String)` after the user has selected a screen or window to capture.
+    fn get_restore_token(&self) -> Result<Option<String>, ObsError>;
+}
+
+impl PipeWireSourceExtTrait for ObsSourceRef {
+    fn get_restore_token(&self) -> Result<Option<String>, ObsError> {
+        if self.id() != "pipewire-desktop-capture-source"
+            && self.id() != "pipewire-window-capture-source"
+        {
+            return Err(ObsError::InvalidOperation(format!("Can't call 'get_restore_token' on a source of id {}. Expected 'pipewire-desktop-capture-source' or 'pipewire-window-capture-source'", self.id())));
+        }
+
+        let source_ptr = Sendable(self.as_ptr());
+        run_with_obs!(self.runtime(), (source_ptr), move || unsafe {
+            libobs::obs_source_save(source_ptr);
+        })?;
+
+        let settings = self.get_settings()?;
+        let token = settings.get_string("RestoreToken")?;
+        Ok(token)
+    }
+}
+
+impl PipeWireDesktopCaptureSourceBuilder {
     /// Enable cursor capture for screen recording
     pub fn with_cursor(self) -> Self {
         self.set_show_cursor(true)
@@ -77,5 +146,6 @@ impl PipeWireCameraSourceBuilder {
     }
 }
 
-impl ObsSourceBuilder for PipeWireCaptureSourceBuilder {}
+impl ObsSourceBuilder for PipeWireDesktopCaptureSourceBuilder {}
+impl ObsSourceBuilder for PipeWireWindowCaptureSourceBuilder {}
 impl ObsSourceBuilder for PipeWireCameraSourceBuilder {}

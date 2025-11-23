@@ -6,9 +6,7 @@ use libobs_wrapper::{
 };
 use std::env;
 
-use crate::linux::sources::{
-    pipewire_capture::PipeWireCaptureSourceBuilder, x11_capture::X11CaptureSourceBuilder,
-};
+use crate::linux::{PipeWireDesktopCaptureSourceBuilder, sources::x11_capture::X11CaptureSourceBuilder};
 
 /// Display server type detection
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -144,7 +142,7 @@ impl LinuxGeneralScreenCapture {
         runtime: ObsRuntime,
         name: &str,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        let builder = PipeWireCaptureSourceBuilder::new(name, runtime.clone())?;
+        let builder = PipeWireDesktopCaptureSourceBuilder::new(name, runtime.clone())?;
         let info = builder.set_show_cursor(true).build()?;
         Ok(LinuxGeneralScreenCapture {
             info,

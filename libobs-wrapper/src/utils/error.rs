@@ -30,6 +30,7 @@ pub enum ObsError {
     OutputNotFound,
     SourceNotFound,
     SourceNotAvailable(String),
+    InvalidOperation(String),
     /// Error converting a string between Rust and OBS
     StringConversionError,
 
@@ -87,6 +88,7 @@ impl Display for ObsError {
             ObsError::EncoderActive => write!(f, "Encoder is still active, stop the attached output before proceeding"),
             ObsError::StringConversionError => write!(f, "Error converting a string between Rust and OBS"),
             ObsError::PlatformInitError(e) => write!(f, "Error during platform-specific initialization: {}", e),
+            ObsError::InvalidOperation(e) => write!(f, "Invalid operation: {}", e),
         }
     }
 }
