@@ -3,7 +3,8 @@ use std::{ffi::CStr, sync::Arc};
 use libobs::obs_data_t;
 
 use crate::{
-    data::ObsDataGetters, impl_obs_drop, run_with_obs, runtime::ObsRuntime, unsafe_send::Sendable, utils::ObsError
+    data::ObsDataGetters, impl_obs_drop, run_with_obs, runtime::ObsRuntime, unsafe_send::Sendable,
+    utils::ObsError,
 };
 
 use super::{ObsData, _ObsDataDropGuard};

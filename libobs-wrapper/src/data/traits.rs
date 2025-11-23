@@ -2,8 +2,13 @@ use std::ffi::CStr;
 
 use libobs::obs_data;
 
-use crate::{data::ObsData, run_with_obs, runtime::ObsRuntime, unsafe_send::Sendable, utils::{ObsError, ObsString}};
-
+use crate::{
+    data::ObsData,
+    run_with_obs,
+    runtime::ObsRuntime,
+    unsafe_send::Sendable,
+    utils::{ObsError, ObsString},
+};
 
 impl ObsDataGetters for ObsData {
     fn runtime(&self) -> &ObsRuntime {

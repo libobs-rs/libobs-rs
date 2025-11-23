@@ -6,7 +6,9 @@ use libobs_wrapper::{
 };
 use std::env;
 
-use crate::linux::{PipeWireDesktopCaptureSourceBuilder, sources::x11_capture::X11CaptureSourceBuilder};
+use crate::linux::{
+    sources::x11_capture::X11CaptureSourceBuilder, PipeWireDesktopCaptureSourceBuilder,
+};
 
 /// Display server type detection
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

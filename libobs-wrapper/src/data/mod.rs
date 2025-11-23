@@ -1,7 +1,4 @@
-use std::{
-    ffi::{CString},
-    sync::Arc,
-};
+use std::{ffi::CString, sync::Arc};
 
 use crate::{
     impl_obs_drop, run_with_obs,

@@ -6,7 +6,9 @@ use libobs_wrapper::{
 };
 
 use super::DisplayServerType;
-use crate::linux::{PipeWireWindowCaptureSourceBuilder, sources::xcomposite_input::XCompositeInputSourceBuilder};
+use crate::linux::{
+    sources::xcomposite_input::XCompositeInputSourceBuilder, PipeWireWindowCaptureSourceBuilder,
+};
 
 /// General Linux window capture source that automatically selects the best capture method.
 ///
