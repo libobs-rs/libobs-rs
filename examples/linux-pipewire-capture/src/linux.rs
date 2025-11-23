@@ -1,35 +1,50 @@
-use std::thread;
-use std::time::Duration;
-
 use libobs_sources::linux::{PipeWireSourceExtTrait, PipeWireWindowCaptureSourceBuilder};
 use libobs_wrapper::context::ObsContext;
 use libobs_wrapper::encoders::ObsContextEncoders;
+use libobs_wrapper::logger::ObsLogger;
 use libobs_wrapper::sources::ObsSourceBuilder;
 use libobs_wrapper::utils::{AudioEncoderInfo, ObsPath, OutputInfo, StartupInfo};
+use std::fs;
+
+#[derive(Debug)]
+pub struct NoLogger {}
+impl ObsLogger for NoLogger {
+    fn log(&mut self, _level: libobs_wrapper::enums::ObsLogLevel, _msg: String) {}
+}
 
 pub fn main() -> anyhow::Result<()> {
     println!("Starting Linux XComposite Window Capture Example...");
+    let restore_token_path = std::env::current_exe()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("window_restore_token.txt");
 
     // Start the OBS context
-    let startup_info = StartupInfo::default();
+    let startup_info = StartupInfo::default()
+        // This is just so the console output from libobs is suppressed, this isn't recommened in production
+        .set_logger(Box::new(NoLogger {}));
     let mut context = ObsContext::new(startup_info)?;
 
     let mut scene = context.scene("main")?;
 
-    let window_capture = context
-        .source_builder::<PipeWireWindowCaptureSourceBuilder, _>("PipeWire Window Capture")?
-        .set_show_cursor(false) // Usually don't show cursor for window capture
-        .add_to_scene(&mut scene)?;
+    let mut window_capture_builder = context
+        .source_builder::<PipeWireWindowCaptureSourceBuilder, _>("PipeWire Window Capture")?;
+
+    if let Ok(restore_token) = fs::read_to_string(&restore_token_path) {
+        println!("Using restore token from file: {}", restore_token);
+        window_capture_builder = window_capture_builder.set_restore_token(restore_token);
+    }
+
+    let window_capture = window_capture_builder.add_to_scene(&mut scene)?;
 
     // Register the source
     scene.set_to_channel(0)?;
 
     // Set up output to ./linux-window-recording.mp4
     let mut output_settings = context.data()?;
-    output_settings.set_string(
-        "path",
-        ObsPath::from_relative("linux-window-recording.mp4").build(),
-    )?;
+    let obs_path = ObsPath::from_relative("linux-window-recording.mp4").build();
+    output_settings.set_string("path", obs_path.clone())?;
 
     let output_info = OutputInfo::new("ffmpeg_muxer", "output", Some(output_settings), None);
     let mut output = context.output(output_info)?;
@@ -60,17 +75,25 @@ pub fn main() -> anyhow::Result<()> {
 
     // Start recording
     output.start()?;
-    println!("Recording started! Recording for 10 seconds...");
+    println!("Recording started! Waiting for you to press Enter to stop...");
     println!("Make sure the target window is visible and not minimized.");
 
-    // Record for 10 seconds
-    thread::sleep(Duration::from_secs(10));
+    // wait for enter key press
+    let mut input = String::new();
+    std::io::stdin().read_line(&mut input)?;
 
+    println!("Stopping recording...");
     // Stop recording
     output.stop()?;
-    println!("Recording stopped. Output saved to linux-window-recording.mp4");
+    println!("Recording stopped. Output saved to {}", obs_path);
     let restore_token = window_capture.get_restore_token()?;
     println!("Restore Token: {:?}. You can use this when creating a source so the exact same window is captured again", restore_token);
+
+    if let Some(restore_token) = restore_token {
+        // Save the restore token to a file
+        fs::write(&restore_token_path, restore_token)?;
+        println!("Restore token saved to {}", restore_token_path.display());
+    }
 
     Ok(())
 }
