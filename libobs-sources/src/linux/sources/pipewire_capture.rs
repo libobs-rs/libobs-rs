@@ -73,6 +73,26 @@ pub struct PipeWireWindowCaptureSourceUpdater {
     show_cursor: bool,
 }
 
+#[obs_object_builder("pipewire-screen-capture-source")]
+/// This struct is used to build a PipeWire screen capture source (so window + desktop capture).
+pub struct PipeWireScreenCaptureSourceBuilder {
+    /// Restore token for reconnecting to previous sessions
+    #[obs_property(type_t = "string", settings_key = "RestoreToken")]
+    restore_token: String,
+
+    /// Whether to show cursor (for screen capture)
+    #[obs_property(type_t = "bool", settings_key = "ShowCursor")]
+    show_cursor: bool,
+}
+
+#[obs_object_updater("pipewire-screen-capture-source", ObsSourceRef)]
+/// This struct is used to update a PipeWire screen capture source (so window + desktop capture).
+pub struct PipeWireScreenCaptureSourceUpdater {
+    /// Whether to show cursor (for screen capture)
+    #[obs_property(type_t = "bool", settings_key = "ShowCursor")]
+    show_cursor: bool,
+}
+
 define_object_manager!(
     #[derive(Debug)]
     /// A source for PipeWire camera capture via camera portal.
@@ -112,8 +132,9 @@ impl PipeWireSourceExtTrait for ObsSourceRef {
     fn get_restore_token(&self) -> Result<Option<String>, ObsError> {
         if self.id() != "pipewire-desktop-capture-source"
             && self.id() != "pipewire-window-capture-source"
+            && self.id() != "pipewire-screen-capture-source"
         {
-            return Err(ObsError::InvalidOperation(format!("Can't call 'get_restore_token' on a source of id {}. Expected 'pipewire-desktop-capture-source' or 'pipewire-window-capture-source'", self.id())));
+            return Err(ObsError::InvalidOperation(format!("Can't call 'get_restore_token' on a source of id {}. Expected 'pipewire-desktop-capture-source', 'pipewire-window-capture-source' or 'pipewire-screen-capture-source'", self.id())));
         }
 
         let source_ptr = Sendable(self.as_ptr());
@@ -148,4 +169,5 @@ impl PipeWireCameraSourceBuilder {
 
 impl ObsSourceBuilder for PipeWireDesktopCaptureSourceBuilder {}
 impl ObsSourceBuilder for PipeWireWindowCaptureSourceBuilder {}
+impl ObsSourceBuilder for PipeWireScreenCaptureSourceBuilder {}
 impl ObsSourceBuilder for PipeWireCameraSourceBuilder {}
