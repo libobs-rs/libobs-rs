@@ -1,4 +1,4 @@
-use libobs_sources::linux::{PipeWireSourceExtTrait, PipeWireWindowCaptureSourceBuilder};
+use libobs_sources::linux::{PipeWireScreenCaptureSourceBuilder, PipeWireSourceExtTrait};
 use libobs_wrapper::context::ObsContext;
 use libobs_wrapper::encoders::ObsContextEncoders;
 use libobs_wrapper::logger::ObsLogger;
@@ -29,10 +29,14 @@ pub fn main() -> anyhow::Result<()> {
     let mut scene = context.scene("main")?;
 
     let mut window_capture_builder = context
-        .source_builder::<PipeWireWindowCaptureSourceBuilder, _>("PipeWire Window Capture")?;
+        .source_builder::<PipeWireScreenCaptureSourceBuilder, _>("PipeWire Screen Capture")?;
 
     if let Ok(restore_token) = fs::read_to_string(&restore_token_path) {
-        println!("Using restore token from file: {}", restore_token);
+        println!(
+            "Using restore token from file({}): {}",
+            &restore_token_path.display(),
+            restore_token
+        );
         window_capture_builder = window_capture_builder.set_restore_token(restore_token);
     }
 
