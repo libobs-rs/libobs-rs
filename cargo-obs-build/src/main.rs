@@ -6,7 +6,7 @@ use colored::Colorize;
 #[cfg(feature = "cli")]
 use std::env::{self, args};
 
-#[cfg(feature = "cli")]
+#[cfg(all(target_os = "linux", feature = "cli"))]
 mod ubuntu_install;
 
 #[cfg(feature = "cli")]
