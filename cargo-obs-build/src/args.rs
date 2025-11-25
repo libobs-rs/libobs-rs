@@ -4,6 +4,23 @@ use std::path::PathBuf;
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 pub struct RunArgs {
+    #[command(subcommand)]
+    pub command: Commands,
+}
+
+#[derive(Parser, Debug)]
+pub enum Commands {
+    /// Build OBS Studio binaries
+    #[cfg(not(target_os = "linux"))]
+    Build(BuildArgs),
+
+    /// Install OBS Studio dependencies (Linux only)
+    #[cfg(target_os = "linux")]
+    Install(InstallArgs),
+}
+
+#[derive(Parser, Debug)]
+pub struct BuildArgs {
     /// The directory the OBS Studio binaries should be copied to
     #[arg(short, long)]
     pub out_dir: String,
@@ -42,4 +59,12 @@ pub struct RunArgs {
     /// If .pdb files should be removed from the final output, this reduces size significantly
     #[arg(long, default_value_t = false)]
     pub remove_pdbs: bool,
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Parser, Debug)]
+pub struct InstallArgs {
+    /// Skip the Ubuntu system check
+    #[arg(long, default_value_t = false)]
+    pub skip_check: bool,
 }
