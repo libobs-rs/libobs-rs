@@ -3,6 +3,8 @@ use std::{boxed::Box, pin::Pin};
 use display_info::DisplayInfo;
 use libobs::obs_video_info;
 
+#[cfg(target_os = "linux")]
+use crate::utils::linux::get_linux_opengl_lib_name;
 use crate::{
     enums::{
         ObsColorspace, ObsGraphicsModule, ObsScaleType, ObsVideoFormat, ObsVideoRange, OsEnumType,
@@ -201,7 +203,7 @@ impl ObsVideoInfoBuilder {
             #[cfg(not(target_os = "linux"))]
             ObsGraphicsModule::OpenGL => ObsString::new("libobs-opengl"),
             #[cfg(target_os = "linux")]
-            ObsGraphicsModule::OpenGL => ObsString::new("libobs-opengl.so.1"),
+            ObsGraphicsModule::OpenGL => ObsString::new(get_linux_opengl_lib_name()),
             ObsGraphicsModule::DirectX11 => ObsString::new("libobs-d3d11.dll"),
         };
 
