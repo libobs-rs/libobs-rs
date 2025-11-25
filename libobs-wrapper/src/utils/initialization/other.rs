@@ -1,4 +1,3 @@
-use std::ffi::CString;
 use std::ptr;
 
 #[cfg(target_os = "linux")]
@@ -77,7 +76,7 @@ pub(crate) fn platform_specific_setup(
     unsafe {
         match platform_type {
             PlatformType::X11 => {
-                use crate::utils::linux::XOpenDisplay;
+                use crate::{logger::internal_log_global, utils::linux::XOpenDisplay};
 
                 libobs::obs_set_nix_platform(
                     libobs::obs_nix_platform_type_OBS_NIX_PLATFORM_X11_EGL,
@@ -95,8 +94,10 @@ pub(crate) fn platform_specific_setup(
 
                 libobs::obs_set_nix_platform_display(display);
 
-                let message = CString::new("[libobs-wrapper]: Detected Platform: EGL/X11").unwrap();
-                libobs::blog(libobs::LOG_INFO as i32, message.as_ptr());
+                internal_log_global(
+                    crate::enums::ObsLogLevel::Info,
+                    "[libobs-wrapper]: Detected Platform: EGL/X11".to_string(),
+                );
 
                 //TODO make sure when creating a display that the same platform is used
                 Ok(Some(Arc::new(PlatformSpecificGuard {
@@ -105,7 +106,10 @@ pub(crate) fn platform_specific_setup(
                 })))
             }
             PlatformType::Wayland => {
-                use crate::utils::linux::wl_display_connect;
+                use crate::{
+                    enums::ObsLogLevel, logger::internal_log_global,
+                    utils::linux::wl_display_connect,
+                };
 
                 libobs::obs_set_nix_platform(
                     libobs::obs_nix_platform_type_OBS_NIX_PLATFORM_WAYLAND,
@@ -124,8 +128,10 @@ pub(crate) fn platform_specific_setup(
 
                 libobs::obs_set_nix_platform_display(display);
 
-                let message = CString::new("[libobs-wrapper]: Detected Platform: Wayland").unwrap();
-                libobs::blog(libobs::LOG_INFO as i32, message.as_ptr());
+                internal_log_global(
+                    ObsLogLevel::Info,
+                    "[libobs-wrapper]: Detected Platform: Wayland".to_string(),
+                );
 
                 Ok(Some(Arc::new(PlatformSpecificGuard {
                     display: Sendable(display),

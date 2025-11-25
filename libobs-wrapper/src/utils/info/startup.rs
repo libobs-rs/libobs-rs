@@ -146,11 +146,29 @@ pub struct StartupPathsBuilder {
 
 impl StartupPathsBuilder {
     fn new() -> Self {
-        Self {
+        #[cfg(not(target_os = "linux"))]
+        return Self {
             libobs_data_path: ObsPath::from_relative("data/libobs"),
             plugin_bin_path: ObsPath::from_relative("obs-plugins/64bit"),
             plugin_data_path: ObsPath::from_relative("data/obs-plugins/%module%"),
-        }
+        };
+
+        #[cfg(target_os = "linux")]
+        let arch = std::env::consts::ARCH;
+        #[cfg(target_os = "linux")]
+        let lib_path = match arch {
+            "x86_64" => "/usr/lib/x86_64-linux-gnu",
+            "aarch64" => "/usr/lib/aarch64-linux-gnu",
+            "arm" => "/usr/lib/arm-linux-gnueabihf",
+            _ => "/usr/lib",
+        };
+
+        #[cfg(target_os = "linux")]
+        return Self {
+            libobs_data_path: ObsPath::new("/usr/share/obs/libobs"),
+            plugin_bin_path: ObsPath::new(&(lib_path.to_string() + "/obs-plugins/%module%")),
+            plugin_data_path: ObsPath::new("/usr/share/obs/obs-plugins/%module%"),
+        };
     }
 
     pub fn build(self) -> StartupPaths {

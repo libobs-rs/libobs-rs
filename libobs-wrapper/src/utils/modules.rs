@@ -1,8 +1,8 @@
 use std::ffi::{CStr, CString};
 
 use crate::{
-    enums::ObsLogLevel, logger::internal_log_global, run_with_obs, runtime::ObsRuntime,
-    unsafe_send::Sendable, utils::StartupPaths,
+    context::ObsContext, enums::ObsLogLevel, logger::internal_log_global, run_with_obs,
+    runtime::ObsRuntime, unsafe_send::Sendable, utils::StartupPaths,
 };
 use libobs::obs_module_failure_info;
 
@@ -15,9 +15,38 @@ pub struct ObsModules {
     pub(crate) runtime: Option<ObsRuntime>,
 }
 
+// List of all modules, this is for compatability for obs versions below 32.0.0
+static SAFE_MODULES: &str = "decklink|image-source|linux-alsa|linux-capture|linux-pipewire|linux-pulseaudio|linux-v4l2|obs-ffmpeg|obs-filters|obs-nvenc|obs-outputs|obs-qsv11|obs-transitions|obs-vst|obs-websocket|obs-x264|rtmp-services|text-freetype2|vlc-video|decklink-captions|decklink-output-ui|obslua|obspython|frontend-tools";
+
 impl ObsModules {
     pub fn add_paths(paths: &StartupPaths) -> Self {
         unsafe {
+            internal_log_global(
+                ObsLogLevel::Info,
+                "[libobs-wrapper]: Adding module paths:".to_string(),
+            );
+            internal_log_global(
+                ObsLogLevel::Info,
+                format!(
+                    "[libobs-wrapper]:   libobs data path: {}",
+                    paths.libobs_data_path()
+                ),
+            );
+            internal_log_global(
+                ObsLogLevel::Info,
+                format!(
+                    "[libobs-wrapper]:   plugin bin path: {}",
+                    paths.plugin_bin_path()
+                ),
+            );
+            internal_log_global(
+                ObsLogLevel::Info,
+                format!(
+                    "[libobs-wrapper]:   plugin data path: {}",
+                    paths.plugin_data_path()
+                ),
+            );
+
             libobs::obs_add_data_path(paths.libobs_data_path().as_ptr().0);
             libobs::obs_add_module_path(
                 paths.plugin_bin_path().as_ptr().0,
@@ -32,9 +61,56 @@ impl ObsModules {
                 disabled_plugins.extend(&["decklink-output-ui", "decklink-captions", "decklink"]);
             }
 
-            for plugin in disabled_plugins {
-                let c_str = CString::new(plugin).unwrap();
-                libobs::obs_add_disabled_module(c_str.as_ptr());
+            let version = ObsContext::get_version_global().unwrap_or_default();
+            let version_parts: Vec<&str> = version.split('.').collect();
+            let major = version_parts
+                .first()
+                .and_then(|s| s.parse::<u32>().ok())
+                .unwrap_or(0);
+
+            // Check if obs_add_disabled_module exists at runtime
+            #[cfg(target_os = "linux")]
+            let has_disabled_module_fn = {
+                // Try to find symbol in already loaded libraries
+                let symbol_name = CString::new("obs_add_disabled_module").unwrap();
+                let sym = libc::dlsym(libc::RTLD_DEFAULT, symbol_name.as_ptr());
+                let found = !sym.is_null();
+
+                if !found && major >= 32 {
+                    log::warn!("OBS version >= 32 but obs_add_disabled_module symbol not found, falling back to safe modules");
+                }
+
+                found
+            };
+            #[cfg(not(target_os = "linux"))]
+            let has_disabled_module_fn = major >= 32;
+
+            if major >= 32 && has_disabled_module_fn {
+                for plugin in disabled_plugins {
+                    let c_str = CString::new(plugin).unwrap();
+                    #[cfg(target_os = "linux")]
+                    {
+                        let symbol_name = CString::new("obs_add_disabled_module").unwrap();
+                        let func = libc::dlsym(libc::RTLD_DEFAULT, symbol_name.as_ptr());
+                        if !func.is_null() {
+                            let add_disabled: extern "C" fn(*const std::os::raw::c_char) =
+                                std::mem::transmute(func);
+                            add_disabled(c_str.as_ptr());
+                        }
+                    }
+                    #[cfg(not(target_os = "linux"))]
+                    {
+                        libobs::obs_add_disabled_module(c_str.as_ptr());
+                    }
+                }
+            } else {
+                for plugin in SAFE_MODULES.split('|') {
+                    if disabled_plugins.contains(&plugin) {
+                        continue;
+                    }
+                    let c_str = CString::new(plugin).unwrap();
+                    libobs::obs_add_safe_module(c_str.as_ptr());
+                }
             }
         }
 

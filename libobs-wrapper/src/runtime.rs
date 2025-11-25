@@ -38,6 +38,7 @@ use std::ffi::CStr;
 use std::sync::Arc;
 use std::{ptr, thread};
 
+use crate::context::ObsContext;
 use crate::crash_handler::main_crash_handler;
 use crate::enums::{ObsLogLevel, ObsResetVideoStatus};
 use crate::logger::{extern_log_callback, internal_log_global, LOGGER};
@@ -421,6 +422,27 @@ impl ObsRuntime {
         let version_str = version_cstr.to_string_lossy().into_owned();
 
         internal_log_global(ObsLogLevel::Info, format!("OBS {}", version_str));
+
+        // Check version compatibility
+        if !ObsContext::check_version_compatibility() {
+            internal_log_global(
+                ObsLogLevel::Warning,
+                "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!".to_string(),
+            );
+            internal_log_global(
+                ObsLogLevel::Warning,
+                format!(
+                    "OBS major version mismatch: installed version is {}, but expected major version {}. Expect crashes or bugs!!",
+                    version_str,
+                    libobs::LIBOBS_API_MAJOR_VER
+                ),
+            );
+            internal_log_global(
+                ObsLogLevel::Warning,
+                "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!".to_string(),
+            );
+        }
+
         internal_log_global(
             ObsLogLevel::Info,
             "---------------------------------".to_string(),

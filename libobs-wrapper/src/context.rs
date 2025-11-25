@@ -109,6 +109,34 @@ pub struct ObsContext {
 }
 
 impl ObsContext {
+    /// Checks if the installed OBS version matches the expected version.
+    /// Returns true if the major version matches, false otherwise.
+    pub fn check_version_compatibility() -> bool {
+        unsafe {
+            let version = libobs::obs_get_version_string();
+            if version.is_null() {
+                return false;
+            }
+
+            let version_str = match CStr::from_ptr(version).to_str() {
+                Ok(s) => s,
+                Err(_) => return false,
+            };
+
+            let version_parts: Vec<&str> = version_str.split('.').collect();
+            if version_parts.len() != 3 {
+                return false;
+            }
+
+            let major = match version_parts[0].parse::<u64>() {
+                Ok(v) => v,
+                Err(_) => return false,
+            };
+
+            major == libobs::LIBOBS_API_MAJOR_VER as u64
+        }
+    }
+
     pub fn builder() -> StartupInfo {
         StartupInfo::new()
     }
@@ -126,8 +154,8 @@ impl ObsContext {
     /// period of time. Unfortunately the memory
     /// leak is caused by a bug in libobs itself.
     ///
-    /// If the `bootstrapper` feature is enabled, and ObsContextReturn::Restart is returned,
-    /// the application must be restarted to apply the updates and initialization can not continue.
+    /// On Linux, make sure to call `ObsContext::check_version_compatibility` before
+    /// initializing the context. If that method returns false, it may be possible for the binary to crash.
     pub fn new(info: StartupInfo) -> Result<ObsContext, ObsError> {
         // Spawning runtime, I'll keep this as function for now
         let (runtime, obs_modules, info) = ObsRuntime::startup(info)?;
@@ -154,14 +182,18 @@ impl ObsContext {
     }
 
     pub fn get_version(&self) -> Result<String, ObsError> {
-        let res = run_with_obs!(self.runtime, || unsafe {
+        Self::get_version_global()
+    }
+
+    pub fn get_version_global() -> Result<String, ObsError> {
+        unsafe {
             let version = libobs::obs_get_version_string();
             let version_cstr = CStr::from_ptr(version);
 
-            version_cstr.to_string_lossy().into_owned()
-        })?;
+            let version = version_cstr.to_string_lossy().into_owned();
 
-        Ok(res)
+            Ok(version)
+        }
     }
 
     pub fn log(&self, level: ObsLogLevel, msg: &str) {

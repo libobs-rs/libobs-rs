@@ -198,7 +198,10 @@ impl ObsVideoInfoBuilder {
     /// to create an `ObsVideoInfo`.
     pub fn build(self) -> ObsVideoInfo {
         let graphics_mod_str = match self.graphics_module {
+            #[cfg(not(target_os = "linux"))]
             ObsGraphicsModule::OpenGL => ObsString::new("libobs-opengl"),
+            #[cfg(target_os = "linux")]
+            ObsGraphicsModule::OpenGL => ObsString::new("libobs-opengl.so.1"),
             ObsGraphicsModule::DirectX11 => ObsString::new("libobs-d3d11.dll"),
         };
 
