@@ -30,8 +30,7 @@ git submodule update --init --recursive
 
 # Configure build with CMAKE_INSTALL_PREFIX=/usr
 cmake --preset ubuntu \
--DCMAKE_INSTALL_PREFIX=/usr \
--DENABLE_BROWSER=OFF
+-DCMAKE_INSTALL_PREFIX=/usr
 
 # Build OBS Studio
 cmake --build build_ubuntu --parallel $(nproc)
