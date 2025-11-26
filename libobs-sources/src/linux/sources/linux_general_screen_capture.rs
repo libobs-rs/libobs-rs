@@ -115,9 +115,10 @@ impl LinuxGeneralScreenCapture {
     pub fn auto_detect(
         runtime: ObsRuntime,
         name: &str,
+        restore_token: Option<String>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let display_type = DisplayServerType::detect();
-        Self::new(runtime, name, display_type)
+        Self::new(runtime, name, display_type, restore_token)
     }
 
     /// Create a screen capture source for a specific display server type.
@@ -127,13 +128,15 @@ impl LinuxGeneralScreenCapture {
     /// * `runtime` - The OBS runtime
     /// * `name` - Name for the source
     /// * `display_type` - The display server type to create a source for
+    /// * `restore_token` - Optional restore token for restoring source settings (this is only for pipewire)
     pub fn new(
         runtime: ObsRuntime,
         name: &str,
         display_type: DisplayServerType,
+        restore_token: Option<String>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         if display_type.prefer_pipewire() {
-            Self::new_pipewire(runtime, name)
+            Self::new_pipewire(runtime, name, restore_token)
         } else {
             Self::new_x11(runtime, name)
         }
@@ -143,9 +146,17 @@ impl LinuxGeneralScreenCapture {
     pub fn new_pipewire(
         runtime: ObsRuntime,
         name: &str,
+        restore_token: Option<String>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        let builder = PipeWireDesktopCaptureSourceBuilder::new(name, runtime.clone())?;
-        let info = builder.set_show_cursor(true).build()?;
+        let builder =
+            PipeWireDesktopCaptureSourceBuilder::new(name, runtime.clone())?.set_show_cursor(true);
+        let builder = if let Some(token) = restore_token {
+            builder.set_restore_token(token)
+        } else {
+            builder
+        };
+
+        let info = builder.build()?;
         Ok(LinuxGeneralScreenCapture {
             info,
             capture_type: CaptureType::PipeWire,

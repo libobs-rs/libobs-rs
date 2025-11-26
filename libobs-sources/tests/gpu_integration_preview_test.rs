@@ -3,6 +3,7 @@ use std::sync::{Arc, RwLock};
 
 #[cfg(target_os = "linux")]
 use libobs_sources::linux::LinuxGeneralScreenCapture;
+use libobs_sources::linux::PipeWireSourceExtTrait;
 #[cfg(target_os = "linux")]
 use libobs_wrapper::utils::NixDisplay;
 
@@ -132,10 +133,28 @@ impl ObsInner {
             .add_to_scene(&mut scene)?;
 
         #[cfg(target_os = "linux")]
-        let monitor_src =
-            LinuxGeneralScreenCapture::auto_detect(context.runtime().clone(), "Monitor capture")
+        let monitor_src = {
+            use std::path::PathBuf;
+
+            let restore_token_path = std::env::current_exe()
                 .unwrap()
-                .add_to_scene(&mut scene)?;
+                .parent()
+                .unwrap()
+                .join(PathBuf::from("pipewire_restore_token.txt"));
+            let restore_token = if restore_token_path.exists() {
+                Some(std::fs::read_to_string(&restore_token_path).unwrap())
+            } else {
+                None
+            };
+
+            LinuxGeneralScreenCapture::auto_detect(
+                context.runtime().clone(),
+                "Monitor capture",
+                restore_token,
+            )
+            .unwrap()
+            .add_to_scene(&mut scene)?
+        };
 
         scene.set_source_position(&monitor_src, libobs_wrapper::Vec2::new(0.0, 0.0))?;
         scene.set_source_scale(&monitor_src, libobs_wrapper::Vec2::new(1.0, 1.0))?;
@@ -256,6 +275,16 @@ impl ApplicationHandler for App {
         // The obs context is droppde here before the window / event loop is closed!
         let mut inner = self.obs.write().unwrap().take().unwrap();
         inner.context.remove_display(&inner.display).unwrap();
+
+        if let Ok(Some(token)) = inner.source.get_restore_token() {
+            let restore_token_path = std::env::current_exe()
+                .unwrap()
+                .parent()
+                .unwrap()
+                .join(std::path::PathBuf::from("pipewire_restore_token.txt"));
+
+            std::fs::write(restore_token_path, token).unwrap();
+        }
     }
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         let window = self.window.read().unwrap();

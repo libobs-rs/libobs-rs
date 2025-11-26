@@ -130,9 +130,10 @@ impl ObsInner {
             )
             .add_to_scene(&mut scene)?;
 
+        // You could also read a restore token here frm a file
         #[cfg(target_os = "linux")]
         let monitor_src =
-            LinuxGeneralScreenCapture::auto_detect(context.runtime().clone(), "Monitor capture")
+            LinuxGeneralScreenCapture::auto_detect(context.runtime().clone(), "Monitor capture", None)
                 .unwrap()
                 .add_to_scene(&mut scene)?;
 
