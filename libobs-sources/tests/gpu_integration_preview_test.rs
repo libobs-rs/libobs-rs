@@ -275,7 +275,7 @@ impl ApplicationHandler for App {
         inner.context.remove_display(&inner.display).unwrap();
 
         #[cfg(target_os = "linux")]
-        if let Ok(Some(token)) = inner.source.get_restore_token() {
+        if let Ok(Some(token)) = inner._source.get_restore_token() {
             let restore_token_path = std::env::current_exe()
                 .unwrap()
                 .parent()
