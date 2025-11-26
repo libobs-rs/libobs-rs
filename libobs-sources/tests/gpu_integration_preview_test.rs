@@ -28,7 +28,7 @@ use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, EventLoopBuilder};
 #[cfg(target_os = "linux")]
 use winit::platform::wayland::EventLoopBuilderExtWayland;
-#[cfg(target_os="windows")]
+#[cfg(target_os = "windows")]
 use winit::platform::windows::EventLoopBuilderExtWindows;
 #[cfg(target_os = "linux")]
 use winit::raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
