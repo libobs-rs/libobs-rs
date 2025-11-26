@@ -1,16 +1,15 @@
-use std::sync::atomic::AtomicUsize;
 use std::sync::{Arc, RwLock};
 
 #[cfg(target_os = "linux")]
 use libobs_sources::linux::LinuxGeneralScreenCapture;
+#[cfg(target_os = "linux")]
 use libobs_sources::linux::PipeWireSourceExtTrait;
 #[cfg(target_os = "linux")]
 use libobs_wrapper::utils::NixDisplay;
 
 #[cfg(windows)]
 use libobs_sources::windows::{
-    GameCaptureSourceBuilder, MonitorCaptureSourceBuilder, MonitorCaptureSourceUpdater,
-    ObsGameCaptureMode, WindowSearchMode,
+    GameCaptureSourceBuilder, MonitorCaptureSourceBuilder, ObsGameCaptureMode, WindowSearchMode,
 };
 use libobs_wrapper::data::video::ObsVideoInfoBuilder;
 use libobs_wrapper::display::{
@@ -27,7 +26,10 @@ use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, EventLoopBuilder};
+#[cfg(target_os = "linux")]
 use winit::platform::wayland::EventLoopBuilderExtWayland;
+#[cfg(target_os="windows")]
+use winit::platform::windows::EventLoopBuilderExtWindows;
 #[cfg(target_os = "linux")]
 use winit::raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -37,8 +39,7 @@ use winit::window::{Window, WindowId};
 struct ObsInner {
     context: ObsContext,
     display: ObsDisplayRef,
-    #[cfg_attr(not(windows), allow(dead_code))]
-    source: ObsSourceRef,
+    _source: ObsSourceRef,
 }
 
 impl ObsInner {
@@ -223,12 +224,13 @@ impl ObsInner {
             }
         });
 
+        #[cfg_attr(not(target_os = "linux"), allow(unused_unsafe))]
         let display = unsafe { context.display(data)? };
         Ok(Self {
             context,
             #[cfg_attr(not(target_os = "linux"), allow(unused_unsafe))]
             display,
-            source: monitor_src,
+            _source: monitor_src,
         })
     }
 }
@@ -236,8 +238,6 @@ impl ObsInner {
 struct App {
     window: Arc<RwLock<Option<Sendable<Window>>>>,
     obs: Arc<RwLock<Option<ObsInner>>>,
-    #[cfg_attr(not(windows), allow(dead_code))]
-    monitor_index: Arc<AtomicUsize>,
     start_time: Option<std::time::Instant>,
 }
 
@@ -335,17 +335,14 @@ impl ApplicationHandler for App {
 
 #[test]
 pub fn test_preview() -> anyhow::Result<()> {
-    let mut event_loop = EventLoopBuilder::default();
-
-    #[cfg(target_os = "linux")]
-    event_loop.with_any_thread(true);
-
-    let event_loop = event_loop.build().unwrap();
+    let event_loop = EventLoopBuilder::default()
+        .with_any_thread(true)
+        .build()
+        .unwrap();
 
     let mut app = App {
         window: Arc::new(RwLock::new(None)),
         obs: Arc::new(RwLock::new(None)),
-        monitor_index: Arc::new(AtomicUsize::new(1)),
         start_time: None,
     };
 
