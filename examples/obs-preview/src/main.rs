@@ -7,6 +7,9 @@ use libobs_sources::linux::LinuxGeneralScreenCapture;
 use libobs_wrapper::utils::NixDisplay;
 
 #[cfg(windows)]
+use libobs_wrapper::utils::traits::ObsUpdatable;
+
+#[cfg(windows)]
 use libobs_sources::windows::{
     GameCaptureSourceBuilder, MonitorCaptureSourceBuilder, MonitorCaptureSourceUpdater,
     ObsGameCaptureMode, WindowSearchMode,
