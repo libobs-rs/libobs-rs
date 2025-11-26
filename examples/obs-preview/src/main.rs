@@ -23,7 +23,7 @@ use libobs_wrapper::unsafe_send::Sendable;
 use libobs_wrapper::utils::{AudioEncoderInfo, OutputInfo};
 use libobs_wrapper::{context::ObsContext, utils::StartupInfo};
 #[cfg(windows)]
-use libobs_wrapper::{sources::ObsSourceBuilder, utils::traits::ObsUpdatable};
+use libobs_wrapper::sources::ObsSourceBuilder;
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
 use winit::event::{ElementState, MouseButton, WindowEvent};

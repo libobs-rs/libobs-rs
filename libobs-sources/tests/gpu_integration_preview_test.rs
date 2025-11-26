@@ -12,19 +12,17 @@ use libobs_sources::windows::{
     GameCaptureSourceBuilder, MonitorCaptureSourceBuilder, MonitorCaptureSourceUpdater,
     ObsGameCaptureMode, WindowSearchMode,
 };
-#[cfg(windows)]
-use libobs_sources::ObsObjectUpdater;
 use libobs_wrapper::data::video::ObsVideoInfoBuilder;
 use libobs_wrapper::display::{
     ObsDisplayCreationData, ObsDisplayRef, ObsWindowHandle, WindowPositionTrait,
 };
 use libobs_wrapper::encoders::{ObsAudioEncoderType, ObsContextEncoders, ObsVideoEncoderType};
+#[cfg(windows)]
+use libobs_wrapper::sources::ObsSourceBuilder;
 use libobs_wrapper::sources::ObsSourceRef;
 use libobs_wrapper::unsafe_send::Sendable;
 use libobs_wrapper::utils::{AudioEncoderInfo, OutputInfo};
 use libobs_wrapper::{context::ObsContext, utils::StartupInfo};
-#[cfg(windows)]
-use libobs_wrapper::{sources::ObsSourceBuilder, utils::traits::ObsUpdatable};
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
 use winit::event::WindowEvent;
@@ -44,7 +42,7 @@ struct ObsInner {
 }
 
 impl ObsInner {
-    fn new(event_loop: &ActiveEventLoop, window: &Window) -> anyhow::Result<Self> {
+    fn new(_event_loop: &ActiveEventLoop, window: &Window) -> anyhow::Result<Self> {
         //TODO This scales the output to 1920x1080, the captured window may be at a different aspect ratio
         let v = ObsVideoInfoBuilder::new()
             .base_width(1920)
@@ -58,7 +56,7 @@ impl ObsInner {
 
         //NOTE - This is very important if you are running a GUI application, ensure that a nix display is set on linux!
         #[cfg(target_os = "linux")]
-        if let RawDisplayHandle::Wayland(handle) = event_loop.display_handle().unwrap().as_raw() {
+        if let RawDisplayHandle::Wayland(handle) = _event_loop.display_handle().unwrap().as_raw() {
             info = unsafe {
                 info.set_nix_display(NixDisplay::Wayland(Sendable(handle.display.as_ptr() as _)))
             };
@@ -276,6 +274,7 @@ impl ApplicationHandler for App {
         let mut inner = self.obs.write().unwrap().take().unwrap();
         inner.context.remove_display(&inner.display).unwrap();
 
+        #[cfg(target_os = "linux")]
         if let Ok(Some(token)) = inner.source.get_restore_token() {
             let restore_token_path = std::env::current_exe()
                 .unwrap()
@@ -336,10 +335,12 @@ impl ApplicationHandler for App {
 
 #[test]
 pub fn test_preview() -> anyhow::Result<()> {
-    let event_loop = EventLoopBuilder::default()
-        .with_any_thread(true)
-        .build()
-        .unwrap();
+    let mut event_loop = EventLoopBuilder::default();
+
+    #[cfg(target_os = "linux")]
+    event_loop.with_any_thread(true);
+
+    let event_loop = event_loop.build().unwrap();
 
     let mut app = App {
         window: Arc::new(RwLock::new(None)),
