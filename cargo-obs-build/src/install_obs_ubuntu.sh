@@ -38,7 +38,7 @@ git submodule update --init --recursive
 
 # Configure build with CMAKE_INSTALL_PREFIX=/usr
 cmake --preset ubuntu \
--DCMAKE_INSTALL_PREFIX=/usr
+-DCMAKE_INSTALL_PREFIX=/usr -DOBS_COMPILE_DEPRECATION_AS_WARNING=ON
 
 # Build OBS Studio
 cmake --build build_ubuntu --parallel $(nproc)
