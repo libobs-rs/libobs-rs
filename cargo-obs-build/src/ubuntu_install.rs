@@ -21,7 +21,10 @@ pub fn linux_obs_system_install(opts: InstallArgs) -> anyhow::Result<()> {
     let mut cmd = std::process::Command::new("bash");
     cmd.arg("/tmp/install_obs.sh");
 
-    cmd.env("OBS_GIT_REPO", opts.repo_id);
+    cmd.env(
+        "OBS_GIT_REPO",
+        format!("https://github.com/{}.git", opts.repo_id),
+    );
     if let Some(tag) = &tag {
         cmd.env("OBS_BUILD_TAG", tag);
     }
