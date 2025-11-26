@@ -36,9 +36,12 @@ fn main() -> anyhow::Result<()> {
     #[cfg(target_os = "linux")]
     {
         // You could also read a restore token here from a file
-        let screen_capture =
-            LinuxGeneralScreenCapture::auto_detect(context.runtime().clone(), "Screen Capture", None)
-                .map_err(|e| anyhow::anyhow!("Failed to create screen capture: {}", e))?;
+        let screen_capture = LinuxGeneralScreenCapture::auto_detect(
+            context.runtime().clone(),
+            "Screen Capture",
+            None,
+        )
+        .map_err(|e| anyhow::anyhow!("Failed to create screen capture: {}", e))?;
 
         println!(
             "Using {} capture method",

@@ -16,7 +16,7 @@ use libobs_sources::windows::{
 use libobs_sources::ObsObjectUpdater;
 use libobs_wrapper::data::video::ObsVideoInfoBuilder;
 use libobs_wrapper::display::{
-    ObsDisplayCreationData, ObsDisplayRef, ObsWindowHandle, ShowHideTrait, WindowPositionTrait,
+    ObsDisplayCreationData, ObsDisplayRef, ObsWindowHandle, WindowPositionTrait,
 };
 use libobs_wrapper::encoders::{ObsAudioEncoderType, ObsContextEncoders, ObsVideoEncoderType};
 use libobs_wrapper::sources::ObsSourceRef;
@@ -27,7 +27,7 @@ use libobs_wrapper::{context::ObsContext, utils::StartupInfo};
 use libobs_wrapper::{sources::ObsSourceBuilder, utils::traits::ObsUpdatable};
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
-use winit::event::{ElementState, MouseButton, WindowEvent};
+use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, EventLoopBuilder};
 use winit::platform::wayland::EventLoopBuilderExtWayland;
 #[cfg(target_os = "linux")]
@@ -328,64 +328,6 @@ impl ApplicationHandler for App {
                 if let Some(obs) = self.obs.write().unwrap().clone() {
                     let _ = obs.display.update_color_space();
                 }
-            }
-            WindowEvent::MouseInput { state, button, .. } => {
-                if !matches!(state, ElementState::Pressed) {
-                    return;
-                }
-
-                match button {
-                    #[cfg(windows)]
-                    // Technically we could also switch monitors on X11, but we would like to keep it simple for now...
-                    MouseButton::Left => {
-                        let tmp = self.source_ref.clone();
-                        let monitor_index = self.monitor_index.clone();
-
-                        let mut source = tmp.write().unwrap().clone();
-                        let monitors = MonitorCaptureSourceBuilder::get_monitors().unwrap();
-
-                        let monitor_index = monitor_index
-                            .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
-                            % monitors.len();
-                        let monitor = &monitors[monitor_index];
-
-                        source
-                            .create_updater::<MonitorCaptureSourceUpdater>()
-                            .unwrap()
-                            .set_monitor(monitor)
-                            .update()
-                            .unwrap();
-                    }
-                    MouseButton::Right => {
-                        let inner = self.obs.write().unwrap().clone();
-                        if let Some(inner) = inner {
-                            let display = inner.display.clone();
-                            let pos = display.get_pos().unwrap();
-                            println!("Display position: {:?}", pos);
-
-                            display.set_pos(pos.0 + 10, pos.1 + 10).unwrap();
-                            println!(
-                                "Moved display to position: {:?}",
-                                display.get_pos().unwrap()
-                            );
-                        }
-                    }
-                    MouseButton::Middle => {
-                        let inner = self.obs.write().unwrap().clone();
-                        if let Some(inner) = inner {
-                            let mut display = inner.display;
-                            let visible = display.is_visible().unwrap();
-                            if visible {
-                                println!("Hiding display");
-                                display.hide().unwrap();
-                            } else {
-                                println!("Showing display");
-                                display.show().unwrap();
-                            }
-                        }
-                    }
-                    _ => (),
-                };
             }
             _ => (),
         }

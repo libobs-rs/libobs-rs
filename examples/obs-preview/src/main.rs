@@ -42,7 +42,7 @@ struct ObsInner {
 }
 
 impl ObsInner {
-    fn new(event_loop: &ActiveEventLoop, window: &Window) -> anyhow::Result<Self> {
+    fn new(_event_loop: &ActiveEventLoop, window: &Window) -> anyhow::Result<Self> {
         //TODO This scales the output to 1920x1080, the captured window may be at a different aspect ratio
         let v = ObsVideoInfoBuilder::new()
             .base_width(1920)
@@ -56,7 +56,7 @@ impl ObsInner {
 
         //NOTE - This is very important if you are running a GUI application, ensure that a nix display is set on linux!
         #[cfg(target_os = "linux")]
-        if let RawDisplayHandle::Wayland(handle) = event_loop.display_handle().unwrap().as_raw() {
+        if let RawDisplayHandle::Wayland(handle) = _event_loop.display_handle().unwrap().as_raw() {
             info = unsafe {
                 info.set_nix_display(NixDisplay::Wayland(Sendable(handle.display.as_ptr() as _)))
             };
@@ -132,10 +132,13 @@ impl ObsInner {
 
         // You could also read a restore token here frm a file
         #[cfg(target_os = "linux")]
-        let monitor_src =
-            LinuxGeneralScreenCapture::auto_detect(context.runtime().clone(), "Monitor capture", None)
-                .unwrap()
-                .add_to_scene(&mut scene)?;
+        let monitor_src = LinuxGeneralScreenCapture::auto_detect(
+            context.runtime().clone(),
+            "Monitor capture",
+            None,
+        )
+        .unwrap()
+        .add_to_scene(&mut scene)?;
 
         scene.set_source_position(&monitor_src, libobs_wrapper::Vec2::new(0.0, 0.0))?;
         scene.set_source_scale(&monitor_src, libobs_wrapper::Vec2::new(1.0, 1.0))?;
@@ -206,6 +209,7 @@ impl ObsInner {
             }
         });
 
+        #[cfg_attr(not(target_os = "linux"), allow(unused_unsafe))]
         let display = unsafe { context.display(data)? };
         Ok(Self {
             context,
@@ -297,23 +301,25 @@ impl ApplicationHandler for App {
                     #[cfg(windows)]
                     // Technically we could also switch monitors on X11, but we would like to keep it simple for now...
                     MouseButton::Left => {
-                        let tmp = self.source_ref.clone();
-                        let monitor_index = self.monitor_index.clone();
+                        let inner = self.obs.write().unwrap().clone();
+                        if let Some(inner) = inner {
+                            let monitor_index = self.monitor_index.clone();
 
-                        let mut source = tmp.write().unwrap().clone();
-                        let monitors = MonitorCaptureSourceBuilder::get_monitors().unwrap();
+                            let mut source = inner.source;
+                            let monitors = MonitorCaptureSourceBuilder::get_monitors().unwrap();
 
-                        let monitor_index = monitor_index
-                            .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
-                            % monitors.len();
-                        let monitor = &monitors[monitor_index];
+                            let monitor_index = monitor_index
+                                .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+                                % monitors.len();
+                            let monitor = &monitors[monitor_index];
 
-                        source
-                            .create_updater::<MonitorCaptureSourceUpdater>()
-                            .unwrap()
-                            .set_monitor(monitor)
-                            .update()
-                            .unwrap();
+                            source
+                                .create_updater::<MonitorCaptureSourceUpdater>()
+                                .unwrap()
+                                .set_monitor(monitor)
+                                .update()
+                                .unwrap();
+                        }
                     }
                     MouseButton::Right => {
                         let inner = self.obs.write().unwrap().clone();
