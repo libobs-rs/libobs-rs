@@ -67,7 +67,10 @@ impl StartupInfo {
     /// Failing to set this may result in libobs being unable to create preview windows,
     ///
     /// X11 however works without setting this display, in fact your window may become unresponsive if a display is set.
-    pub fn set_nix_display(mut self, display: NixDisplay) -> Self {
+    ///
+    /// # Safety
+    /// Make sure that the display is closed AFTER the whole OBS context has been dropped!
+    pub unsafe fn set_nix_display(mut self, display: NixDisplay) -> Self {
         self.nix_display = Some(display);
         self
     }

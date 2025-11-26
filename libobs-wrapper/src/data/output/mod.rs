@@ -22,12 +22,12 @@ mod replay_buffer;
 pub use replay_buffer::*;
 
 #[derive(Debug)]
-struct _ObsDropGuard {
+struct _ObsOutputDropGuard {
     output: Sendable<*mut obs_output>,
     runtime: ObsRuntime,
 }
 
-impl_obs_drop!(_ObsDropGuard, (output), move || unsafe {
+impl_obs_drop!(_ObsOutputDropGuard, (output), move || unsafe {
     libobs::obs_output_release(output);
 });
 
@@ -76,7 +76,7 @@ pub struct ObsOutputRef {
 
     /// RAII guard that ensures proper cleanup when the output is dropped
     #[skip_getter]
-    _drop_guard: Arc<_ObsDropGuard>,
+    _drop_guard: Arc<_ObsOutputDropGuard>,
 }
 
 impl ObsOutputRef {
@@ -138,7 +138,7 @@ impl ObsOutputRef {
             id,
             name,
 
-            _drop_guard: Arc::new(_ObsDropGuard {
+            _drop_guard: Arc::new(_ObsOutputDropGuard {
                 output,
                 runtime: runtime.clone(),
             }),

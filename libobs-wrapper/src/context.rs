@@ -423,17 +423,15 @@ impl ObsContext {
 
                             let surface_handle = data.window_handle.window.0.display;
                             let display_from_surface = wl_proxy_get_display(surface_handle);
-                            if display_from_surface.is_err() {
-                                return Err(ObsError::DisplayCreationError(
-                            "Could not get display from surface handle on wayland. Make sure your wayland client is at least version 1.23".to_string(),
-                        ));
-                            }
-
-                            let display_from_surface = display_from_surface.unwrap();
-                            if display_from_surface != display.0 {
-                                return Err(ObsError::DisplayCreationError(
+                            if let Err(e) = display_from_surface {
+                                log::warn!("Could not get display from surface handle on wayland. Make sure your wayland client is at least version 1.23. Error: {:?}", e);
+                            } else {
+                                let display_from_surface = display_from_surface.unwrap();
+                                if display_from_surface != display.0 {
+                                    return Err(ObsError::DisplayCreationError(
                             "Provided surface handle's Wayland display does not match the NixDisplay's Wayland display.".to_string(),
                         ));
+                                }
                             }
                         }
                     }

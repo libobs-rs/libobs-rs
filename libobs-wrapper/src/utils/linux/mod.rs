@@ -47,10 +47,12 @@ impl Drop for LinuxGlibLoop {
         if let Some(handle) = self.handle.take() {
             let r = handle.join();
             if std::thread::panicking() {
-                log::error!(
-                    "[libobs-wrapper]: Thread panicked while dropping LinuxGlibLoop: {:?}",
-                    r.err()
-                );
+                if let Err(e) = r {
+                    log::error!(
+                        "[libobs-wrapper]: Thread panicked while dropping LinuxGlibLoop: {:?}",
+                        e
+                    );
+                }
             } else {
                 r.unwrap();
             }
@@ -62,7 +64,8 @@ pub(crate) fn wl_proxy_get_display(
     proxy: *mut std::os::raw::c_void,
 ) -> Result<*mut std::os::raw::c_void, libloading::Error> {
     unsafe {
-        let lib = libloading::Library::new("libwayland-client.so")?;
+        let lib = libloading::Library::new("libwayland-client.so")
+            .or_else(|_e| libloading::Library::new("libwayland-client.so.0"))?;
         let sym: Result<
             libloading::Symbol<
                 unsafe extern "C" fn(*mut ::std::os::raw::c_void) -> *mut ::std::os::raw::c_void,
