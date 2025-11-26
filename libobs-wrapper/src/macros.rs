@@ -58,9 +58,8 @@ macro_rules! impl_obs_drop {
     ($struct_name: ident, ($($var:ident),* $(,)*), $operation:expr) => {
         impl Drop for $struct_name {
             fn drop(&mut self) {
-                use std::io::Write;
-                println!("Dropping {}...", stringify!($struct_name));
-                let _ = std::io::stdout().flush();
+                log::trace!("Dropping {}...", stringify!($struct_name));
+
                 $(let $var = self.$var.clone();)*
                 #[cfg(any(not(feature = "no_blocking_drops"), test, feature="__test_environment"))]
                 {

@@ -157,7 +157,6 @@ impl ObsWindowHandle {
 
 impl ObsDisplayRef {
     /// Call initialize to ObsDisplay#create the display
-    /// NOTE: This must be pinned to prevent the draw callbacks from having an invalid pointer. DO NOT UNPIN
     pub(crate) fn new(data: ObsDisplayCreationData, runtime: ObsRuntime) -> anyhow::Result<Self> {
         use std::sync::atomic::Ordering;
 

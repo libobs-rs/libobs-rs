@@ -353,7 +353,7 @@ impl ObsContext {
     ///
     /// Note: When calling `set_size` or `set_pos`, `update_color_space` is called automatically.
     ///
-    /// Another note: On Linux, this method is unsafe because you must ensure that every display reference is dropped before your application exits.
+    /// Another note: On Linux, this method is unsafe because you must ensure that every display reference is dropped before your window exits.
     #[cfg(not(target_os = "linux"))]
     pub fn display(&mut self, data: ObsDisplayCreationData) -> Result<ObsDisplayRef, ObsError> {
         self.inner_display_fn(data)
@@ -364,7 +364,7 @@ impl ObsContext {
     /// You must call `update_color_space` on the display when the window is moved, resized or the display settings change.
     ///
     /// # Safety
-    /// All references of the `ObsDisplayRef` **MUST** be dropped before your application exits, otherwise you **will** have crashes.
+    /// All references of the `ObsDisplayRef` **MUST** be dropped before your window closes, otherwise you **will** have crashes.
     /// This includes calling `remove_display` or `remove_display_by_id` to remove the display from the context.
     ///
     /// Also on X11, make sure that the provided window handle was created using the same display as the one provided in the `NixDisplay` in the `StartupInfo`.

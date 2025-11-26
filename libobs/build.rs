@@ -27,25 +27,29 @@ fn main() {
 
         #[cfg(target_os = "linux")]
         {
+            /*
             let header = include_str!("./headers/obs/obs-config.h");
-            let mut major = "";
-            let mut minor = "";
-            let mut patch = "";
-            for line in header.lines() {
-                if line.starts_with("#define LIBOBS_API_MAJOR_VER") {
-                    major = line.split_whitespace().last().unwrap();
-                } else if line.starts_with("#define LIBOBS_API_MINOR_VER") {
-                    minor = line.split_whitespace().last().unwrap();
-                } else if line.starts_with("#define LIBOBS_API_PATCH_VER") {
-                    patch = line.split_whitespace().last().unwrap();
-                }
-            }
+                        let mut major = "";
+                        let mut minor = "";
+                        let mut patch = "";
+                        for line in header.lines() {
+                            if line.starts_with("#define LIBOBS_API_MAJOR_VER") {
+                                major = line.split_whitespace().last().unwrap();
+                            } else if line.starts_with("#define LIBOBS_API_MINOR_VER") {
+                                minor = line.split_whitespace().last().unwrap();
+                            } else if line.starts_with("#define LIBOBS_API_PATCH_VER") {
+                                patch = line.split_whitespace().last().unwrap();
+                            }
+                        }
 
-            let version = format!("{}.{}.{}", major, minor, patch);
+                        let version = format!("{}.{}.{}", major, minor, patch);
+                        */
+
+            let version = "30.0.0"; // Manually set for now, update when updating obs-studio version
             pkg_config::Config::new()
-                .atleast_version(&version)
+                .atleast_version(version)
                 .probe("libobs")
-                .unwrap_or_else(|_| panic!("Could not find libobs via pkg-config. Make sure you have installed obs-studio to the system. A build/installation guide can be found at https://github.com/obsproject/obs-studio/wiki/Build-Instructions-For-Linux. The version must be at least {}", version));
+                .unwrap_or_else(|_| panic!("Could not find libobs via pkg-config. Make sure you have installed obs-studio to the system. A build/installation guide can be found at https://github.com/obsproject/obs-studio/wiki/Build-Instructions-For-Linux. If you are using Ubuntu, you can also run 'cargo obs-build install'. The version must be at least {}", version));
         }
     }
 

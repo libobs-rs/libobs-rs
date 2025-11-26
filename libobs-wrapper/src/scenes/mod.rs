@@ -97,7 +97,6 @@ impl ObsSceneRef {
 
         let scene_source_ptr = self.get_scene_source_ptr()?;
         run_with_obs!(self.runtime, (scene_source_ptr), move || unsafe {
-            //TODO remove this once the scene has been dropped
             libobs::obs_set_output_source(channel, scene_source_ptr);
         })
     }

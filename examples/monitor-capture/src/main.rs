@@ -1,5 +1,6 @@
 use libobs_wrapper::context::ObsContext;
 use libobs_wrapper::encoders::ObsContextEncoders;
+use libobs_wrapper::logger::ObsLogger;
 use libobs_wrapper::utils::{AudioEncoderInfo, ObsPath, OutputInfo, StartupInfo};
 
 #[cfg(windows)]
@@ -16,9 +17,17 @@ use libobs_sources::linux::LinuxGeneralScreenCapture;
 #[cfg(target_os = "linux")]
 use std::io::{self, Write};
 
+#[derive(Debug)]
+pub struct NoLogger {}
+impl ObsLogger for NoLogger {
+    fn log(&mut self, _level: libobs_wrapper::enums::ObsLogLevel, _msg: String) {}
+}
+
 fn main() -> anyhow::Result<()> {
     // Start the OBS context
-    let startup_info = StartupInfo::default();
+    let startup_info = StartupInfo::default()
+        //FIXME This is not recommended in production. This is just for the purpose of this example.
+        .set_logger(Box::new(NoLogger {}));
     let mut context = ObsContext::new(startup_info)?;
 
     let mut scene = context.scene("main")?;

@@ -1,6 +1,6 @@
 # Example build.rs for using cargo-obs-build as a library
 
-**This crate supports Windows and MacOS only!**
+**This crate supports Windows and MacOS for build only!**
 
 This demonstrates how to use the `cargo-obs-build` library in a build script to automatically download and install OBS binaries.
 

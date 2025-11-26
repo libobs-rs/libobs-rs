@@ -11,7 +11,7 @@ use crate::{
 /// ## Platform Notes
 /// On Linux platforms, if your application uses a GUI
 /// framework (like GTK, Qt, etc.), it is crucial to set
-/// the appropriate `NixDisplay` in the `StartupInfo`.
+/// the appropriate `NixDisplay` in the `StartupInfo` **if you want to create a preview window**.
 /// This ensures that libobs can correctly interface with
 /// the display server (X11 or Wayland) used by your application.
 /// If this is not set, libobs will not be able to create a preview window and the application will crash.
@@ -61,9 +61,10 @@ impl StartupInfo {
 
     /// This sets the Nix display (X11 or Wayland) to use when starting libobs.
     ///
-    /// This is required on Linux platforms to ensure proper integration with the display server.
+    /// This is **important** if your application creates any preview windows using libobs on Linux.
+    /// Otherwise if you don't plan to use preview windows **AND** are not using a GUI framework, you can skip this.
     ///
-    /// Wayland requires this display to be the same as the one used by the application.
+    /// Wayland requires this display to be the same as the one used by the GUI application (if you have one).
     /// Failing to set this may result in libobs being unable to create preview windows,
     ///
     /// X11 however works without setting this display, in fact your window may become unresponsive if a display is set.
