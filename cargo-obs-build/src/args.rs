@@ -67,4 +67,14 @@ pub struct InstallArgs {
     /// Skip the Ubuntu system check
     #[arg(long, default_value_t = false)]
     pub skip_check: bool,
+
+    /// The github repository to clone OBS Studio from
+    #[arg(long, default_value = "obsproject/obs-studio")]
+    pub repo_id: String,
+
+    /// The tag of the OBS Studio release to build.
+    /// If none is specified, the matching release for the libobs crate will be used.
+    /// Use `latest` for the latest obs release. If a version in the `workspace.metadata` is set, that version will be used.
+    #[arg(short, long)]
+    pub tag: Option<String>,
 }

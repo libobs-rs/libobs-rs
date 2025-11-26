@@ -19,15 +19,21 @@ sudo apt install cmake extra-cmake-modules ninja-build pkg-config clang clang-fo
 
 TEMP_DIR=$(mktemp -d)
 
+OBS_REPO="${OBS_GIT_REPO:-https://github.com/obsproject/obs-studio.git}"
+echo "Cloning OBS Studio from: $OBS_REPO"
+
 # Clone OBS Studio repository
-git clone --recursive https://github.com/obsproject/obs-studio.git $TEMP_DIR
+git clone --recursive "$OBS_REPO" $TEMP_DIR
 cd $TEMP_DIR
 
-# Get the latest stable tag
 git fetch --tags
 LATEST_TAG=$(git describe --tags --abbrev=0)
-echo "Building OBS Studio version: $LATEST_TAG"
-git checkout $LATEST_TAG
+
+OBS_BUILD_TAG="${OBS_BUILD_TAG:-$LATEST_TAG}"
+
+# Get the latest stable tag
+echo "Building OBS Studio version: $OBS_BUILD_TAG"
+git checkout $OBS_BUILD_TAG
 git submodule update --init --recursive
 
 # Configure build with CMAKE_INSTALL_PREFIX=/usr

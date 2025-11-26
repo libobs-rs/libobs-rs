@@ -1,7 +1,13 @@
 use anyhow::bail;
+use cargo_obs_build::get_meta_info;
 
-pub fn linux_obs_system_install(skip_check: bool) -> anyhow::Result<()> {
-    if !skip_check {
+use crate::args::InstallArgs;
+
+pub fn linux_obs_system_install(opts: InstallArgs) -> anyhow::Result<()> {
+    let mut tag = opts.tag;
+    get_meta_info(&mut None, &mut tag)?;
+
+    if !opts.skip_check {
         // Check if system is Ubuntu/Debian based
         let os_release =
             std::fs::read_to_string("/etc/os-release").expect("Failed to read /etc/os-release");
@@ -12,10 +18,15 @@ pub fn linux_obs_system_install(skip_check: bool) -> anyhow::Result<()> {
 
     let script = include_str!("install_obs_ubuntu.sh");
     std::fs::write("/tmp/install_obs.sh", script).expect("Failed to write install script");
-    let status = std::process::Command::new("bash")
-        .arg("/tmp/install_obs.sh")
-        .status()
-        .expect("Failed to execute install script");
+    let mut cmd = std::process::Command::new("bash");
+    cmd.arg("/tmp/install_obs.sh");
+
+    cmd.env("OBS_GIT_REPO", opts.repo_id);
+    if let Some(tag) = &tag {
+        cmd.env("OBS_BUILD_TAG", tag);
+    }
+
+    let status = cmd.status().expect("Failed to execute install script");
 
     if !status.success() {
         bail!("OBS installation script failed");

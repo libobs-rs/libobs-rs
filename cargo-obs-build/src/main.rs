@@ -52,7 +52,7 @@ fn main() -> anyhow::Result<()> {
     match args.command {
         #[cfg(target_os = "linux")]
         args::Commands::Install(args) => {
-            ubuntu_install::linux_obs_system_install(args.skip_check)?;
+            ubuntu_install::linux_obs_system_install(args)?;
         }
         #[cfg(not(target_os = "linux"))]
         args::Commands::Build(args) => {
