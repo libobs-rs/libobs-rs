@@ -45,6 +45,7 @@ pub fn test_scene() {
             let t = e.get_encoder_id();
             t == &ObsVideoEncoderType::H264_TEXTURE_AMF
                 || t == &ObsVideoEncoderType::AV1_TEXTURE_AMF
+                || t == &ObsVideoEncoderType::OBS_X264
         })
         .unwrap();
 

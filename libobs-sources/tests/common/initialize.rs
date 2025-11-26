@@ -55,6 +55,7 @@ pub fn initialize_obs<T: Into<ObsString> + Send + Sync>(rec_file: T) -> (ObsCont
             t == &ObsVideoEncoderType::H264_TEXTURE_AMF
                 || t == &ObsVideoEncoderType::AV1_TEXTURE_AMF
                 || t == &ObsVideoEncoderType::OBS_NVENC_H264_TEX
+                || t == &ObsVideoEncoderType::OBS_X264
         })
         .unwrap();
 
