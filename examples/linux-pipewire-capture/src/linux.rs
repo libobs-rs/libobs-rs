@@ -22,7 +22,7 @@ pub fn main() -> anyhow::Result<()> {
 
     // Start the OBS context
     let startup_info = StartupInfo::default()
-        // This is just so the console output from libobs is suppressed, this isn't recommened in production
+        // This is just so the console output from libobs is suppressed, this isn't recommended in production
         .set_logger(Box::new(NoLogger {}));
     let mut context = ObsContext::new(startup_info)?;
 
