@@ -4002,6 +4002,11 @@ pub type obs_hotkey_callback_router_func = ::std::option::Option<
 >;
 pub type obs_hotkey_atomic_update_func =
     ::std::option::Option<unsafe extern "C" fn(arg1: *mut ::std::os::raw::c_void)>;
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct dstr {
+    _unused: [u8; 0],
+}
 pub const obs_order_movement_OBS_ORDER_MOVE_UP: obs_order_movement = 0;
 pub const obs_order_movement_OBS_ORDER_MOVE_DOWN: obs_order_movement = 1;
 pub const obs_order_movement_OBS_ORDER_MOVE_TOP: obs_order_movement = 2;
@@ -4601,39 +4606,6 @@ pub const hook_rate_HOOK_RATE_NORMAL: hook_rate = 1;
 pub const hook_rate_HOOK_RATE_FAST: hook_rate = 2;
 pub const hook_rate_HOOK_RATE_FASTEST: hook_rate = 3;
 pub type hook_rate = ::std::os::raw::c_int;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct strref {
-    _unused: [u8; 0],
-}
-#[repr(C)]
-pub struct dstr {
-    pub array: *mut ::std::os::raw::c_char,
-    pub len: usize,
-    pub capacity: usize,
-}
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of dstr"][::std::mem::size_of::<dstr>() - 24usize];
-    ["Alignment of dstr"][::std::mem::align_of::<dstr>() - 8usize];
-    ["Offset of field: dstr::array"][::std::mem::offset_of!(dstr, array) - 0usize];
-    ["Offset of field: dstr::len"][::std::mem::offset_of!(dstr, len) - 8usize];
-    ["Offset of field: dstr::capacity"][::std::mem::offset_of!(dstr, capacity) - 16usize];
-};
-pub const window_priority_WINDOW_PRIORITY_CLASS: window_priority = 0;
-pub const window_priority_WINDOW_PRIORITY_TITLE: window_priority = 1;
-pub const window_priority_WINDOW_PRIORITY_EXE: window_priority = 2;
-pub type window_priority = ::std::os::raw::c_int;
-pub const window_search_mode_INCLUDE_MINIMIZED: window_search_mode = 0;
-pub const window_search_mode_EXCLUDE_MINIMIZED: window_search_mode = 1;
-pub type window_search_mode = ::std::os::raw::c_int;
-pub type add_window_cb = ::std::option::Option<
-    unsafe extern "C" fn(
-        title: *const ::std::os::raw::c_char,
-        window_class: *const ::std::os::raw::c_char,
-        exe: *const ::std::os::raw::c_char,
-    ) -> bool,
->;
 pub const window_capture_method_METHOD_AUTO: window_capture_method = 0;
 pub const window_capture_method_METHOD_BITBLT: window_capture_method = 1;
 pub const window_capture_method_METHOD_WGC: window_capture_method = 2;
@@ -8260,79 +8232,4 @@ unsafe extern "C" {
         -> bool;
     #[doc = " Renders the sources of this canvas's view context"]
     pub fn obs_canvas_render(canvas: *mut obs_canvas_t);
-    pub fn astrcmpi(
-        str1: *const ::std::os::raw::c_char,
-        str2: *const ::std::os::raw::c_char,
-    ) -> ::std::os::raw::c_int;
-    pub fn wstrcmpi(str1: *const wchar_t, str2: *const wchar_t) -> ::std::os::raw::c_int;
-    pub fn astrcmp_n(
-        str1: *const ::std::os::raw::c_char,
-        str2: *const ::std::os::raw::c_char,
-        n: usize,
-    ) -> ::std::os::raw::c_int;
-    pub fn wstrcmp_n(str1: *const wchar_t, str2: *const wchar_t, n: usize)
-        -> ::std::os::raw::c_int;
-    pub fn astrcmpi_n(
-        str1: *const ::std::os::raw::c_char,
-        str2: *const ::std::os::raw::c_char,
-        n: usize,
-    ) -> ::std::os::raw::c_int;
-    pub fn wstrcmpi_n(
-        str1: *const wchar_t,
-        str2: *const wchar_t,
-        n: usize,
-    ) -> ::std::os::raw::c_int;
-    pub fn astrstri(
-        str_: *const ::std::os::raw::c_char,
-        find: *const ::std::os::raw::c_char,
-    ) -> *mut ::std::os::raw::c_char;
-    pub fn wstrstri(str_: *const wchar_t, find: *const wchar_t) -> *mut wchar_t;
-    pub fn strdepad(str_: *mut ::std::os::raw::c_char) -> *mut ::std::os::raw::c_char;
-    pub fn wcsdepad(str_: *mut wchar_t) -> *mut wchar_t;
-    pub fn strlist_split(
-        str_: *const ::std::os::raw::c_char,
-        split_ch: ::std::os::raw::c_char,
-        include_empty: bool,
-    ) -> *mut *mut ::std::os::raw::c_char;
-    pub fn strlist_free(strlist: *mut *mut ::std::os::raw::c_char);
-    pub fn dstr_init_copy_strref(dst: *mut dstr, src: *const strref);
-    pub fn dstr_copy(dst: *mut dstr, array: *const ::std::os::raw::c_char);
-    pub fn dstr_copy_strref(dst: *mut dstr, src: *const strref);
-    pub fn dstr_ncopy(dst: *mut dstr, array: *const ::std::os::raw::c_char, len: usize);
-    pub fn dstr_ncopy_dstr(dst: *mut dstr, src: *const dstr, len: usize);
-    pub fn dstr_cat_dstr(dst: *mut dstr, str_: *const dstr);
-    pub fn dstr_cat_strref(dst: *mut dstr, str_: *const strref);
-    pub fn dstr_ncat(dst: *mut dstr, array: *const ::std::os::raw::c_char, len: usize);
-    pub fn dstr_ncat_dstr(dst: *mut dstr, str_: *const dstr, len: usize);
-    pub fn dstr_insert(dst: *mut dstr, idx: usize, array: *const ::std::os::raw::c_char);
-    pub fn dstr_insert_dstr(dst: *mut dstr, idx: usize, str_: *const dstr);
-    pub fn dstr_insert_ch(dst: *mut dstr, idx: usize, ch: ::std::os::raw::c_char);
-    pub fn dstr_remove(dst: *mut dstr, idx: usize, count: usize);
-    pub fn dstr_printf(dst: *mut dstr, format: *const ::std::os::raw::c_char, ...);
-    pub fn dstr_catf(dst: *mut dstr, format: *const ::std::os::raw::c_char, ...);
-    pub fn dstr_vprintf(dst: *mut dstr, format: *const ::std::os::raw::c_char, args: va_list);
-    pub fn dstr_vcatf(dst: *mut dstr, format: *const ::std::os::raw::c_char, args: va_list);
-    pub fn dstr_safe_printf(
-        dst: *mut dstr,
-        format: *const ::std::os::raw::c_char,
-        val1: *const ::std::os::raw::c_char,
-        val2: *const ::std::os::raw::c_char,
-        val3: *const ::std::os::raw::c_char,
-        val4: *const ::std::os::raw::c_char,
-    );
-    pub fn dstr_replace(
-        str_: *mut dstr,
-        find: *const ::std::os::raw::c_char,
-        replace: *const ::std::os::raw::c_char,
-    );
-    pub fn dstr_depad(dst: *mut dstr);
-    pub fn dstr_left(dst: *mut dstr, str_: *const dstr, pos: usize);
-    pub fn dstr_mid(dst: *mut dstr, str_: *const dstr, start: usize, count: usize);
-    pub fn dstr_right(dst: *mut dstr, str_: *const dstr, pos: usize);
-    pub fn dstr_from_mbs(dst: *mut dstr, mbstr: *const ::std::os::raw::c_char);
-    pub fn dstr_to_mbs(str_: *const dstr) -> *mut ::std::os::raw::c_char;
-    pub fn dstr_from_wcs(dst: *mut dstr, wstr: *const wchar_t);
-    pub fn dstr_to_wcs(str_: *const dstr) -> *mut wchar_t;
-    pub fn dstr_to_upper(str_: *mut dstr);
-    pub fn dstr_to_lower(str_: *mut dstr);
 }

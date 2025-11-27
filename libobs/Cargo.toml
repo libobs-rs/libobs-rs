@@ -30,6 +30,7 @@ pkg-config = "0.3"
 [features]
 default = []
 generate_bindings = ["dep:bindgen"]
+include_win_bindings = []
 
 [dev-dependencies]
 vsprintf = "2.0.0"

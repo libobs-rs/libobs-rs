@@ -95,13 +95,15 @@ mod bindings {
     }
 
     pub fn generate_bindings() {
-        let builder = bindgen::builder().header("headers/wrapper.h");
+        let builder = bindgen::builder()
+            .header("headers/wrapper.h")
+            .clang_arg(format!("-I{}", "headers/obs"));
 
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(all(not(target_os = "linux"), not(feature = "include_win_bindings")))]
         let builder = builder
-            //.clang_arg(format!("-I{}", "headers/obs"))
             .blocklist_function("blogva")
             .blocklist_function("^_.*")
+            .blocklist_function("^ms_.*")
             .blocklist_file(".*windows\\.h")
             .blocklist_file(".*winuser\\.h")
             .blocklist_file(".*wingdi\\.h")

@@ -399,7 +399,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-obs-build"
-version = "1.3.0"
+version = "2.0.0"
 dependencies = [
  "anyhow",
  "cargo_metadata",
