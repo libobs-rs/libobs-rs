@@ -5,6 +5,7 @@ fn main() {
     println!("cargo:rerun-if-changed=headers/display_capture.h");
     println!("cargo:rerun-if-changed=headers/game_capture.h");
     println!("cargo:rerun-if-changed=headers/vec4.c");
+    println!("cargo:rerun-if-changed=src/whitelist.txt");
     println!("cargo:rerun-if-changed=headers/window_capture.h");
     println!("cargo:rerun-if-changed=Cargo.toml");
     println!("cargo:rerun-if-env-changed=LIBOBS_PATH");
@@ -98,15 +99,38 @@ mod bindings {
 
         #[cfg(not(target_os = "linux"))]
         let builder = builder
-            .clang_arg(format!("-I{}", "headers/obs"))
-            .blocklist_file(".*Windows\\.h")
-            .blocklist_file(".*wchar\\.h")
-            .blocklist_function("bwstrdup_n")
-            .blocklist_function("bwstrdup");
+            //.clang_arg(format!("-I{}", "headers/obs"))
+            .blocklist_function("blogva")
+            .blocklist_function("^_.*")
+            .blocklist_file(".*windows\\.h")
+            .blocklist_file(".*winuser\\.h")
+            .blocklist_file(".*wingdi\\.h")
+            .blocklist_file(".*winnt\\.h")
+            .blocklist_file(".*winbase\\.h")
+            .blocklist_file(".*Windows Kits.*")
+            // Block all MSVC headers except vadefs.h
+            .blocklist_file(r".*MSVC.*[\\/]include[\\/][^v].*")
+            .blocklist_file(r".*MSVC.*[\\/]include[\\/]v[^a].*")
+            .blocklist_file(r".*MSVC.*[\\/]include[\\/]va[^d].*")
+            .blocklist_file(r".*MSVC.*[\\/]include[\\/]vad[^e].*")
+            .blocklist_file(r".*MSVC.*[\\/]include[\\/]vade[^f].*")
+            .blocklist_file(r".*MSVC.*[\\/]include[\\/]vadef[^s].*")
+            .blocklist_file(r".*MSVC.*[\\/]include[\\/]vadefs[^.].*")
+            .blocklist_file(r".*MSVC.*[\\/]include[\\/]vadefs\.[^h].*");
+        //.blocklist_function("_bindgen_ty_2")
+        //.ignore_functions()
+        //.ignore_methods();
+        /*         let builder = to_include.lines().fold(builder, |builder, line| {
+            let item = line.trim();
+            if item.is_empty() || item.starts_with("//") {
+                builder
+            } else {
+                builder.allowlist_item(item)
+            }
+        }); */
+
         let bindings = builder
-            .blocklist_function("_bindgen_ty_2")
             .parse_callbacks(Box::new(get_ignored_macros()))
-            .blocklist_function("_+.*")
             .derive_copy(true)
             .derive_debug(true)
             .derive_default(false)

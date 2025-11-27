@@ -41,11 +41,11 @@ Add the following to your `Cargo.toml`
 Install OBS in your target directory. This uses the original signed OBS binaries.
 ```bash
 # for debugging
-cargo obs-build --out-dir target/debug
+cargo obs-build build --out-dir target/debug
 # for release
-cargo obs-build --out-dir target/release
+cargo obs-build build --out-dir target/release
 # for testing
-cargo obs-build --out-dir target/(debug|release)/deps
+cargo obs-build build --out-dir target/(debug|release)/deps
 ```
 
 More details can be found in the [cargo-obs-build documentation](./cargo-obs-build/README.md).

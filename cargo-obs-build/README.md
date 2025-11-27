@@ -14,7 +14,7 @@ The CLI tool automatically prepares the environment by putting the required OBS 
 
 ```bash
 cargo install cargo-obs-build
-cargo obs-build --out-dir ./target/debug # or ./target/release, this should be the directory where your binary will be built
+cargo obs-build build --out-dir ./target/debug # or ./target/release, this should be the directory where your binary will be built
 ```
 
 Run `cargo obs-build --help` for all available options.

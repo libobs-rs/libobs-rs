@@ -6,7 +6,9 @@
         "corecrt_math.h": "c",
         "corecrt.h": "c",
         "vcruntime.h": "c",
-        "stddef.h": "c"
+        "stddef.h": "c",
+        "types.h": "c",
+        "stdint.h": "c"
     },
     "rust-analyzer.cargo.targetDir": true,
     "rust-analyzer.check.command": "clippy",

@@ -48,13 +48,13 @@ Install OBS in your target directory:
 
 ```bash
 # For debug builds
-cargo obs-build --out-dir target/debug
+cargo obs-build build --out-dir target/debug
 
 # For release builds
-cargo obs-build --out-dir target/release
+cargo obs-build build --out-dir target/release
 
 # For testing
-cargo obs-build --out-dir target/(debug|release)/deps
+cargo obs-build build --out-dir target/(debug|release)/deps
 ```
 
 More details can be found in the [cargo-obs-build documentation](./cargo-obs-build/README.md).
