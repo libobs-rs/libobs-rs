@@ -1,4 +1,4 @@
-//! Contains linux specific bindigns to x11 and wayland
+//! Contains linux specific bindings to x11 and wayland
 
 use std::{fs, os::raw::c_char};
 
