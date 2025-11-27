@@ -2215,74 +2215,74 @@ const _: () = {
 #[doc = " Source definition structure"]
 #[repr(C)]
 pub struct obs_source_info {
-    #[doc = " Unique string identifier for the source"]
+#[doc = " Unique string identifier for the source"]
     pub id: *const ::std::os::raw::c_char,
-    #[doc = " Type of source.\n\n OBS_SOURCE_TYPE_INPUT for input sources,\n OBS_SOURCE_TYPE_FILTER for filter sources, and\n OBS_SOURCE_TYPE_TRANSITION for transition sources."]
+#[doc = " Type of source.\n\n OBS_SOURCE_TYPE_INPUT for input sources,\n OBS_SOURCE_TYPE_FILTER for filter sources, and\n OBS_SOURCE_TYPE_TRANSITION for transition sources."]
     pub type_: obs_source_type,
-    #[doc = " Source output flags"]
+#[doc = " Source output flags"]
     pub output_flags: u32,
-    #[doc = " Get the translated name of the source type\n\n @param  type_data  The type_data variable of this structure\n @return               The translated name of the source type"]
+#[doc = " Get the translated name of the source type\n\n @param  type_data  The type_data variable of this structure\n @return               The translated name of the source type"]
     pub get_name: ::std::option::Option<
         unsafe extern "C" fn(
             type_data: *mut ::std::os::raw::c_void,
         ) -> *const ::std::os::raw::c_char,
     >,
-    #[doc = " Creates the source data for the source\n\n @param  settings  Settings to initialize the source with\n @param  source    Source that this data is associated with\n @return           The data associated with this source"]
+#[doc = " Creates the source data for the source\n\n @param  settings  Settings to initialize the source with\n @param  source    Source that this data is associated with\n @return           The data associated with this source"]
     pub create: ::std::option::Option<
         unsafe extern "C" fn(
             settings: *mut obs_data_t,
             source: *mut obs_source_t,
         ) -> *mut ::std::os::raw::c_void,
     >,
-    #[doc = " Destroys the private data for the source\n\n Async sources must not call obs_source_output_video after returning\n from destroy"]
+#[doc = " Destroys the private data for the source\n\n Async sources must not call obs_source_output_video after returning\n from destroy"]
     pub destroy: ::std::option::Option<unsafe extern "C" fn(data: *mut ::std::os::raw::c_void)>,
-    #[doc = " Returns the width of the source.  Required if this is an input\n source and has non-async video"]
+#[doc = " Returns the width of the source.  Required if this is an input\n source and has non-async video"]
     pub get_width:
         ::std::option::Option<unsafe extern "C" fn(data: *mut ::std::os::raw::c_void) -> u32>,
-    #[doc = " Returns the height of the source.  Required if this is an input\n source and has non-async video"]
+#[doc = " Returns the height of the source.  Required if this is an input\n source and has non-async video"]
     pub get_height:
         ::std::option::Option<unsafe extern "C" fn(data: *mut ::std::os::raw::c_void) -> u32>,
-    #[doc = " Gets the default settings for this source\n\n @param\\[out\\]  settings  Data to assign default settings to\n @deprecated            Use get_defaults2 if type_data is needed"]
+#[doc = " Gets the default settings for this source\n\n @param\\[out\\]  settings  Data to assign default settings to\n @deprecated            Use get_defaults2 if type_data is needed"]
     pub get_defaults: ::std::option::Option<unsafe extern "C" fn(settings: *mut obs_data_t)>,
-    #[doc = " Gets the property information of this source\n\n @return         The properties data\n @deprecated     Use get_properties2 if type_data is needed"]
+#[doc = " Gets the property information of this source\n\n @return         The properties data\n @deprecated     Use get_properties2 if type_data is needed"]
     pub get_properties: ::std::option::Option<
         unsafe extern "C" fn(data: *mut ::std::os::raw::c_void) -> *mut obs_properties_t,
     >,
-    #[doc = " Updates the settings for this source\n\n @param data      Source data\n @param settings  New settings for this source"]
+#[doc = " Updates the settings for this source\n\n @param data      Source data\n @param settings  New settings for this source"]
     pub update: ::std::option::Option<
         unsafe extern "C" fn(data: *mut ::std::os::raw::c_void, settings: *mut obs_data_t),
     >,
-    #[doc = " Called when the source has been activated in the main view"]
+#[doc = " Called when the source has been activated in the main view"]
     pub activate: ::std::option::Option<unsafe extern "C" fn(data: *mut ::std::os::raw::c_void)>,
-    #[doc = " Called when the source has been deactivated from the main view\n (no longer being played/displayed)"]
+#[doc = " Called when the source has been deactivated from the main view\n (no longer being played/displayed)"]
     pub deactivate: ::std::option::Option<unsafe extern "C" fn(data: *mut ::std::os::raw::c_void)>,
-    #[doc = " Called when the source is visible"]
+#[doc = " Called when the source is visible"]
     pub show: ::std::option::Option<unsafe extern "C" fn(data: *mut ::std::os::raw::c_void)>,
-    #[doc = " Called when the source is no longer visible"]
+#[doc = " Called when the source is no longer visible"]
     pub hide: ::std::option::Option<unsafe extern "C" fn(data: *mut ::std::os::raw::c_void)>,
-    #[doc = " Called each video frame with the time elapsed\n\n @param  data     Source data\n @param  seconds  Seconds elapsed since the last frame"]
+#[doc = " Called each video frame with the time elapsed\n\n @param  data     Source data\n @param  seconds  Seconds elapsed since the last frame"]
     pub video_tick: ::std::option::Option<
         unsafe extern "C" fn(data: *mut ::std::os::raw::c_void, seconds: f32),
     >,
-    #[doc = " Called when rendering the source with the graphics subsystem.\n\n If this is an input/transition source, this is called to draw the\n source texture with the graphics subsystem using the specified\n effect.\n\n If this is a filter source, it wraps source draw calls (for\n example applying a custom effect with custom parameters to a\n source).  In this case, it's highly recommended to use the\n obs_source_process_filter function to automatically handle\n effect-based filter processing.  However, you can implement custom\n draw handling as desired as well.\n\n If the source output flags do not include SOURCE_CUSTOM_DRAW, all\n a source needs to do is set the \"image\" parameter of the effect to\n the desired texture, and then draw.  If the output flags include\n SOURCE_COLOR_MATRIX, you may optionally set the \"color_matrix\"\n parameter of the effect to a custom 4x4 conversion matrix (by\n default it will be set to an YUV->RGB conversion matrix)\n\n @param data    Source data\n @param effect  Effect to be used with this source.  If the source\n                output flags include SOURCE_CUSTOM_DRAW, this will\n                be NULL, and the source is expected to process with\n                an effect manually."]
+#[doc = " Called when rendering the source with the graphics subsystem.\n\n If this is an input/transition source, this is called to draw the\n source texture with the graphics subsystem using the specified\n effect.\n\n If this is a filter source, it wraps source draw calls (for\n example applying a custom effect with custom parameters to a\n source).  In this case, it's highly recommended to use the\n obs_source_process_filter function to automatically handle\n effect-based filter processing.  However, you can implement custom\n draw handling as desired as well.\n\n If the source output flags do not include SOURCE_CUSTOM_DRAW, all\n a source needs to do is set the \"image\" parameter of the effect to\n the desired texture, and then draw.  If the output flags include\n SOURCE_COLOR_MATRIX, you may optionally set the \"color_matrix\"\n parameter of the effect to a custom 4x4 conversion matrix (by\n default it will be set to an YUV->RGB conversion matrix)\n\n @param data    Source data\n @param effect  Effect to be used with this source.  If the source\n                output flags include SOURCE_CUSTOM_DRAW, this will\n                be NULL, and the source is expected to process with\n                an effect manually."]
     pub video_render: ::std::option::Option<
         unsafe extern "C" fn(data: *mut ::std::os::raw::c_void, effect: *mut gs_effect_t),
     >,
-    #[doc = " Called to filter raw async video data.\n\n @note          This function is only used with filter sources.\n\n @param  data   Filter data\n @param  frame  Video frame to filter\n @return        New video frame data.  This can defer video data to\n                be drawn later if time is needed for processing"]
+#[doc = " Called to filter raw async video data.\n\n @note          This function is only used with filter sources.\n\n @param  data   Filter data\n @param  frame  Video frame to filter\n @return        New video frame data.  This can defer video data to\n                be drawn later if time is needed for processing"]
     pub filter_video: ::std::option::Option<
         unsafe extern "C" fn(
             data: *mut ::std::os::raw::c_void,
             frame: *mut obs_source_frame,
         ) -> *mut obs_source_frame,
     >,
-    #[doc = " Called to filter raw audio data.\n\n @note          This function is only used with filter sources.\n\n @param  data   Filter data\n @param  audio  Audio data to filter.\n @return        Modified or new audio data.  You can directly modify\n                the data passed and return it, or you can defer audio\n                data for later if time is needed for processing.  If\n                you are returning new data, that data must exist\n                until the next call to the filter_audio callback or\n                until the filter is removed/destroyed."]
+#[doc = " Called to filter raw audio data.\n\n @note          This function is only used with filter sources.\n\n @param  data   Filter data\n @param  audio  Audio data to filter.\n @return        Modified or new audio data.  You can directly modify\n                the data passed and return it, or you can defer audio\n                data for later if time is needed for processing.  If\n                you are returning new data, that data must exist\n                until the next call to the filter_audio callback or\n                until the filter is removed/destroyed."]
     pub filter_audio: ::std::option::Option<
         unsafe extern "C" fn(
             data: *mut ::std::os::raw::c_void,
             audio: *mut obs_audio_data,
         ) -> *mut obs_audio_data,
     >,
-    #[doc = " Called to enumerate all active sources being used within this\n source.  If the source has children that render audio/video it must\n implement this callback.\n\n @param  data           Filter data\n @param  enum_callback  Enumeration callback\n @param  param          User data to pass to callback"]
+#[doc = " Called to enumerate all active sources being used within this\n source.  If the source has children that render audio/video it must\n implement this callback.\n\n @param  data           Filter data\n @param  enum_callback  Enumeration callback\n @param  param          User data to pass to callback"]
     pub enum_active_sources: ::std::option::Option<
         unsafe extern "C" fn(
             data: *mut ::std::os::raw::c_void,
@@ -2290,15 +2290,15 @@ pub struct obs_source_info {
             param: *mut ::std::os::raw::c_void,
         ),
     >,
-    #[doc = " Called when saving a source.  This is a separate function because\n sometimes a source needs to know when it is being saved so it\n doesn't always have to update the current settings until a certain\n point.\n\n @param  data      Source data\n @param  settings  Settings"]
+#[doc = " Called when saving a source.  This is a separate function because\n sometimes a source needs to know when it is being saved so it\n doesn't always have to update the current settings until a certain\n point.\n\n @param  data      Source data\n @param  settings  Settings"]
     pub save: ::std::option::Option<
         unsafe extern "C" fn(data: *mut ::std::os::raw::c_void, settings: *mut obs_data_t),
     >,
-    #[doc = " Called when loading a source from saved data.  This should be called\n after all the loading sources have actually been created because\n sometimes there are sources that depend on each other.\n\n @param  data      Source data\n @param  settings  Settings"]
+#[doc = " Called when loading a source from saved data.  This should be called\n after all the loading sources have actually been created because\n sometimes there are sources that depend on each other.\n\n @param  data      Source data\n @param  settings  Settings"]
     pub load: ::std::option::Option<
         unsafe extern "C" fn(data: *mut ::std::os::raw::c_void, settings: *mut obs_data_t),
     >,
-    #[doc = " Called when interacting with a source and a mouse-down or mouse-up\n occurs.\n\n @param data         Source data\n @param event        Mouse event properties\n @param type         Mouse button pushed\n @param mouse_up     Mouse event type (true if mouse-up)\n @param click_count  Mouse click count (1 for single click, etc.)"]
+#[doc = " Called when interacting with a source and a mouse-down or mouse-up\n occurs.\n\n @param data         Source data\n @param event        Mouse event properties\n @param type         Mouse button pushed\n @param mouse_up     Mouse event type (true if mouse-up)\n @param click_count  Mouse click count (1 for single click, etc.)"]
     pub mouse_click: ::std::option::Option<
         unsafe extern "C" fn(
             data: *mut ::std::os::raw::c_void,
@@ -2308,7 +2308,7 @@ pub struct obs_source_info {
             click_count: u32,
         ),
     >,
-    #[doc = " Called when interacting with a source and a mouse-move occurs.\n\n @param data         Source data\n @param event        Mouse event properties\n @param mouse_leave  Mouse leave state (true if mouse left source)"]
+#[doc = " Called when interacting with a source and a mouse-move occurs.\n\n @param data         Source data\n @param event        Mouse event properties\n @param mouse_leave  Mouse leave state (true if mouse left source)"]
     pub mouse_move: ::std::option::Option<
         unsafe extern "C" fn(
             data: *mut ::std::os::raw::c_void,
@@ -2316,7 +2316,7 @@ pub struct obs_source_info {
             mouse_leave: bool,
         ),
     >,
-    #[doc = " Called when interacting with a source and a mouse-wheel occurs.\n\n @param data         Source data\n @param event        Mouse event properties\n @param x_delta      Movement delta in the horizontal direction\n @param y_delta      Movement delta in the vertical direction"]
+#[doc = " Called when interacting with a source and a mouse-wheel occurs.\n\n @param data         Source data\n @param event        Mouse event properties\n @param x_delta      Movement delta in the horizontal direction\n @param y_delta      Movement delta in the vertical direction"]
     pub mouse_wheel: ::std::option::Option<
         unsafe extern "C" fn(
             data: *mut ::std::os::raw::c_void,
@@ -2325,10 +2325,10 @@ pub struct obs_source_info {
             y_delta: ::std::os::raw::c_int,
         ),
     >,
-    #[doc = " Called when interacting with a source and gain focus/lost focus event\n occurs.\n\n @param data         Source data\n @param focus        Focus state (true if focus gained)"]
+#[doc = " Called when interacting with a source and gain focus/lost focus event\n occurs.\n\n @param data         Source data\n @param focus        Focus state (true if focus gained)"]
     pub focus:
         ::std::option::Option<unsafe extern "C" fn(data: *mut ::std::os::raw::c_void, focus: bool)>,
-    #[doc = " Called when interacting with a source and a key-up or key-down\n occurs.\n\n @param data         Source data\n @param event        Key event properties\n @param focus        Key event type (true if mouse-up)"]
+#[doc = " Called when interacting with a source and a key-up or key-down\n occurs.\n\n @param data         Source data\n @param event        Key event properties\n @param focus        Key event type (true if mouse-up)"]
     pub key_click: ::std::option::Option<
         unsafe extern "C" fn(
             data: *mut ::std::os::raw::c_void,
@@ -2336,13 +2336,13 @@ pub struct obs_source_info {
             key_up: bool,
         ),
     >,
-    #[doc = " Called when the filter is removed from a source\n\n @param  data    Filter data\n @param  source  Source that the filter being removed from"]
+#[doc = " Called when the filter is removed from a source\n\n @param  data    Filter data\n @param  source  Source that the filter being removed from"]
     pub filter_remove: ::std::option::Option<
         unsafe extern "C" fn(data: *mut ::std::os::raw::c_void, source: *mut obs_source_t),
     >,
-    #[doc = " Private data associated with this entry"]
+#[doc = " Private data associated with this entry"]
     pub type_data: *mut ::std::os::raw::c_void,
-    #[doc = " If defined, called to free private data on shutdown"]
+#[doc = " If defined, called to free private data on shutdown"]
     pub free_type_data:
         ::std::option::Option<unsafe extern "C" fn(type_data: *mut ::std::os::raw::c_void)>,
     pub audio_render: ::std::option::Option<
@@ -2355,7 +2355,7 @@ pub struct obs_source_info {
             sample_rate: usize,
         ) -> bool,
     >,
-    #[doc = " Called to enumerate all active and inactive sources being used\n within this source.  If this callback isn't implemented,\n enum_active_sources will be called instead.\n\n This is typically used if a source can have inactive child sources.\n\n @param  data           Filter data\n @param  enum_callback  Enumeration callback\n @param  param          User data to pass to callback"]
+#[doc = " Called to enumerate all active and inactive sources being used\n within this source.  If this callback isn't implemented,\n enum_active_sources will be called instead.\n\n This is typically used if a source can have inactive child sources.\n\n @param  data           Filter data\n @param  enum_callback  Enumeration callback\n @param  param          User data to pass to callback"]
     pub enum_all_sources: ::std::option::Option<
         unsafe extern "C" fn(
             data: *mut ::std::os::raw::c_void,
@@ -2367,11 +2367,11 @@ pub struct obs_source_info {
         ::std::option::Option<unsafe extern "C" fn(data: *mut ::std::os::raw::c_void)>,
     pub transition_stop:
         ::std::option::Option<unsafe extern "C" fn(data: *mut ::std::os::raw::c_void)>,
-    #[doc = " Gets the default settings for this source\n\n If get_defaults is also defined both will be called, and the first\n call will be to get_defaults, then to get_defaults2.\n\n @param       type_data The type_data variable of this structure\n @param\\[out\\]  settings  Data to assign default settings to"]
+#[doc = " Gets the default settings for this source\n\n If get_defaults is also defined both will be called, and the first\n call will be to get_defaults, then to get_defaults2.\n\n @param       type_data The type_data variable of this structure\n @param\\[out\\]  settings  Data to assign default settings to"]
     pub get_defaults2: ::std::option::Option<
         unsafe extern "C" fn(type_data: *mut ::std::os::raw::c_void, settings: *mut obs_data_t),
     >,
-    #[doc = " Gets the property information of this source\n\n @param data      Source data\n @param type_data The type_data variable of this structure\n @return          The properties data"]
+#[doc = " Gets the property information of this source\n\n @param data      Source data\n @param type_data The type_data variable of this structure\n @return          The properties data"]
     pub get_properties2: ::std::option::Option<
         unsafe extern "C" fn(
             data: *mut ::std::os::raw::c_void,
@@ -2387,9 +2387,9 @@ pub struct obs_source_info {
             sample_rate: usize,
         ) -> bool,
     >,
-    #[doc = " Icon type for the source"]
+#[doc = " Icon type for the source"]
     pub icon_type: obs_icon_type,
-    #[doc = " Media controls"]
+#[doc = " Media controls"]
     pub media_play_pause:
         ::std::option::Option<unsafe extern "C" fn(data: *mut ::std::os::raw::c_void, pause: bool)>,
     pub media_restart:
@@ -2410,11 +2410,11 @@ pub struct obs_source_info {
     >,
     pub version: u32,
     pub unversioned_id: *const ::std::os::raw::c_char,
-    #[doc = " Missing files"]
+#[doc = " Missing files"]
     pub missing_files: ::std::option::Option<
         unsafe extern "C" fn(data: *mut ::std::os::raw::c_void) -> *mut obs_missing_files_t,
     >,
-    #[doc = " Get color space"]
+#[doc = " Get color space"]
     pub video_get_color_space: ::std::option::Option<
         unsafe extern "C" fn(
             data: *mut ::std::os::raw::c_void,
@@ -2422,7 +2422,7 @@ pub struct obs_source_info {
             preferred_spaces: *const gs_color_space,
         ) -> gs_color_space,
     >,
-    #[doc = " Called when the filter is added to a source\n\n @param  data    Filter data\n @param  source  Source that the filter is being added to"]
+#[doc = " Called when the filter is added to a source\n\n @param  data    Filter data\n @param  source  Source that the filter is being added to"]
     pub filter_add: ::std::option::Option<
         unsafe extern "C" fn(data: *mut ::std::os::raw::c_void, source: *mut obs_source_t),
     >,
@@ -2567,31 +2567,31 @@ const _: () = {
 #[doc = " Encoder output packet"]
 #[repr(C)]
 pub struct encoder_packet {
-    #[doc = "< Packet data"]
+#[doc = "< Packet data"]
     pub data: *mut u8,
-    #[doc = "< Packet size"]
+#[doc = "< Packet size"]
     pub size: usize,
-    #[doc = "< Presentation timestamp"]
+#[doc = "< Presentation timestamp"]
     pub pts: i64,
-    #[doc = "< Decode timestamp"]
+#[doc = "< Decode timestamp"]
     pub dts: i64,
-    #[doc = "< Timebase numerator"]
+#[doc = "< Timebase numerator"]
     pub timebase_num: i32,
-    #[doc = "< Timebase denominator"]
+#[doc = "< Timebase denominator"]
     pub timebase_den: i32,
-    #[doc = "< Encoder type"]
+#[doc = "< Encoder type"]
     pub type_: obs_encoder_type,
-    #[doc = "< Is a keyframe"]
+#[doc = "< Is a keyframe"]
     pub keyframe: bool,
     pub dts_usec: i64,
     pub sys_dts_usec: i64,
-    #[doc = " Packet priority\n\n This is generally use by video encoders to specify the priority\n of the packet."]
+#[doc = " Packet priority\n\n This is generally use by video encoders to specify the priority\n of the packet."]
     pub priority: ::std::os::raw::c_int,
-    #[doc = " Dropped packet priority\n\n If this packet needs to be dropped, the next packet must be of this\n priority or higher to continue transmission."]
+#[doc = " Dropped packet priority\n\n If this packet needs to be dropped, the next packet must be of this\n priority or higher to continue transmission."]
     pub drop_priority: ::std::os::raw::c_int,
-    #[doc = " Audio track index (used with outputs)"]
+#[doc = " Audio track index (used with outputs)"]
     pub track_idx: usize,
-    #[doc = " Encoder from which the track originated from"]
+#[doc = " Encoder from which the track originated from"]
     pub encoder: *mut obs_encoder_t,
 }
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]
@@ -2628,13 +2628,13 @@ const _: () = {
 #[doc = " Encoder input frame"]
 #[repr(C)]
 pub struct encoder_frame {
-    #[doc = " Data for the frame/audio"]
+#[doc = " Data for the frame/audio"]
     pub data: [*mut u8; 8usize],
-    #[doc = " size of each plane"]
+#[doc = " size of each plane"]
     pub linesize: [u32; 8usize],
-    #[doc = " Number of frames (audio only)"]
+#[doc = " Number of frames (audio only)"]
     pub frames: u32,
-    #[doc = " Presentation timestamp"]
+#[doc = " Presentation timestamp"]
     pub pts: i64,
 }
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]
@@ -2675,9 +2675,9 @@ const _: () = {
 #[doc = " Encoder input texture"]
 #[repr(C)]
 pub struct encoder_texture {
-    #[doc = " Shared texture handle, only set on Windows"]
+#[doc = " Shared texture handle, only set on Windows"]
     pub handle: u32,
-    #[doc = " Textures, length determined by format"]
+#[doc = " Textures, length determined by format"]
     pub tex: [*mut gs_texture; 4usize],
 }
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]
@@ -2692,28 +2692,28 @@ const _: () = {
 #[doc = " Encoder interface\n\n Encoders have a limited usage with OBS.  You are not generally supposed to\n implement every encoder out there.  Generally, these are limited or specific\n encoders for h264/aac for streaming and recording.  It doesn't have to be\n *just* h264 or aac of course, but generally those are the expected encoders.\n\n That being said, other encoders will be kept in mind for future use."]
 #[repr(C)]
 pub struct obs_encoder_info {
-    #[doc = " Specifies the named identifier of this encoder"]
+#[doc = " Specifies the named identifier of this encoder"]
     pub id: *const ::std::os::raw::c_char,
-    #[doc = " Specifies the encoder type (video or audio)"]
+#[doc = " Specifies the encoder type (video or audio)"]
     pub type_: obs_encoder_type,
-    #[doc = " Specifies the codec"]
+#[doc = " Specifies the codec"]
     pub codec: *const ::std::os::raw::c_char,
-    #[doc = " Gets the full translated name of this encoder\n\n @param  type_data  The type_data variable of this structure\n @return            Translated name of the encoder"]
+#[doc = " Gets the full translated name of this encoder\n\n @param  type_data  The type_data variable of this structure\n @return            Translated name of the encoder"]
     pub get_name: ::std::option::Option<
         unsafe extern "C" fn(
             type_data: *mut ::std::os::raw::c_void,
         ) -> *const ::std::os::raw::c_char,
     >,
-    #[doc = " Creates the encoder with the specified settings\n\n @param  settings  Settings for the encoder\n @param  encoder   OBS encoder context\n @return           Data associated with this encoder context, or\n                   NULL if initialization failed."]
+#[doc = " Creates the encoder with the specified settings\n\n @param  settings  Settings for the encoder\n @param  encoder   OBS encoder context\n @return           Data associated with this encoder context, or\n                   NULL if initialization failed."]
     pub create: ::std::option::Option<
         unsafe extern "C" fn(
             settings: *mut obs_data_t,
             encoder: *mut obs_encoder_t,
         ) -> *mut ::std::os::raw::c_void,
     >,
-    #[doc = " Destroys the encoder data\n\n @param  data  Data associated with this encoder context"]
+#[doc = " Destroys the encoder data\n\n @param  data  Data associated with this encoder context"]
     pub destroy: ::std::option::Option<unsafe extern "C" fn(data: *mut ::std::os::raw::c_void)>,
-    #[doc = " Encodes frame(s), and outputs encoded packets as they become\n available.\n\n @param       data             Data associated with this encoder\n                               context\n @param\\[in\\]   frame            Raw audio/video data to encode\n @param\\[out\\]  packet           Encoder packet output, if any\n @param\\[out\\]  received_packet  Set to true if a packet was received,\n                               false otherwise\n @return                       true if successful, false otherwise."]
+#[doc = " Encodes frame(s), and outputs encoded packets as they become\n available.\n\n @param       data             Data associated with this encoder\n                               context\n @param\\[in\\]   frame            Raw audio/video data to encode\n @param\\[out\\]  packet           Encoder packet output, if any\n @param\\[out\\]  received_packet  Set to true if a packet was received,\n                               false otherwise\n @return                       true if successful, false otherwise."]
     pub encode: ::std::option::Option<
         unsafe extern "C" fn(
             data: *mut ::std::os::raw::c_void,
@@ -2722,20 +2722,20 @@ pub struct obs_encoder_info {
             received_packet: *mut bool,
         ) -> bool,
     >,
-    #[doc = " Audio encoder only:  Returns the frame size for this encoder"]
+#[doc = " Audio encoder only:  Returns the frame size for this encoder"]
     pub get_frame_size:
         ::std::option::Option<unsafe extern "C" fn(data: *mut ::std::os::raw::c_void) -> usize>,
-    #[doc = " Gets the default settings for this encoder\n\n @param\\[out\\]  settings  Data to assign default settings to"]
+#[doc = " Gets the default settings for this encoder\n\n @param\\[out\\]  settings  Data to assign default settings to"]
     pub get_defaults: ::std::option::Option<unsafe extern "C" fn(settings: *mut obs_data_t)>,
-    #[doc = " Gets the property information of this encoder\n\n @return         The properties data"]
+#[doc = " Gets the property information of this encoder\n\n @return         The properties data"]
     pub get_properties: ::std::option::Option<
         unsafe extern "C" fn(data: *mut ::std::os::raw::c_void) -> *mut obs_properties_t,
     >,
-    #[doc = " Updates the settings for this encoder (usually used for things like\n changing bitrate while active)\n\n @param  data      Data associated with this encoder context\n @param  settings  New settings for this encoder\n @return           true if successful, false otherwise"]
+#[doc = " Updates the settings for this encoder (usually used for things like\n changing bitrate while active)\n\n @param  data      Data associated with this encoder context\n @param  settings  New settings for this encoder\n @return           true if successful, false otherwise"]
     pub update: ::std::option::Option<
         unsafe extern "C" fn(data: *mut ::std::os::raw::c_void, settings: *mut obs_data_t) -> bool,
     >,
-    #[doc = " Returns extra data associated with this encoder (usually header)\n\n @param  data             Data associated with this encoder context\n @param\\[out\\]  extra_data  Pointer to receive the extra data\n @param\\[out\\]  size        Pointer to receive the size of the extra\n                          data\n @return                  true if extra data available, false\n                          otherwise"]
+#[doc = " Returns extra data associated with this encoder (usually header)\n\n @param  data             Data associated with this encoder context\n @param\\[out\\]  extra_data  Pointer to receive the extra data\n @param\\[out\\]  size        Pointer to receive the size of the extra\n                          data\n @return                  true if extra data available, false\n                          otherwise"]
     pub get_extra_data: ::std::option::Option<
         unsafe extern "C" fn(
             data: *mut ::std::os::raw::c_void,
@@ -2743,7 +2743,7 @@ pub struct obs_encoder_info {
             size: *mut usize,
         ) -> bool,
     >,
-    #[doc = " Gets the SEI data, if any\n\n @param       data      Data associated with this encoder context\n @param\\[out\\]  sei_data  Pointer to receive the SEI data\n @param\\[out\\]  size      Pointer to receive the SEI data size\n @return                true if SEI data available, false otherwise"]
+#[doc = " Gets the SEI data, if any\n\n @param       data      Data associated with this encoder context\n @param\\[out\\]  sei_data  Pointer to receive the SEI data\n @param\\[out\\]  size      Pointer to receive the SEI data size\n @return                true if SEI data available, false otherwise"]
     pub get_sei_data: ::std::option::Option<
         unsafe extern "C" fn(
             data: *mut ::std::os::raw::c_void,
@@ -2751,11 +2751,11 @@ pub struct obs_encoder_info {
             size: *mut usize,
         ) -> bool,
     >,
-    #[doc = " Returns desired audio format and sample information\n\n @param          data  Data associated with this encoder context\n @param\\[in/out\\]  info  Audio format information"]
+#[doc = " Returns desired audio format and sample information\n\n @param          data  Data associated with this encoder context\n @param\\[in/out\\]  info  Audio format information"]
     pub get_audio_info: ::std::option::Option<
         unsafe extern "C" fn(data: *mut ::std::os::raw::c_void, info: *mut audio_convert_info),
     >,
-    #[doc = " Returns desired video format information\n\n @param          data  Data associated with this encoder context\n @param\\[in/out\\]  info  Video format information"]
+#[doc = " Returns desired video format information\n\n @param          data  Data associated with this encoder context\n @param\\[in/out\\]  info  Video format information"]
     pub get_video_info: ::std::option::Option<
         unsafe extern "C" fn(data: *mut ::std::os::raw::c_void, info: *mut video_scale_info),
     >,
@@ -2763,11 +2763,11 @@ pub struct obs_encoder_info {
     pub free_type_data:
         ::std::option::Option<unsafe extern "C" fn(type_data: *mut ::std::os::raw::c_void)>,
     pub caps: u32,
-    #[doc = " Gets the default settings for this encoder\n\n If get_defaults is also defined both will be called, and the first\n call will be to get_defaults, then to get_defaults2.\n\n @param\\[out\\]  settings  Data to assign default settings to\n @param\\[in\\]   typedata  Type Data"]
+#[doc = " Gets the default settings for this encoder\n\n If get_defaults is also defined both will be called, and the first\n call will be to get_defaults, then to get_defaults2.\n\n @param\\[out\\]  settings  Data to assign default settings to\n @param\\[in\\]   typedata  Type Data"]
     pub get_defaults2: ::std::option::Option<
         unsafe extern "C" fn(settings: *mut obs_data_t, type_data: *mut ::std::os::raw::c_void),
     >,
-    #[doc = " Gets the property information of this encoder\n\n @param\\[in\\]   data      Pointer from create (or null)\n @param\\[in\\]   typedata  Type Data\n @return                The properties data"]
+#[doc = " Gets the property information of this encoder\n\n @param\\[in\\]   data      Pointer from create (or null)\n @param\\[in\\]   typedata  Type Data\n @return                The properties data"]
     pub get_properties2: ::std::option::Option<
         unsafe extern "C" fn(
             data: *mut ::std::os::raw::c_void,
@@ -3014,7 +3014,7 @@ pub struct obs_service_info {
     pub get_properties: ::std::option::Option<
         unsafe extern "C" fn(data: *mut ::std::os::raw::c_void) -> *mut obs_properties_t,
     >,
-    #[doc = " Called when getting ready to start up an output, before the encoders\n and output are initialized\n\n @param  data    Internal service data\n @param  output  Output context\n @return         true to allow the output to start up,\n                 false to prevent output from starting up"]
+#[doc = " Called when getting ready to start up an output, before the encoders\n and output are initialized\n\n @param  data    Internal service data\n @param  output  Output context\n @return         true to allow the output to start up,\n                 false to prevent output from starting up"]
     pub initialize: ::std::option::Option<
         unsafe extern "C" fn(data: *mut ::std::os::raw::c_void, output: *mut obs_output_t) -> bool,
     >,
@@ -4095,31 +4095,31 @@ const _: () = {
 #[doc = " Video initialization structure"]
 #[repr(C)]
 pub struct obs_video_info {
-    #[doc = " Graphics module to use (usually \"libobs-opengl\" or \"libobs-d3d11\")"]
+#[doc = " Graphics module to use (usually \"libobs-opengl\" or \"libobs-d3d11\")"]
     pub graphics_module: *const ::std::os::raw::c_char,
-    #[doc = "< Output FPS numerator"]
+#[doc = "< Output FPS numerator"]
     pub fps_num: u32,
-    #[doc = "< Output FPS denominator"]
+#[doc = "< Output FPS denominator"]
     pub fps_den: u32,
-    #[doc = "< Base compositing width"]
+#[doc = "< Base compositing width"]
     pub base_width: u32,
-    #[doc = "< Base compositing height"]
+#[doc = "< Base compositing height"]
     pub base_height: u32,
-    #[doc = "< Output width"]
+#[doc = "< Output width"]
     pub output_width: u32,
-    #[doc = "< Output height"]
+#[doc = "< Output height"]
     pub output_height: u32,
-    #[doc = "< Output format"]
+#[doc = "< Output format"]
     pub output_format: video_format,
-    #[doc = " Video adapter index to use (NOTE: avoid for optimus laptops)"]
+#[doc = " Video adapter index to use (NOTE: avoid for optimus laptops)"]
     pub adapter: u32,
-    #[doc = " Use shaders to convert to different color formats"]
+#[doc = " Use shaders to convert to different color formats"]
     pub gpu_conversion: bool,
-    #[doc = "< YUV type (if YUV)"]
+#[doc = "< YUV type (if YUV)"]
     pub colorspace: video_colorspace,
-    #[doc = "< YUV range (if YUV)"]
+#[doc = "< YUV range (if YUV)"]
     pub range: video_range_type,
-    #[doc = "< How to scale if scaling"]
+#[doc = "< How to scale if scaling"]
     pub scale_type: obs_scale_type,
 }
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]
@@ -4606,6 +4606,13 @@ pub const hook_rate_HOOK_RATE_NORMAL: hook_rate = 1;
 pub const hook_rate_HOOK_RATE_FAST: hook_rate = 2;
 pub const hook_rate_HOOK_RATE_FASTEST: hook_rate = 3;
 pub type hook_rate = ::std::os::raw::c_int;
+pub const window_priority_WINDOW_PRIORITY_CLASS: window_priority = 0;
+pub const window_priority_WINDOW_PRIORITY_TITLE: window_priority = 1;
+pub const window_priority_WINDOW_PRIORITY_EXE: window_priority = 2;
+pub type window_priority = ::std::os::raw::c_int;
+pub const window_search_mode_INCLUDE_MINIMIZED: window_search_mode = 0;
+pub const window_search_mode_EXCLUDE_MINIMIZED: window_search_mode = 1;
+pub type window_search_mode = ::std::os::raw::c_int;
 pub const window_capture_method_METHOD_AUTO: window_capture_method = 0;
 pub const window_capture_method_METHOD_BITBLT: window_capture_method = 1;
 pub const window_capture_method_METHOD_WGC: window_capture_method = 2;
@@ -4764,7 +4771,7 @@ unsafe extern "C" {
     ) -> *mut gs_epass_t;
     pub fn gs_effect_get_num_params(effect: *const gs_effect_t) -> usize;
     pub fn gs_effect_get_param_by_idx(effect: *const gs_effect_t, param: usize)
-        -> *mut gs_eparam_t;
+    -> *mut gs_eparam_t;
     pub fn gs_effect_get_param_by_name(
         effect: *const gs_effect_t,
         name: *const ::std::os::raw::c_char,
@@ -4778,9 +4785,9 @@ unsafe extern "C" {
         param: *const gs_eparam_t,
         name: *const ::std::os::raw::c_char,
     ) -> *mut gs_eparam_t;
-    #[doc = " Helper function to simplify effect usage.  Use with a while loop that\n contains drawing functions.  Automatically handles techniques, passes, and\n unloading."]
+#[doc = " Helper function to simplify effect usage.  Use with a while loop that\n contains drawing functions.  Automatically handles techniques, passes, and\n unloading."]
     pub fn gs_effect_loop(effect: *mut gs_effect_t, name: *const ::std::os::raw::c_char) -> bool;
-    #[doc = " used internally"]
+#[doc = " used internally"]
     pub fn gs_effect_update_params(effect: *mut gs_effect_t);
     pub fn gs_effect_get_viewproj_matrix(effect: *const gs_effect_t) -> *mut gs_eparam_t;
     pub fn gs_effect_get_world_matrix(effect: *const gs_effect_t) -> *mut gs_eparam_t;
@@ -4917,7 +4924,7 @@ unsafe extern "C" {
         cy: *mut u32,
         space: *mut gs_color_space,
     ) -> *mut u8;
-    #[doc = " Draws a 2D sprite\n\n   If width or height is 0, the width or height of the texture will be used.\n The flip value specifies whether the texture should be flipped on the U or V\n axis with GS_FLIP_U and GS_FLIP_V."]
+#[doc = " Draws a 2D sprite\n\n   If width or height is 0, the width or height of the texture will be used.\n The flip value specifies whether the texture should be flipped on the U or V\n axis with GS_FLIP_U and GS_FLIP_V."]
     pub fn gs_draw_sprite(tex: *mut gs_texture_t, flip: u32, width: u32, height: u32);
     pub fn gs_draw_quadf(tex: *mut gs_texture_t, flip: u32, width: f32, height: f32);
     pub fn gs_draw_sprite_subregion(
@@ -4937,11 +4944,11 @@ unsafe extern "C" {
         bottom: f32,
         znear: f32,
     );
-    #[doc = " sets the viewport to current swap chain size"]
+#[doc = " sets the viewport to current swap chain size"]
     pub fn gs_reset_viewport();
-    #[doc = " sets default screen-sized orthographic mode"]
+#[doc = " sets default screen-sized orthographic mode"]
     pub fn gs_set_2d_mode();
-    #[doc = " sets default screen-sized perspective mode"]
+#[doc = " sets default screen-sized perspective mode"]
     pub fn gs_set_3d_mode(fovy: f64, znear: f64, zvar: f64);
     pub fn gs_viewport_push();
     pub fn gs_viewport_pop();
@@ -5113,9 +5120,9 @@ unsafe extern "C" {
     pub fn gs_texture_get_color_format(tex: *const gs_texture_t) -> gs_color_format;
     pub fn gs_texture_map(tex: *mut gs_texture_t, ptr: *mut *mut u8, linesize: *mut u32) -> bool;
     pub fn gs_texture_unmap(tex: *mut gs_texture_t);
-    #[doc = " special-case function (GL only) - specifies whether the texture is a\n GL_TEXTURE_RECTANGLE type, which doesn't use normalized texture\n coordinates, doesn't support mipmapping, and requires address clamping"]
+#[doc = " special-case function (GL only) - specifies whether the texture is a\n GL_TEXTURE_RECTANGLE type, which doesn't use normalized texture\n coordinates, doesn't support mipmapping, and requires address clamping"]
     pub fn gs_texture_is_rect(tex: *const gs_texture_t) -> bool;
-    #[doc = " Gets a pointer to the context-specific object associated with the texture.\n For example, for GL, this is a GLuint*.  For D3D11, ID3D11Texture2D*."]
+#[doc = " Gets a pointer to the context-specific object associated with the texture.\n For example, for GL, this is a GLuint*.  For D3D11, ID3D11Texture2D*."]
     pub fn gs_texture_get_obj(tex: *mut gs_texture_t) -> *mut ::std::os::raw::c_void;
     pub fn gs_cubetexture_destroy(cubetex: *mut gs_texture_t);
     pub fn gs_cubetexture_get_size(cubetex: *const gs_texture_t) -> u32;
@@ -5190,7 +5197,7 @@ unsafe extern "C" {
     pub fn gs_debug_marker_end();
     pub fn gs_gdi_texture_available() -> bool;
     pub fn gs_shared_texture_available() -> bool;
-    #[doc = " Gets information about the monitor at the specific index, returns false\n when there is no monitor at the specified index"]
+#[doc = " Gets information about the monitor at the specific index, returns false\n when there is no monitor at the specified index"]
     pub fn gs_get_duplicator_monitor_info(
         monitor_idx: ::std::os::raw::c_int,
         monitor_info: *mut gs_monitor_info,
@@ -5198,7 +5205,7 @@ unsafe extern "C" {
     pub fn gs_duplicator_get_monitor_index(
         monitor: *mut ::std::os::raw::c_void,
     ) -> ::std::os::raw::c_int;
-    #[doc = " creates a windows 8+ output duplicator (monitor capture)"]
+#[doc = " creates a windows 8+ output duplicator (monitor capture)"]
     pub fn gs_duplicator_create(monitor_idx: ::std::os::raw::c_int) -> *mut gs_duplicator_t;
     pub fn gs_duplicator_destroy(duplicator: *mut gs_duplicator_t);
     pub fn gs_duplicator_update_frame(duplicator: *mut gs_duplicator_t) -> bool;
@@ -5206,22 +5213,22 @@ unsafe extern "C" {
     pub fn gs_duplicator_get_color_space(duplicator: *mut gs_duplicator_t) -> gs_color_space;
     pub fn gs_duplicator_get_sdr_white_level(duplicator: *mut gs_duplicator_t) -> f32;
     pub fn gs_can_adapter_fast_clear() -> bool;
-    #[doc = " creates a windows GDI-lockable texture"]
+#[doc = " creates a windows GDI-lockable texture"]
     pub fn gs_texture_create_gdi(width: u32, height: u32) -> *mut gs_texture_t;
     pub fn gs_texture_get_dc(gdi_tex: *mut gs_texture_t) -> *mut ::std::os::raw::c_void;
     pub fn gs_texture_release_dc(gdi_tex: *mut gs_texture_t);
-    #[doc = " creates a windows shared texture from a texture handle"]
+#[doc = " creates a windows shared texture from a texture handle"]
     pub fn gs_texture_open_shared(handle: u32) -> *mut gs_texture_t;
     pub fn gs_texture_open_nt_shared(handle: u32) -> *mut gs_texture_t;
     pub fn gs_texture_get_shared_handle(tex: *mut gs_texture_t) -> u32;
     pub fn gs_texture_wrap_obj(obj: *mut ::std::os::raw::c_void) -> *mut gs_texture_t;
-    #[doc = " acquires a lock on a keyed mutex texture.\n returns -1 on generic failure, ETIMEDOUT if timed out"]
+#[doc = " acquires a lock on a keyed mutex texture.\n returns -1 on generic failure, ETIMEDOUT if timed out"]
     pub fn gs_texture_acquire_sync(
         tex: *mut gs_texture_t,
         key: u64,
         ms: u32,
     ) -> ::std::os::raw::c_int;
-    #[doc = " releases a lock on a keyed mutex texture to another device.\n return 0 on success, -1 on error"]
+#[doc = " releases a lock on a keyed mutex texture to another device.\n return 0 on success, -1 on error"]
     pub fn gs_texture_release_sync(tex: *mut gs_texture_t, key: u64) -> ::std::os::raw::c_int;
     pub fn gs_stagesurface_create_nv12(width: u32, height: u32) -> *mut gs_stagesurf_t;
     pub fn gs_stagesurface_create_p010(width: u32, height: u32) -> *mut gs_stagesurf_t;
@@ -5410,7 +5417,7 @@ unsafe extern "C" {
         proc_: proc_handler_proc_t,
         data: *mut ::std::os::raw::c_void,
     );
-    #[doc = " Calls a function in a procedure handler.  Returns false if the named\n procedure is not found."]
+#[doc = " Calls a function in a procedure handler.  Returns false if the named\n procedure is not found."]
     pub fn proc_handler_call(
         handler: *mut proc_handler_t,
         name: *const ::std::os::raw::c_char,
@@ -5418,7 +5425,7 @@ unsafe extern "C" {
     ) -> bool;
     pub fn obs_data_create() -> *mut obs_data_t;
     pub fn obs_data_create_from_json(json_string: *const ::std::os::raw::c_char)
-        -> *mut obs_data_t;
+    -> *mut obs_data_t;
     pub fn obs_data_create_from_json_file(
         json_file: *const ::std::os::raw::c_char,
     ) -> *mut obs_data_t;
@@ -5927,12 +5934,12 @@ unsafe extern "C" {
         property: *const ::std::os::raw::c_char,
     ) -> *mut obs_property_t;
     pub fn obs_properties_get_parent(props: *mut obs_properties_t) -> *mut obs_properties_t;
-    #[doc = " Remove a property from a properties list.\n\n Removes a property from a properties list. Only valid in either\n get_properties or modified_callback(2). modified_callback(2) must return\n true so that all UI properties are rebuilt and returning false is undefined\n behavior.\n\n @param props Properties to remove from.\n @param property Name of the property to remove."]
+#[doc = " Remove a property from a properties list.\n\n Removes a property from a properties list. Only valid in either\n get_properties or modified_callback(2). modified_callback(2) must return\n true so that all UI properties are rebuilt and returning false is undefined\n behavior.\n\n @param props Properties to remove from.\n @param property Name of the property to remove."]
     pub fn obs_properties_remove_by_name(
         props: *mut obs_properties_t,
         property: *const ::std::os::raw::c_char,
     );
-    #[doc = " Applies settings to the properties by calling all the necessary\n modification callbacks"]
+#[doc = " Applies settings to the properties by calling all the necessary\n modification callbacks"]
     pub fn obs_properties_apply_settings(props: *mut obs_properties_t, settings: *mut obs_data_t);
     pub fn obs_properties_add_bool(
         props: *mut obs_properties_t,
@@ -5977,7 +5984,7 @@ unsafe extern "C" {
         description: *const ::std::os::raw::c_char,
         type_: obs_text_type,
     ) -> *mut obs_property_t;
-    #[doc = " Adds a 'path' property.  Can be a directory or a file.\n\n If target is a file path, the filters should be this format, separated by\n double semicolons, and extensions separated by space:\n   \"Example types 1 and 2 (*.ex1 *.ex2);;Example type 3 (*.ex3)\"\n\n @param  props        Properties object\n @param  name         Settings name\n @param  description  Description (display name) of the property\n @param  type         Type of path (directory or file)\n @param  filter       If type is a file path, then describes the file filter\n                      that the user can browse.  Items are separated via\n                      double semicolons.  If multiple file types in a\n                      filter, separate with space."]
+#[doc = " Adds a 'path' property.  Can be a directory or a file.\n\n If target is a file path, the filters should be this format, separated by\n double semicolons, and extensions separated by space:\n   \"Example types 1 and 2 (*.ex1 *.ex2);;Example type 3 (*.ex3)\"\n\n @param  props        Properties object\n @param  name         Settings name\n @param  description  Description (display name) of the property\n @param  type         Type of path (directory or file)\n @param  filter       If type is a file path, then describes the file filter\n                      that the user can browse.  Items are separated via\n                      double semicolons.  If multiple file types in a\n                      filter, separate with space."]
     pub fn obs_properties_add_path(
         props: *mut obs_properties_t,
         name: *const ::std::os::raw::c_char,
@@ -6016,7 +6023,7 @@ unsafe extern "C" {
         callback: obs_property_clicked_t,
         priv_: *mut ::std::os::raw::c_void,
     ) -> *mut obs_property_t;
-    #[doc = " Adds a font selection property.\n\n A font is an obs_data sub-object which contains the following items:\n   face:   face name string\n   style:  style name string\n   size:   size integer\n   flags:  font flags integer (OBS_FONT_* defined above)"]
+#[doc = " Adds a font selection property.\n\n A font is an obs_data sub-object which contains the following items:\n   face:   face name string\n   style:  style name string\n   size:   size integer\n   flags:  font flags integer (OBS_FONT_* defined above)"]
     pub fn obs_properties_add_font(
         props: *mut obs_properties_t,
         name: *const ::std::os::raw::c_char,
@@ -6264,25 +6271,25 @@ unsafe extern "C" {
     pub fn obs_register_encoder_s(info: *const obs_encoder_info, size: usize);
     pub fn obs_register_output_s(info: *const obs_output_info, size: usize);
     pub fn obs_register_service_s(info: *const obs_service_info, size: usize);
-    #[doc = " @brief Create a fader\n @param type the type of the fader\n @return pointer to the fader object\n\n A fader object is used to map input values from a gui element to dB and\n subsequently multiplier values used by libobs to mix audio.\n The current \"position\" of the fader is internally stored as dB value."]
+#[doc = " @brief Create a fader\n @param type the type of the fader\n @return pointer to the fader object\n\n A fader object is used to map input values from a gui element to dB and\n subsequently multiplier values used by libobs to mix audio.\n The current \"position\" of the fader is internally stored as dB value."]
     pub fn obs_fader_create(type_: obs_fader_type) -> *mut obs_fader_t;
-    #[doc = " @brief Destroy a fader\n @param fader pointer to the fader object\n\n Destroy the fader and free all related data"]
+#[doc = " @brief Destroy a fader\n @param fader pointer to the fader object\n\n Destroy the fader and free all related data"]
     pub fn obs_fader_destroy(fader: *mut obs_fader_t);
-    #[doc = " @brief Set the fader dB value\n @param fader pointer to the fader object\n @param db new dB value\n @return true if value was set without clamping"]
+#[doc = " @brief Set the fader dB value\n @param fader pointer to the fader object\n @param db new dB value\n @return true if value was set without clamping"]
     pub fn obs_fader_set_db(fader: *mut obs_fader_t, db: f32) -> bool;
-    #[doc = " @brief Get the current fader dB value\n @param fader pointer to the fader object\n @return current fader dB value"]
+#[doc = " @brief Get the current fader dB value\n @param fader pointer to the fader object\n @return current fader dB value"]
     pub fn obs_fader_get_db(fader: *mut obs_fader_t) -> f32;
-    #[doc = " @brief Set the fader value from deflection\n @param fader pointer to the fader object\n @param def new deflection\n @return true if value was set without clamping\n\n This sets the new fader value from the supplied deflection, in case the\n resulting value was clamped due to limits this function will return false.\n The deflection is typically in the range \\[0.0, 1.0\\] but may be higher in\n order to provide some amplification. In order for this to work the high dB\n limit has to be set."]
+#[doc = " @brief Set the fader value from deflection\n @param fader pointer to the fader object\n @param def new deflection\n @return true if value was set without clamping\n\n This sets the new fader value from the supplied deflection, in case the\n resulting value was clamped due to limits this function will return false.\n The deflection is typically in the range \\[0.0, 1.0\\] but may be higher in\n order to provide some amplification. In order for this to work the high dB\n limit has to be set."]
     pub fn obs_fader_set_deflection(fader: *mut obs_fader_t, def: f32) -> bool;
-    #[doc = " @brief Get the current fader deflection\n @param fader pointer to the fader object\n @return current fader deflection"]
+#[doc = " @brief Get the current fader deflection\n @param fader pointer to the fader object\n @return current fader deflection"]
     pub fn obs_fader_get_deflection(fader: *mut obs_fader_t) -> f32;
-    #[doc = " @brief Set the fader value from multiplier\n @param fader pointer to the fader object\n @return true if the value was set without clamping"]
+#[doc = " @brief Set the fader value from multiplier\n @param fader pointer to the fader object\n @return true if the value was set without clamping"]
     pub fn obs_fader_set_mul(fader: *mut obs_fader_t, mul: f32) -> bool;
-    #[doc = " @brief Get the current fader multiplier value\n @param fader pointer to the fader object\n @return current fader multiplier"]
+#[doc = " @brief Get the current fader multiplier value\n @param fader pointer to the fader object\n @return current fader multiplier"]
     pub fn obs_fader_get_mul(fader: *mut obs_fader_t) -> f32;
-    #[doc = " @brief Attach the fader to a source\n @param fader pointer to the fader object\n @param source pointer to the source object\n @return true on success\n\n When the fader is attached to a source it will automatically sync it's state\n to the volume of the source."]
+#[doc = " @brief Attach the fader to a source\n @param fader pointer to the fader object\n @param source pointer to the source object\n @return true on success\n\n When the fader is attached to a source it will automatically sync it's state\n to the volume of the source."]
     pub fn obs_fader_attach_source(fader: *mut obs_fader_t, source: *mut obs_source_t) -> bool;
-    #[doc = " @brief Detach the fader from the currently attached source\n @param fader pointer to the fader object"]
+#[doc = " @brief Detach the fader from the currently attached source\n @param fader pointer to the fader object"]
     pub fn obs_fader_detach_source(fader: *mut obs_fader_t);
     pub fn obs_fader_add_callback(
         fader: *mut obs_fader_t,
@@ -6294,23 +6301,23 @@ unsafe extern "C" {
         callback: obs_fader_changed_t,
         param: *mut ::std::os::raw::c_void,
     );
-    #[doc = " @brief Create a volume meter\n @param type the mapping type to use for the volume meter\n @return pointer to the volume meter object\n\n A volume meter object is used to prepare the sound levels reported by audio\n sources for display in a GUI.\n It will automatically take source volume into account and map the levels\n to a range \\[0.0f, 1.0f\\]."]
+#[doc = " @brief Create a volume meter\n @param type the mapping type to use for the volume meter\n @return pointer to the volume meter object\n\n A volume meter object is used to prepare the sound levels reported by audio\n sources for display in a GUI.\n It will automatically take source volume into account and map the levels\n to a range \\[0.0f, 1.0f\\]."]
     pub fn obs_volmeter_create(type_: obs_fader_type) -> *mut obs_volmeter_t;
-    #[doc = " @brief Destroy a volume meter\n @param volmeter pointer to the volmeter object\n\n Destroy the volume meter and free all related data"]
+#[doc = " @brief Destroy a volume meter\n @param volmeter pointer to the volmeter object\n\n Destroy the volume meter and free all related data"]
     pub fn obs_volmeter_destroy(volmeter: *mut obs_volmeter_t);
-    #[doc = " @brief Attach the volume meter to a source\n @param volmeter pointer to the volume meter object\n @param source pointer to the source object\n @return true on success\n\n When the volume meter is attached to a source it will start to listen to\n volume updates on the source and after preparing the data emit its own\n signal."]
+#[doc = " @brief Attach the volume meter to a source\n @param volmeter pointer to the volume meter object\n @param source pointer to the source object\n @return true on success\n\n When the volume meter is attached to a source it will start to listen to\n volume updates on the source and after preparing the data emit its own\n signal."]
     pub fn obs_volmeter_attach_source(
         volmeter: *mut obs_volmeter_t,
         source: *mut obs_source_t,
     ) -> bool;
-    #[doc = " @brief Detach the volume meter from the currently attached source\n @param volmeter pointer to the volume meter object"]
+#[doc = " @brief Detach the volume meter from the currently attached source\n @param volmeter pointer to the volume meter object"]
     pub fn obs_volmeter_detach_source(volmeter: *mut obs_volmeter_t);
-    #[doc = " @brief Set the peak meter type for the volume meter\n @param volmeter pointer to the volume meter object\n @param peak_meter_type set if true-peak needs to be measured."]
+#[doc = " @brief Set the peak meter type for the volume meter\n @param volmeter pointer to the volume meter object\n @param peak_meter_type set if true-peak needs to be measured."]
     pub fn obs_volmeter_set_peak_meter_type(
         volmeter: *mut obs_volmeter_t,
         peak_meter_type: obs_peak_meter_type,
     );
-    #[doc = " @brief Get the number of channels which are configured for this source.\n @param volmeter pointer to the volume meter object"]
+#[doc = " @brief Get the number of channels which are configured for this source.\n @param volmeter pointer to the volume meter object"]
     pub fn obs_volmeter_get_nr_channels(volmeter: *mut obs_volmeter_t) -> ::std::os::raw::c_int;
     pub fn obs_volmeter_add_callback(
         volmeter: *mut obs_volmeter_t,
@@ -6497,58 +6504,58 @@ unsafe extern "C" {
     pub fn obs_key_to_virtual_key(key: obs_key_t) -> ::std::os::raw::c_int;
     pub fn obs_key_to_name(key: obs_key_t) -> *const ::std::os::raw::c_char;
     pub fn obs_key_from_name(name: *const ::std::os::raw::c_char) -> obs_key_t;
-    #[doc = " Find a core libobs data file\n @param path name of the base file\n @return A string containing the full path to the file.\n          Use bfree after use."]
+#[doc = " Find a core libobs data file\n @param path name of the base file\n @return A string containing the full path to the file.\n          Use bfree after use."]
     pub fn obs_find_data_file(file: *const ::std::os::raw::c_char) -> *mut ::std::os::raw::c_char;
-    #[doc = " Add a path to search libobs data files in.\n @param path Full path to directory to look in.\n             The string is copied."]
+#[doc = " Add a path to search libobs data files in.\n @param path Full path to directory to look in.\n             The string is copied."]
     pub fn obs_add_data_path(path: *const ::std::os::raw::c_char);
-    #[doc = " Remove a path from libobs core data paths.\n @param path The path to compare to currently set paths.\n             It does not need to be the same pointer, but\n             the path string must match an entry fully.\n @return Whether or not the path was successfully removed.\n         If false, the path could not be found."]
+#[doc = " Remove a path from libobs core data paths.\n @param path The path to compare to currently set paths.\n             It does not need to be the same pointer, but\n             the path string must match an entry fully.\n @return Whether or not the path was successfully removed.\n         If false, the path could not be found."]
     pub fn obs_remove_data_path(path: *const ::std::os::raw::c_char) -> bool;
-    #[doc = " Initializes OBS\n\n @param  locale              The locale to use for modules\n @param  module_config_path  Path to module config storage directory\n                             (or NULL if none)\n @param  store               The profiler name store for OBS to use or NULL"]
+#[doc = " Initializes OBS\n\n @param  locale              The locale to use for modules\n @param  module_config_path  Path to module config storage directory\n                             (or NULL if none)\n @param  store               The profiler name store for OBS to use or NULL"]
     pub fn obs_startup(
         locale: *const ::std::os::raw::c_char,
         module_config_path: *const ::std::os::raw::c_char,
         store: *mut profiler_name_store_t,
     ) -> bool;
-    #[doc = " Releases all data associated with OBS and terminates the OBS context"]
+#[doc = " Releases all data associated with OBS and terminates the OBS context"]
     pub fn obs_shutdown();
-    #[doc = " @return true if the main OBS context has been initialized"]
+#[doc = " @return true if the main OBS context has been initialized"]
     pub fn obs_initialized() -> bool;
-    #[doc = " @return The current core version"]
+#[doc = " @return The current core version"]
     pub fn obs_get_version() -> u32;
-    #[doc = " @return The current core version string"]
+#[doc = " @return The current core version string"]
     pub fn obs_get_version_string() -> *const ::std::os::raw::c_char;
-    #[doc = " Sets things up for calls to obs_get_cmdline_args. Called only once at startup\n and safely copies argv/argc from main(). Subsequent calls do nothing.\n\n @param  argc  The count of command line arguments, from main()\n @param  argv  An array of command line arguments, copied from main() and ends\n               with NULL."]
+#[doc = " Sets things up for calls to obs_get_cmdline_args. Called only once at startup\n and safely copies argv/argc from main(). Subsequent calls do nothing.\n\n @param  argc  The count of command line arguments, from main()\n @param  argv  An array of command line arguments, copied from main() and ends\n               with NULL."]
     pub fn obs_set_cmdline_args(
         argc: ::std::os::raw::c_int,
         argv: *const *const ::std::os::raw::c_char,
     );
-    #[doc = " Get the argc/argv used to start OBS\n\n @return  The command line arguments used for main(). Don't modify this or\n          you'll mess things up for other callers."]
+#[doc = " Get the argc/argv used to start OBS\n\n @return  The command line arguments used for main(). Don't modify this or\n          you'll mess things up for other callers."]
     pub fn obs_get_cmdline_args() -> obs_cmdline_args;
-    #[doc = " Sets a new locale to use for modules.  This will call obs_module_set_locale\n for each module with the new locale.\n\n @param  locale  The locale to use for modules"]
+#[doc = " Sets a new locale to use for modules.  This will call obs_module_set_locale\n for each module with the new locale.\n\n @param  locale  The locale to use for modules"]
     pub fn obs_set_locale(locale: *const ::std::os::raw::c_char);
-    #[doc = " @return the current locale"]
+#[doc = " @return the current locale"]
     pub fn obs_get_locale() -> *const ::std::os::raw::c_char;
     pub fn obs_init_win32_crash_handler();
-    #[doc = " Returns the profiler name store (see util/profiler.h) used by OBS, which is\n either a name store passed to obs_startup, an internal name store, or NULL\n in case obs_initialized() returns false."]
+#[doc = " Returns the profiler name store (see util/profiler.h) used by OBS, which is\n either a name store passed to obs_startup, an internal name store, or NULL\n in case obs_initialized() returns false."]
     pub fn obs_get_profiler_name_store() -> *mut profiler_name_store_t;
-    #[doc = " Sets base video output base resolution/fps/format.\n\n @note This data cannot be changed if an output is currently active.\n @note The graphics module cannot be changed without fully destroying the\n       OBS context.\n\n @param   ovi  Pointer to an obs_video_info structure containing the\n               specification of the graphics subsystem,\n @return       OBS_VIDEO_SUCCESS if successful\n               OBS_VIDEO_NOT_SUPPORTED if the adapter lacks capabilities\n               OBS_VIDEO_INVALID_PARAM if a parameter is invalid\n               OBS_VIDEO_CURRENTLY_ACTIVE if video is currently active\n               OBS_VIDEO_MODULE_NOT_FOUND if the graphics module is not found\n               OBS_VIDEO_FAIL for generic failure"]
+#[doc = " Sets base video output base resolution/fps/format.\n\n @note This data cannot be changed if an output is currently active.\n @note The graphics module cannot be changed without fully destroying the\n       OBS context.\n\n @param   ovi  Pointer to an obs_video_info structure containing the\n               specification of the graphics subsystem,\n @return       OBS_VIDEO_SUCCESS if successful\n               OBS_VIDEO_NOT_SUPPORTED if the adapter lacks capabilities\n               OBS_VIDEO_INVALID_PARAM if a parameter is invalid\n               OBS_VIDEO_CURRENTLY_ACTIVE if video is currently active\n               OBS_VIDEO_MODULE_NOT_FOUND if the graphics module is not found\n               OBS_VIDEO_FAIL for generic failure"]
     pub fn obs_reset_video(ovi: *mut obs_video_info) -> ::std::os::raw::c_int;
-    #[doc = " Sets base audio output format/channels/samples/etc\n\n @note Cannot reset base audio if an output is currently active."]
+#[doc = " Sets base audio output format/channels/samples/etc\n\n @note Cannot reset base audio if an output is currently active."]
     pub fn obs_reset_audio(oai: *const obs_audio_info) -> bool;
     pub fn obs_reset_audio2(oai: *const obs_audio_info2) -> bool;
-    #[doc = " Gets the current video settings, returns false if no video"]
+#[doc = " Gets the current video settings, returns false if no video"]
     pub fn obs_get_video_info(ovi: *mut obs_video_info) -> bool;
-    #[doc = " Gets the SDR white level, returns 300.f if no video"]
+#[doc = " Gets the SDR white level, returns 300.f if no video"]
     pub fn obs_get_video_sdr_white_level() -> f32;
-    #[doc = " Gets the HDR nominal peak level, returns 1000.f if no video"]
+#[doc = " Gets the HDR nominal peak level, returns 1000.f if no video"]
     pub fn obs_get_video_hdr_nominal_peak_level() -> f32;
-    #[doc = " Sets the video levels"]
+#[doc = " Sets the video levels"]
     pub fn obs_set_video_levels(sdr_white_level: f32, hdr_nominal_peak_level: f32);
-    #[doc = " Gets the current audio settings, returns false if no audio"]
+#[doc = " Gets the current audio settings, returns false if no audio"]
     pub fn obs_get_audio_info(oai: *mut obs_audio_info) -> bool;
-    #[doc = " Gets the v2 audio settings that includes buffering information.\n Returns false if no audio."]
+#[doc = " Gets the v2 audio settings that includes buffering information.\n Returns false if no audio."]
     pub fn obs_get_audio_info2(oai2: *mut obs_audio_info2) -> bool;
-    #[doc = " Opens a plugin module directly from a specific path.\n\n If the module already exists then the function will return successful, and\n the module parameter will be given the pointer to the existing module.\n\n This does not initialize the module, it only loads the module image.  To\n initialize the module, call obs_init_module.\n\n @param  module     The pointer to the created module.\n @param  path       Specifies the path to the module library file.  If the\n                    extension is not specified, it will use the extension\n                    appropriate to the operating system.\n @param  data_path  Specifies the path to the directory where the module's\n                    data files are stored.\n @returns           MODULE_SUCCESS if successful\n                    MODULE_ERROR if a generic error occurred\n                    MODULE_FAILED_TO_OPEN if the module failed to open, e.g. because it was not found or had missing symbols\n                    MODULE_MISSING_EXPORTS if required exports are missing\n                    MODULE_INCOMPATIBLE_VER if incompatible version"]
+#[doc = " Opens a plugin module directly from a specific path.\n\n If the module already exists then the function will return successful, and\n the module parameter will be given the pointer to the existing module.\n\n This does not initialize the module, it only loads the module image.  To\n initialize the module, call obs_init_module.\n\n @param  module     The pointer to the created module.\n @param  path       Specifies the path to the module library file.  If the\n                    extension is not specified, it will use the extension\n                    appropriate to the operating system.\n @param  data_path  Specifies the path to the directory where the module's\n                    data files are stored.\n @returns           MODULE_SUCCESS if successful\n                    MODULE_ERROR if a generic error occurred\n                    MODULE_FAILED_TO_OPEN if the module failed to open, e.g. because it was not found or had missing symbols\n                    MODULE_MISSING_EXPORTS if required exports are missing\n                    MODULE_INCOMPATIBLE_VER if incompatible version"]
     pub fn obs_open_module(
         module: *mut *mut obs_module_t,
         path: *const ::std::os::raw::c_char,
@@ -6560,15 +6567,15 @@ unsafe extern "C" {
         data_path: *const ::std::os::raw::c_char,
         state: obs_module_load_state,
     ) -> bool;
-    #[doc = " Initializes the module, which calls its obs_module_load export.  If the\n module is already loaded, then this function does nothing and returns\n successful."]
+#[doc = " Initializes the module, which calls its obs_module_load export.  If the\n module is already loaded, then this function does nothing and returns\n successful."]
     pub fn obs_init_module(module: *mut obs_module_t) -> bool;
-    #[doc = " Returns a module based upon its name, or NULL if not found"]
+#[doc = " Returns a module based upon its name, or NULL if not found"]
     pub fn obs_get_module(name: *const ::std::os::raw::c_char) -> *mut obs_module_t;
-    #[doc = " Returns a module if it is disabled, or NULL if not found in the disabled list"]
+#[doc = " Returns a module if it is disabled, or NULL if not found in the disabled list"]
     pub fn obs_get_disabled_module(name: *const ::std::os::raw::c_char) -> *mut obs_module_t;
-    #[doc = " Gets library of module"]
+#[doc = " Gets library of module"]
     pub fn obs_get_module_lib(module: *mut obs_module_t) -> *mut ::std::os::raw::c_void;
-    #[doc = " Returns locale text from a specific module"]
+#[doc = " Returns locale text from a specific module"]
     pub fn obs_module_get_locale_string(
         mod_: *const obs_module_t,
         lookup_string: *const ::std::os::raw::c_char,
@@ -6578,81 +6585,81 @@ unsafe extern "C" {
         mod_: *const obs_module_t,
         text: *const ::std::os::raw::c_char,
     ) -> *const ::std::os::raw::c_char;
-    #[doc = " Logs loaded modules"]
+#[doc = " Logs loaded modules"]
     pub fn obs_log_loaded_modules();
-    #[doc = " Returns the module file name"]
+#[doc = " Returns the module file name"]
     pub fn obs_get_module_file_name(module: *mut obs_module_t) -> *const ::std::os::raw::c_char;
-    #[doc = " Returns the module full name"]
+#[doc = " Returns the module full name"]
     pub fn obs_get_module_name(module: *mut obs_module_t) -> *const ::std::os::raw::c_char;
-    #[doc = " Returns the module author(s)"]
+#[doc = " Returns the module author(s)"]
     pub fn obs_get_module_author(module: *mut obs_module_t) -> *const ::std::os::raw::c_char;
-    #[doc = " Returns the module description"]
+#[doc = " Returns the module description"]
     pub fn obs_get_module_description(module: *mut obs_module_t) -> *const ::std::os::raw::c_char;
-    #[doc = " Returns the module binary path"]
+#[doc = " Returns the module binary path"]
     pub fn obs_get_module_binary_path(module: *mut obs_module_t) -> *const ::std::os::raw::c_char;
-    #[doc = " Returns the module data path"]
+#[doc = " Returns the module data path"]
     pub fn obs_get_module_data_path(module: *mut obs_module_t) -> *const ::std::os::raw::c_char;
-    #[doc = " Adds a source type id to the module provided sources list"]
+#[doc = " Adds a source type id to the module provided sources list"]
     pub fn obs_module_add_source(module: *mut obs_module_t, id: *const ::std::os::raw::c_char);
-    #[doc = " Adds an output type id to the module provided outputs list"]
+#[doc = " Adds an output type id to the module provided outputs list"]
     pub fn obs_module_add_output(module: *mut obs_module_t, id: *const ::std::os::raw::c_char);
-    #[doc = " Adds an encoder type id to the module provided encoders list"]
+#[doc = " Adds an encoder type id to the module provided encoders list"]
     pub fn obs_module_add_encoder(module: *mut obs_module_t, id: *const ::std::os::raw::c_char);
-    #[doc = " Adds an encoder service id to the module provided services list"]
+#[doc = " Adds an encoder service id to the module provided services list"]
     pub fn obs_module_add_service(module: *mut obs_module_t, id: *const ::std::os::raw::c_char);
-    #[doc = " Adds a module search path to be used with obs_find_modules.  If the search\n path strings contain %module%, that text will be replaced with the module\n name when used.\n\n @param  bin   Specifies the module's binary directory search path.\n @param  data  Specifies the module's data directory search path."]
+#[doc = " Adds a module search path to be used with obs_find_modules.  If the search\n path strings contain %module%, that text will be replaced with the module\n name when used.\n\n @param  bin   Specifies the module's binary directory search path.\n @param  data  Specifies the module's data directory search path."]
     pub fn obs_add_module_path(
         bin: *const ::std::os::raw::c_char,
         data: *const ::std::os::raw::c_char,
     );
-    #[doc = " Adds a module to the list of modules allowed to load in Safe Mode.\n If the list is empty, all modules are allowed.\n\n @param  name  Specifies the module's name (filename sans extension)."]
+#[doc = " Adds a module to the list of modules allowed to load in Safe Mode.\n If the list is empty, all modules are allowed.\n\n @param  name  Specifies the module's name (filename sans extension)."]
     pub fn obs_add_safe_module(name: *const ::std::os::raw::c_char);
-    #[doc = " Adds a module to the list of core modules (which cannot be disabled).\n If the list is empty, all modules are allowed.\n\n @param  name  Specifies the module's name (filename sans extension)."]
+#[doc = " Adds a module to the list of core modules (which cannot be disabled).\n If the list is empty, all modules are allowed.\n\n @param  name  Specifies the module's name (filename sans extension)."]
     pub fn obs_add_core_module(name: *const ::std::os::raw::c_char);
-    #[doc = " Automatically loads all modules from module paths (convenience function)"]
+#[doc = " Automatically loads all modules from module paths (convenience function)"]
     pub fn obs_load_all_modules();
     pub fn obs_module_failure_info_free(mfi: *mut obs_module_failure_info);
     pub fn obs_load_all_modules2(mfi: *mut obs_module_failure_info);
-    #[doc = " Notifies modules that all modules have been loaded.  This function should\n be called after all modules have been loaded."]
+#[doc = " Notifies modules that all modules have been loaded.  This function should\n be called after all modules have been loaded."]
     pub fn obs_post_load_modules();
-    #[doc = " Finds all modules within the search paths added by obs_add_module_path."]
+#[doc = " Finds all modules within the search paths added by obs_add_module_path."]
     pub fn obs_find_modules(
         callback: obs_find_module_callback_t,
         param: *mut ::std::os::raw::c_void,
     );
-    #[doc = " Finds all modules within the search paths added by obs_add_module_path."]
+#[doc = " Finds all modules within the search paths added by obs_add_module_path."]
     pub fn obs_find_modules2(
         callback: obs_find_module_callback2_t,
         param: *mut ::std::os::raw::c_void,
     );
-    #[doc = " Enumerates all loaded modules"]
+#[doc = " Enumerates all loaded modules"]
     pub fn obs_enum_modules(
         callback: obs_enum_module_callback_t,
         param: *mut ::std::os::raw::c_void,
     );
-    #[doc = " Helper function for using default module locale"]
+#[doc = " Helper function for using default module locale"]
     pub fn obs_module_load_locale(
         module: *mut obs_module_t,
         default_locale: *const ::std::os::raw::c_char,
         locale: *const ::std::os::raw::c_char,
     ) -> *mut lookup_t;
-    #[doc = " Returns the location of a plugin module data file.\n\n @note   Modules should use obs_module_file function defined in obs-module.h\n         as a more elegant means of getting their files without having to\n         specify the module parameter.\n\n @param  module  The module associated with the file to locate\n @param  file    The file to locate\n @return         Path string, or NULL if not found.  Use bfree to free string."]
+#[doc = " Returns the location of a plugin module data file.\n\n @note   Modules should use obs_module_file function defined in obs-module.h\n         as a more elegant means of getting their files without having to\n         specify the module parameter.\n\n @param  module  The module associated with the file to locate\n @param  file    The file to locate\n @return         Path string, or NULL if not found.  Use bfree to free string."]
     pub fn obs_find_module_file(
         module: *mut obs_module_t,
         file: *const ::std::os::raw::c_char,
     ) -> *mut ::std::os::raw::c_char;
-    #[doc = " Adds a module name to the disabled modules list.\n\n @param  name    The name of the module to disable"]
+#[doc = " Adds a module name to the disabled modules list.\n\n @param  name    The name of the module to disable"]
     pub fn obs_add_disabled_module(name: *const ::std::os::raw::c_char);
-    #[doc = " Returns if a module can be disabled.\n\n @param  name    The name of the module to check\n @return         Boolean to indicate if module can be disabled"]
+#[doc = " Returns if a module can be disabled.\n\n @param  name    The name of the module to check\n @return         Boolean to indicate if module can be disabled"]
     pub fn obs_get_module_allow_disable(name: *const ::std::os::raw::c_char) -> bool;
-    #[doc = " Returns the path of a plugin module config file (whether it exists or not)\n\n @note   Modules should use obs_module_config_path function defined in\n         obs-module.h as a more elegant means of getting their files without\n         having to specify the module parameter.\n\n @param  module  The module associated with the path\n @param  file    The file to get a path to\n @return         Path string, or NULL if not found.  Use bfree to free string."]
+#[doc = " Returns the path of a plugin module config file (whether it exists or not)\n\n @note   Modules should use obs_module_config_path function defined in\n         obs-module.h as a more elegant means of getting their files without\n         having to specify the module parameter.\n\n @param  module  The module associated with the path\n @param  file    The file to get a path to\n @return         Path string, or NULL if not found.  Use bfree to free string."]
     pub fn obs_module_get_config_path(
         module: *mut obs_module_t,
         file: *const ::std::os::raw::c_char,
     ) -> *mut ::std::os::raw::c_char;
-    #[doc = " Enumerates all source types (inputs, filters, transitions, etc)."]
+#[doc = " Enumerates all source types (inputs, filters, transitions, etc)."]
     pub fn obs_enum_source_types(idx: usize, id: *mut *const ::std::os::raw::c_char) -> bool;
-    #[doc = " Enumerates all available inputs source types.\n\n   Inputs are general source inputs (such as capture sources, device sources,\n etc)."]
+#[doc = " Enumerates all available inputs source types.\n\n   Inputs are general source inputs (such as capture sources, device sources,\n etc)."]
     pub fn obs_enum_input_types(idx: usize, id: *mut *const ::std::os::raw::c_char) -> bool;
     pub fn obs_enum_input_types2(
         idx: usize,
@@ -6662,31 +6669,31 @@ unsafe extern "C" {
     pub fn obs_get_latest_input_type_id(
         unversioned_id: *const ::std::os::raw::c_char,
     ) -> *const ::std::os::raw::c_char;
-    #[doc = " Enumerates all available filter source types.\n\n   Filters are sources that are used to modify the video/audio output of\n other sources."]
+#[doc = " Enumerates all available filter source types.\n\n   Filters are sources that are used to modify the video/audio output of\n other sources."]
     pub fn obs_enum_filter_types(idx: usize, id: *mut *const ::std::os::raw::c_char) -> bool;
-    #[doc = " Enumerates all available transition source types.\n\n   Transitions are sources used to transition between two or more other\n sources."]
+#[doc = " Enumerates all available transition source types.\n\n   Transitions are sources used to transition between two or more other\n sources."]
     pub fn obs_enum_transition_types(idx: usize, id: *mut *const ::std::os::raw::c_char) -> bool;
-    #[doc = " Enumerates all available output types."]
+#[doc = " Enumerates all available output types."]
     pub fn obs_enum_output_types(idx: usize, id: *mut *const ::std::os::raw::c_char) -> bool;
-    #[doc = " Enumerates all available encoder types."]
+#[doc = " Enumerates all available encoder types."]
     pub fn obs_enum_encoder_types(idx: usize, id: *mut *const ::std::os::raw::c_char) -> bool;
-    #[doc = " Enumerates all available service types."]
+#[doc = " Enumerates all available service types."]
     pub fn obs_enum_service_types(idx: usize, id: *mut *const ::std::os::raw::c_char) -> bool;
-    #[doc = " Helper function for entering the OBS graphics context"]
+#[doc = " Helper function for entering the OBS graphics context"]
     pub fn obs_enter_graphics();
-    #[doc = " Helper function for leaving the OBS graphics context"]
+#[doc = " Helper function for leaving the OBS graphics context"]
     pub fn obs_leave_graphics();
-    #[doc = " Gets the main audio output handler for this OBS context"]
+#[doc = " Gets the main audio output handler for this OBS context"]
     pub fn obs_get_audio() -> *mut audio_t;
-    #[doc = " Gets the main video output handler for this OBS context"]
+#[doc = " Gets the main video output handler for this OBS context"]
     pub fn obs_get_video() -> *mut video_t;
-    #[doc = " Returns true if video is active, false otherwise"]
+#[doc = " Returns true if video is active, false otherwise"]
     pub fn obs_video_active() -> bool;
-    #[doc = " Sets the primary output source for a channel."]
+#[doc = " Sets the primary output source for a channel."]
     pub fn obs_set_output_source(channel: u32, source: *mut obs_source_t);
-    #[doc = " Gets the primary output source for a channel and increments the reference\n counter for that source.  Use obs_source_release to release."]
+#[doc = " Gets the primary output source for a channel and increments the reference\n counter for that source.  Use obs_source_release to release."]
     pub fn obs_get_output_source(channel: u32) -> *mut obs_source_t;
-    #[doc = " Enumerates all input sources\n\n   Callback function returns true to continue enumeration, or false to end\n enumeration.\n\n   Use obs_source_get_ref or obs_source_get_weak_source if you want to retain\n a reference after obs_enum_sources finishes"]
+#[doc = " Enumerates all input sources\n\n   Callback function returns true to continue enumeration, or false to end\n enumeration.\n\n   Use obs_source_get_ref or obs_source_get_weak_source if you want to retain\n a reference after obs_enum_sources finishes"]
     pub fn obs_enum_sources(
         enum_proc: ::std::option::Option<
             unsafe extern "C" fn(
@@ -6696,7 +6703,7 @@ unsafe extern "C" {
         >,
         param: *mut ::std::os::raw::c_void,
     );
-    #[doc = " Enumerates scenes"]
+#[doc = " Enumerates scenes"]
     pub fn obs_enum_scenes(
         enum_proc: ::std::option::Option<
             unsafe extern "C" fn(
@@ -6706,7 +6713,7 @@ unsafe extern "C" {
         >,
         param: *mut ::std::os::raw::c_void,
     );
-    #[doc = " Enumerates all sources (regardless of type)"]
+#[doc = " Enumerates all sources (regardless of type)"]
     pub fn obs_enum_all_sources(
         enum_proc: ::std::option::Option<
             unsafe extern "C" fn(
@@ -6716,7 +6723,7 @@ unsafe extern "C" {
         >,
         param: *mut ::std::os::raw::c_void,
     );
-    #[doc = " Enumerates outputs"]
+#[doc = " Enumerates outputs"]
     pub fn obs_enum_outputs(
         enum_proc: ::std::option::Option<
             unsafe extern "C" fn(
@@ -6726,7 +6733,7 @@ unsafe extern "C" {
         >,
         param: *mut ::std::os::raw::c_void,
     );
-    #[doc = " Enumerates encoders"]
+#[doc = " Enumerates encoders"]
     pub fn obs_enum_encoders(
         enum_proc: ::std::option::Option<
             unsafe extern "C" fn(
@@ -6736,7 +6743,7 @@ unsafe extern "C" {
         >,
         param: *mut ::std::os::raw::c_void,
     );
-    #[doc = " Enumerates encoders"]
+#[doc = " Enumerates encoders"]
     pub fn obs_enum_services(
         enum_proc: ::std::option::Option<
             unsafe extern "C" fn(
@@ -6746,7 +6753,7 @@ unsafe extern "C" {
         >,
         param: *mut ::std::os::raw::c_void,
     );
-    #[doc = " Enumerates canvases"]
+#[doc = " Enumerates canvases"]
     pub fn obs_enum_canvases(
         enum_proc: ::std::option::Option<
             unsafe extern "C" fn(
@@ -6756,65 +6763,65 @@ unsafe extern "C" {
         >,
         param: *mut ::std::os::raw::c_void,
     );
-    #[doc = " Gets a source by its name.\n\n   Increments the source reference counter, use obs_source_release to\n release it when complete."]
+#[doc = " Gets a source by its name.\n\n   Increments the source reference counter, use obs_source_release to\n release it when complete."]
     pub fn obs_get_source_by_name(name: *const ::std::os::raw::c_char) -> *mut obs_source_t;
-    #[doc = " Gets a source by its UUID.\n\n   Increments the source reference counter, use obs_source_release to\n release it when complete."]
+#[doc = " Gets a source by its UUID.\n\n   Increments the source reference counter, use obs_source_release to\n release it when complete."]
     pub fn obs_get_source_by_uuid(uuid: *const ::std::os::raw::c_char) -> *mut obs_source_t;
-    #[doc = " Get a transition source by its name."]
+#[doc = " Get a transition source by its name."]
     pub fn obs_get_transition_by_name(name: *const ::std::os::raw::c_char) -> *mut obs_source_t;
-    #[doc = " Get a transition source by its UUID."]
+#[doc = " Get a transition source by its UUID."]
     pub fn obs_get_transition_by_uuid(uuid: *const ::std::os::raw::c_char) -> *mut obs_source_t;
-    #[doc = " Gets an output by its name."]
+#[doc = " Gets an output by its name."]
     pub fn obs_get_output_by_name(name: *const ::std::os::raw::c_char) -> *mut obs_output_t;
-    #[doc = " Gets an encoder by its name."]
+#[doc = " Gets an encoder by its name."]
     pub fn obs_get_encoder_by_name(name: *const ::std::os::raw::c_char) -> *mut obs_encoder_t;
-    #[doc = " Gets an service by its name."]
+#[doc = " Gets an service by its name."]
     pub fn obs_get_service_by_name(name: *const ::std::os::raw::c_char) -> *mut obs_service_t;
-    #[doc = " Get a canvas by its name."]
+#[doc = " Get a canvas by its name."]
     pub fn obs_get_canvas_by_name(name: *const ::std::os::raw::c_char) -> *mut obs_canvas_t;
-    #[doc = " Get a canvas by its UUID."]
+#[doc = " Get a canvas by its UUID."]
     pub fn obs_get_canvas_by_uuid(uuid: *const ::std::os::raw::c_char) -> *mut obs_canvas_t;
-    #[doc = " Returns a commonly used base effect"]
+#[doc = " Returns a commonly used base effect"]
     pub fn obs_get_base_effect(effect: obs_base_effect) -> *mut gs_effect_t;
-    #[doc = " Returns the primary obs signal handler"]
+#[doc = " Returns the primary obs signal handler"]
     pub fn obs_get_signal_handler() -> *mut signal_handler_t;
-    #[doc = " Returns the primary obs procedure handler"]
+#[doc = " Returns the primary obs procedure handler"]
     pub fn obs_get_proc_handler() -> *mut proc_handler_t;
-    #[doc = " Renders the last main output texture"]
+#[doc = " Renders the last main output texture"]
     pub fn obs_render_main_texture();
-    #[doc = " Renders the last main output texture ignoring background color"]
+#[doc = " Renders the last main output texture ignoring background color"]
     pub fn obs_render_main_texture_src_color_only();
-    #[doc = " Renders the last canvas output texture"]
+#[doc = " Renders the last canvas output texture"]
     pub fn obs_render_canvas_texture(canvas: *mut obs_canvas_t);
-    #[doc = " Renders the last main output texture ignoring background color"]
+#[doc = " Renders the last main output texture ignoring background color"]
     pub fn obs_render_canvas_texture_src_color_only(canvas: *mut obs_canvas_t);
-    #[doc = " Returns the last main output texture.  This can return NULL if the texture\n is unavailable."]
+#[doc = " Returns the last main output texture.  This can return NULL if the texture\n is unavailable."]
     pub fn obs_get_main_texture() -> *mut gs_texture_t;
-    #[doc = " Saves a source to settings data"]
+#[doc = " Saves a source to settings data"]
     pub fn obs_save_source(source: *mut obs_source_t) -> *mut obs_data_t;
-    #[doc = " Loads a source from settings data"]
+#[doc = " Loads a source from settings data"]
     pub fn obs_load_source(data: *mut obs_data_t) -> *mut obs_source_t;
-    #[doc = " Loads a private source from settings data"]
+#[doc = " Loads a private source from settings data"]
     pub fn obs_load_private_source(data: *mut obs_data_t) -> *mut obs_source_t;
-    #[doc = " Send a save signal to sources"]
+#[doc = " Send a save signal to sources"]
     pub fn obs_source_save(source: *mut obs_source_t);
-    #[doc = " Send a load signal to sources (soft deprecated; does not load filters)"]
+#[doc = " Send a load signal to sources (soft deprecated; does not load filters)"]
     pub fn obs_source_load(source: *mut obs_source_t);
-    #[doc = " Send a load signal to sources"]
+#[doc = " Send a load signal to sources"]
     pub fn obs_source_load2(source: *mut obs_source_t);
-    #[doc = " Loads sources from a data array"]
+#[doc = " Loads sources from a data array"]
     pub fn obs_load_sources(
         array: *mut obs_data_array_t,
         cb: obs_load_source_cb,
         private_data: *mut ::std::os::raw::c_void,
     );
-    #[doc = " Saves sources to a data array"]
+#[doc = " Saves sources to a data array"]
     pub fn obs_save_sources() -> *mut obs_data_array_t;
     pub fn obs_save_sources_filtered(
         cb: obs_save_source_filter_cb,
         data: *mut ::std::os::raw::c_void,
     ) -> *mut obs_data_array_t;
-    #[doc = " Reset source UUIDs. NOTE: this function is only to be used by the UI and\n  will be removed in a future version!"]
+#[doc = " Reset source UUIDs. NOTE: this function is only to be used by the UI and\n  will be removed in a future version!"]
     pub fn obs_reset_source_uuids();
     pub fn obs_obj_get_type(obj: *mut ::std::os::raw::c_void) -> obs_obj_type;
     pub fn obs_obj_get_id(obj: *mut ::std::os::raw::c_void) -> *const ::std::os::raw::c_char;
@@ -6930,23 +6937,23 @@ unsafe extern "C" {
         weak: *mut obs_weak_object_t,
         object: *mut obs_object_t,
     ) -> bool;
-    #[doc = " Creates a view context.\n\n   A view can be used for things like separate previews, or drawing\n sources separately."]
+#[doc = " Creates a view context.\n\n   A view can be used for things like separate previews, or drawing\n sources separately."]
     pub fn obs_view_create() -> *mut obs_view_t;
-    #[doc = " Destroys this view context"]
+#[doc = " Destroys this view context"]
     pub fn obs_view_destroy(view: *mut obs_view_t);
-    #[doc = " Sets the source to be used for this view context."]
+#[doc = " Sets the source to be used for this view context."]
     pub fn obs_view_set_source(view: *mut obs_view_t, channel: u32, source: *mut obs_source_t);
-    #[doc = " Gets the source currently in use for this view context"]
+#[doc = " Gets the source currently in use for this view context"]
     pub fn obs_view_get_source(view: *mut obs_view_t, channel: u32) -> *mut obs_source_t;
-    #[doc = " Renders the sources of this view context"]
+#[doc = " Renders the sources of this view context"]
     pub fn obs_view_render(view: *mut obs_view_t);
-    #[doc = " Adds a view to the main render loop, with current obs_get_video_info state"]
+#[doc = " Adds a view to the main render loop, with current obs_get_video_info state"]
     pub fn obs_view_add(view: *mut obs_view_t) -> *mut video_t;
-    #[doc = " Adds a view to the main render loop, with custom video settings"]
+#[doc = " Adds a view to the main render loop, with custom video settings"]
     pub fn obs_view_add2(view: *mut obs_view_t, ovi: *mut obs_video_info) -> *mut video_t;
-    #[doc = " Removes a view from the main render loop"]
+#[doc = " Removes a view from the main render loop"]
     pub fn obs_view_remove(view: *mut obs_view_t);
-    #[doc = " Enumerate the video info of all mixes using the specified view context"]
+#[doc = " Enumerate the video info of all mixes using the specified view context"]
     pub fn obs_view_enum_video_info(
         view: *mut obs_view_t,
         enum_proc: ::std::option::Option<
@@ -6957,18 +6964,18 @@ unsafe extern "C" {
         >,
         param: *mut ::std::os::raw::c_void,
     );
-    #[doc = " Adds a new window display linked to the main render pipeline.  This creates\n a new swap chain which updates every frame.\n\n @param  graphics_data  The swap chain initialization data.\n @return                The new display context, or NULL if failed."]
+#[doc = " Adds a new window display linked to the main render pipeline.  This creates\n a new swap chain which updates every frame.\n\n @param  graphics_data  The swap chain initialization data.\n @return                The new display context, or NULL if failed."]
     pub fn obs_display_create(
         graphics_data: *const gs_init_data,
         backround_color: u32,
     ) -> *mut obs_display_t;
-    #[doc = " Destroys a display context"]
+#[doc = " Destroys a display context"]
     pub fn obs_display_destroy(display: *mut obs_display_t);
-    #[doc = " Changes the size of this display"]
+#[doc = " Changes the size of this display"]
     pub fn obs_display_resize(display: *mut obs_display_t, cx: u32, cy: u32);
-    #[doc = " Updates the color space of this display"]
+#[doc = " Updates the color space of this display"]
     pub fn obs_display_update_color_space(display: *mut obs_display_t);
-    #[doc = " Adds a draw callback for this display context\n\n @param  display  The display context.\n @param  draw     The draw callback which is called each time a frame\n                  updates.\n @param  param    The user data to be associated with this draw callback."]
+#[doc = " Adds a draw callback for this display context\n\n @param  display  The display context.\n @param  draw     The draw callback which is called each time a frame\n                  updates.\n @param  param    The user data to be associated with this draw callback."]
     pub fn obs_display_add_draw_callback(
         display: *mut obs_display_t,
         draw: ::std::option::Option<
@@ -6976,7 +6983,7 @@ unsafe extern "C" {
         >,
         param: *mut ::std::os::raw::c_void,
     );
-    #[doc = " Removes a draw callback for this display context"]
+#[doc = " Removes a draw callback for this display context"]
     pub fn obs_display_remove_draw_callback(
         display: *mut obs_display_t,
         draw: ::std::option::Option<
@@ -6988,15 +6995,15 @@ unsafe extern "C" {
     pub fn obs_display_enabled(display: *mut obs_display_t) -> bool;
     pub fn obs_display_set_background_color(display: *mut obs_display_t, color: u32);
     pub fn obs_display_size(display: *mut obs_display_t, width: *mut u32, height: *mut u32);
-    #[doc = " Returns the translated display name of a source"]
+#[doc = " Returns the translated display name of a source"]
     pub fn obs_source_get_display_name(
         id: *const ::std::os::raw::c_char,
     ) -> *const ::std::os::raw::c_char;
-    #[doc = " Returns a pointer to the module which provides the source"]
+#[doc = " Returns a pointer to the module which provides the source"]
     pub fn obs_source_get_module(id: *const ::std::os::raw::c_char) -> *mut obs_module_t;
-    #[doc = " Returns the load state of a source's module given the id"]
+#[doc = " Returns the load state of a source's module given the id"]
     pub fn obs_source_load_state(id: *const ::std::os::raw::c_char) -> obs_module_load_state;
-    #[doc = " Creates a source of the specified type with the specified settings.\n\n   The \"source\" context is used for anything related to presenting\n or modifying video/audio.  Use obs_source_release to release it."]
+#[doc = " Creates a source of the specified type with the specified settings.\n\n   The \"source\" context is used for anything related to presenting\n or modifying video/audio.  Use obs_source_release to release it."]
     pub fn obs_source_create(
         id: *const ::std::os::raw::c_char,
         name: *const ::std::os::raw::c_char,
@@ -7013,7 +7020,7 @@ unsafe extern "C" {
         desired_name: *const ::std::os::raw::c_char,
         create_private: bool,
     ) -> *mut obs_source_t;
-    #[doc = " Adds/releases a reference to a source.  When the last reference is\n released, the source is destroyed."]
+#[doc = " Adds/releases a reference to a source.  When the last reference is\n released, the source is destroyed."]
     pub fn obs_source_release(source: *mut obs_source_t);
     pub fn obs_weak_source_addref(weak: *mut obs_weak_source_t);
     pub fn obs_weak_source_release(weak: *mut obs_weak_source_t);
@@ -7025,21 +7032,21 @@ unsafe extern "C" {
         weak: *mut obs_weak_source_t,
         source: *mut obs_source_t,
     ) -> bool;
-    #[doc = " Notifies all references that the source should be released"]
+#[doc = " Notifies all references that the source should be released"]
     pub fn obs_source_remove(source: *mut obs_source_t);
-    #[doc = " Returns true if the source should be released"]
+#[doc = " Returns true if the source should be released"]
     pub fn obs_source_removed(source: *const obs_source_t) -> bool;
-    #[doc = " The 'hidden' flag is not the same as a sceneitem's visibility. It is a\n property the determines if it can be found through searches. **/\n/** Simply sets a 'hidden' flag when the source is still alive but shouldn't be found"]
+#[doc = " The 'hidden' flag is not the same as a sceneitem's visibility. It is a\n property the determines if it can be found through searches. **/\n/** Simply sets a 'hidden' flag when the source is still alive but shouldn't be found"]
     pub fn obs_source_set_hidden(source: *mut obs_source_t, hidden: bool);
-    #[doc = " Returns the current 'hidden' state on the source"]
+#[doc = " Returns the current 'hidden' state on the source"]
     pub fn obs_source_is_hidden(source: *mut obs_source_t) -> bool;
-    #[doc = " Returns capability flags of a source"]
+#[doc = " Returns capability flags of a source"]
     pub fn obs_source_get_output_flags(source: *const obs_source_t) -> u32;
-    #[doc = " Returns capability flags of a source type"]
+#[doc = " Returns capability flags of a source type"]
     pub fn obs_get_source_output_flags(id: *const ::std::os::raw::c_char) -> u32;
-    #[doc = " Gets the default settings for a source type"]
+#[doc = " Gets the default settings for a source type"]
     pub fn obs_get_source_defaults(id: *const ::std::os::raw::c_char) -> *mut obs_data_t;
-    #[doc = " Returns the property list, if any.  Free with obs_properties_destroy"]
+#[doc = " Returns the property list, if any.  Free with obs_properties_destroy"]
     pub fn obs_get_source_properties(id: *const ::std::os::raw::c_char) -> *mut obs_properties_t;
     pub fn obs_source_get_missing_files(source: *const obs_source_t) -> *mut obs_missing_files_t;
     pub fn obs_source_replace_missing_file(
@@ -7048,94 +7055,94 @@ unsafe extern "C" {
         new_path: *const ::std::os::raw::c_char,
         data: *mut ::std::os::raw::c_void,
     );
-    #[doc = " Returns whether the source has custom properties or not"]
+#[doc = " Returns whether the source has custom properties or not"]
     pub fn obs_is_source_configurable(id: *const ::std::os::raw::c_char) -> bool;
     pub fn obs_source_configurable(source: *const obs_source_t) -> bool;
-    #[doc = " Returns the properties list for a specific existing source.  Free with\n obs_properties_destroy"]
+#[doc = " Returns the properties list for a specific existing source.  Free with\n obs_properties_destroy"]
     pub fn obs_source_properties(source: *const obs_source_t) -> *mut obs_properties_t;
-    #[doc = " Updates settings for this source"]
+#[doc = " Updates settings for this source"]
     pub fn obs_source_update(source: *mut obs_source_t, settings: *mut obs_data_t);
     pub fn obs_source_reset_settings(source: *mut obs_source_t, settings: *mut obs_data_t);
-    #[doc = " Renders a video source."]
+#[doc = " Renders a video source."]
     pub fn obs_source_video_render(source: *mut obs_source_t);
-    #[doc = " Gets the width of a source (if it has video)"]
+#[doc = " Gets the width of a source (if it has video)"]
     pub fn obs_source_get_width(source: *mut obs_source_t) -> u32;
-    #[doc = " Gets the height of a source (if it has video)"]
+#[doc = " Gets the height of a source (if it has video)"]
     pub fn obs_source_get_height(source: *mut obs_source_t) -> u32;
-    #[doc = " Gets the color space of a source (if it has video)"]
+#[doc = " Gets the color space of a source (if it has video)"]
     pub fn obs_source_get_color_space(
         source: *mut obs_source_t,
         count: usize,
         preferred_spaces: *const gs_color_space,
     ) -> gs_color_space;
-    #[doc = " Hints whether or not the source will blend texels"]
+#[doc = " Hints whether or not the source will blend texels"]
     pub fn obs_source_get_texcoords_centered(source: *mut obs_source_t) -> bool;
-    #[doc = " If the source is a filter, returns the parent source of the filter.  Only\n guaranteed to be valid inside of the video_render, filter_audio,\n filter_video, and filter_remove callbacks."]
+#[doc = " If the source is a filter, returns the parent source of the filter.  Only\n guaranteed to be valid inside of the video_render, filter_audio,\n filter_video, and filter_remove callbacks."]
     pub fn obs_filter_get_parent(filter: *const obs_source_t) -> *mut obs_source_t;
-    #[doc = " If the source is a filter, returns the target source of the filter.  Only\n guaranteed to be valid inside of the video_render, filter_audio,\n filter_video, and filter_remove callbacks."]
+#[doc = " If the source is a filter, returns the target source of the filter.  Only\n guaranteed to be valid inside of the video_render, filter_audio,\n filter_video, and filter_remove callbacks."]
     pub fn obs_filter_get_target(filter: *const obs_source_t) -> *mut obs_source_t;
-    #[doc = " Used to directly render a non-async source without any filter processing"]
+#[doc = " Used to directly render a non-async source without any filter processing"]
     pub fn obs_source_default_render(source: *mut obs_source_t);
-    #[doc = " Adds a filter to the source (which is used whenever the source is used)"]
+#[doc = " Adds a filter to the source (which is used whenever the source is used)"]
     pub fn obs_source_filter_add(source: *mut obs_source_t, filter: *mut obs_source_t);
-    #[doc = " Removes a filter from the source"]
+#[doc = " Removes a filter from the source"]
     pub fn obs_source_filter_remove(source: *mut obs_source_t, filter: *mut obs_source_t);
-    #[doc = " Modifies the order of a specific filter"]
+#[doc = " Modifies the order of a specific filter"]
     pub fn obs_source_filter_set_order(
         source: *mut obs_source_t,
         filter: *mut obs_source_t,
         movement: obs_order_movement,
     );
-    #[doc = " Gets filter index"]
+#[doc = " Gets filter index"]
     pub fn obs_source_filter_get_index(
         source: *mut obs_source_t,
         filter: *mut obs_source_t,
     ) -> ::std::os::raw::c_int;
-    #[doc = " Sets filter index"]
+#[doc = " Sets filter index"]
     pub fn obs_source_filter_set_index(
         source: *mut obs_source_t,
         filter: *mut obs_source_t,
         index: usize,
     );
-    #[doc = " Gets the settings string for a source"]
+#[doc = " Gets the settings string for a source"]
     pub fn obs_source_get_settings(source: *const obs_source_t) -> *mut obs_data_t;
-    #[doc = " Gets the name of a source"]
+#[doc = " Gets the name of a source"]
     pub fn obs_source_get_name(source: *const obs_source_t) -> *const ::std::os::raw::c_char;
-    #[doc = " Sets the name of a source"]
+#[doc = " Sets the name of a source"]
     pub fn obs_source_set_name(source: *mut obs_source_t, name: *const ::std::os::raw::c_char);
-    #[doc = " Gets the UUID of a source"]
+#[doc = " Gets the UUID of a source"]
     pub fn obs_source_get_uuid(source: *const obs_source_t) -> *const ::std::os::raw::c_char;
-    #[doc = " Gets the source type"]
+#[doc = " Gets the source type"]
     pub fn obs_source_get_type(source: *const obs_source_t) -> obs_source_type;
-    #[doc = " Gets the source identifier"]
+#[doc = " Gets the source identifier"]
     pub fn obs_source_get_id(source: *const obs_source_t) -> *const ::std::os::raw::c_char;
     pub fn obs_source_get_unversioned_id(
         source: *const obs_source_t,
     ) -> *const ::std::os::raw::c_char;
-    #[doc = " Returns the signal handler for a source"]
+#[doc = " Returns the signal handler for a source"]
     pub fn obs_source_get_signal_handler(source: *const obs_source_t) -> *mut signal_handler_t;
-    #[doc = " Returns the procedure handler for a source"]
+#[doc = " Returns the procedure handler for a source"]
     pub fn obs_source_get_proc_handler(source: *const obs_source_t) -> *mut proc_handler_t;
-    #[doc = " Sets the user volume for a source that has audio output"]
+#[doc = " Sets the user volume for a source that has audio output"]
     pub fn obs_source_set_volume(source: *mut obs_source_t, volume: f32);
-    #[doc = " Gets the user volume for a source that has audio output"]
+#[doc = " Gets the user volume for a source that has audio output"]
     pub fn obs_source_get_volume(source: *const obs_source_t) -> f32;
     pub fn obs_source_get_speaker_layout(source: *mut obs_source_t) -> speaker_layout;
-    #[doc = " Sets the balance value for a stereo audio source"]
+#[doc = " Sets the balance value for a stereo audio source"]
     pub fn obs_source_set_balance_value(source: *mut obs_source_t, balance: f32);
-    #[doc = " Gets the balance value for a stereo audio source"]
+#[doc = " Gets the balance value for a stereo audio source"]
     pub fn obs_source_get_balance_value(source: *const obs_source_t) -> f32;
-    #[doc = " Sets the audio sync offset (in nanoseconds) for a source"]
+#[doc = " Sets the audio sync offset (in nanoseconds) for a source"]
     pub fn obs_source_set_sync_offset(source: *mut obs_source_t, offset: i64);
-    #[doc = " Gets the audio sync offset (in nanoseconds) for a source"]
+#[doc = " Gets the audio sync offset (in nanoseconds) for a source"]
     pub fn obs_source_get_sync_offset(source: *const obs_source_t) -> i64;
-    #[doc = " Enumerates active child sources used by this source"]
+#[doc = " Enumerates active child sources used by this source"]
     pub fn obs_source_enum_active_sources(
         source: *mut obs_source_t,
         enum_callback: obs_source_enum_proc_t,
         param: *mut ::std::os::raw::c_void,
     );
-    #[doc = " Enumerates the entire active child source tree used by this source"]
+#[doc = " Enumerates the entire active child source tree used by this source"]
     pub fn obs_source_enum_active_tree(
         source: *mut obs_source_t,
         enum_callback: obs_source_enum_proc_t,
@@ -7146,38 +7153,38 @@ unsafe extern "C" {
         enum_callback: obs_source_enum_proc_t,
         param: *mut ::std::os::raw::c_void,
     );
-    #[doc = " Returns true if active, false if not"]
+#[doc = " Returns true if active, false if not"]
     pub fn obs_source_active(source: *const obs_source_t) -> bool;
-    #[doc = " Returns true if currently displayed somewhere (active or not), false if not"]
+#[doc = " Returns true if currently displayed somewhere (active or not), false if not"]
     pub fn obs_source_showing(source: *const obs_source_t) -> bool;
-    #[doc = " Sets source flags.  Note that these are different from the main output\n flags.  These are generally things that can be set by the source or user,\n while the output flags are more used to determine capabilities of a source."]
+#[doc = " Sets source flags.  Note that these are different from the main output\n flags.  These are generally things that can be set by the source or user,\n while the output flags are more used to determine capabilities of a source."]
     pub fn obs_source_set_flags(source: *mut obs_source_t, flags: u32);
-    #[doc = " Gets source flags."]
+#[doc = " Gets source flags."]
     pub fn obs_source_get_flags(source: *const obs_source_t) -> u32;
-    #[doc = " Sets audio mixer flags.  These flags are used to specify which mixers\n the source's audio should be applied to."]
+#[doc = " Sets audio mixer flags.  These flags are used to specify which mixers\n the source's audio should be applied to."]
     pub fn obs_source_set_audio_mixers(source: *mut obs_source_t, mixers: u32);
-    #[doc = " Gets audio mixer flags"]
+#[doc = " Gets audio mixer flags"]
     pub fn obs_source_get_audio_mixers(source: *const obs_source_t) -> u32;
-    #[doc = " Increments the 'showing' reference counter to indicate that the source is\n being shown somewhere.  If the reference counter was 0, will call the 'show'\n callback."]
+#[doc = " Increments the 'showing' reference counter to indicate that the source is\n being shown somewhere.  If the reference counter was 0, will call the 'show'\n callback."]
     pub fn obs_source_inc_showing(source: *mut obs_source_t);
-    #[doc = " Increments the 'active' reference counter to indicate that the source is\n fully active.  If the reference counter was 0, will call the 'activate'\n callback.\n\n Unlike obs_source_inc_showing, this will cause children of this source to be\n considered showing as well (currently used by transition previews to make\n the stinger transition show correctly).  obs_source_inc_showing should\n generally be used instead."]
+#[doc = " Increments the 'active' reference counter to indicate that the source is\n fully active.  If the reference counter was 0, will call the 'activate'\n callback.\n\n Unlike obs_source_inc_showing, this will cause children of this source to be\n considered showing as well (currently used by transition previews to make\n the stinger transition show correctly).  obs_source_inc_showing should\n generally be used instead."]
     pub fn obs_source_inc_active(source: *mut obs_source_t);
-    #[doc = " Decrements the 'showing' reference counter to indicate that the source is\n no longer being shown somewhere.  If the reference counter is set to 0,\n will call the 'hide' callback"]
+#[doc = " Decrements the 'showing' reference counter to indicate that the source is\n no longer being shown somewhere.  If the reference counter is set to 0,\n will call the 'hide' callback"]
     pub fn obs_source_dec_showing(source: *mut obs_source_t);
-    #[doc = " Decrements the 'active' reference counter to indicate that the source is no\n longer fully active.  If the reference counter is set to 0, will call the\n 'deactivate' callback\n\n Unlike obs_source_dec_showing, this will cause children of this source to be\n considered not showing as well.  obs_source_dec_showing should generally be\n used instead."]
+#[doc = " Decrements the 'active' reference counter to indicate that the source is no\n longer fully active.  If the reference counter is set to 0, will call the\n 'deactivate' callback\n\n Unlike obs_source_dec_showing, this will cause children of this source to be\n considered not showing as well.  obs_source_dec_showing should generally be\n used instead."]
     pub fn obs_source_dec_active(source: *mut obs_source_t);
-    #[doc = " Enumerates filters assigned to the source"]
+#[doc = " Enumerates filters assigned to the source"]
     pub fn obs_source_enum_filters(
         source: *mut obs_source_t,
         callback: obs_source_enum_proc_t,
         param: *mut ::std::os::raw::c_void,
     );
-    #[doc = " Gets a filter of a source by its display name."]
+#[doc = " Gets a filter of a source by its display name."]
     pub fn obs_source_get_filter_by_name(
         source: *mut obs_source_t,
         name: *const ::std::os::raw::c_char,
     ) -> *mut obs_source_t;
-    #[doc = " Gets the number of filters the source has."]
+#[doc = " Gets the number of filters the source has."]
     pub fn obs_source_filter_count(source: *const obs_source_t) -> usize;
     pub fn obs_source_copy_filters(dst: *mut obs_source_t, src: *mut obs_source_t);
     pub fn obs_source_copy_single_filter(dst: *mut obs_source_t, filter: *mut obs_source_t);
@@ -7234,18 +7241,18 @@ unsafe extern "C" {
     ) -> obs_deinterlace_field_order;
     pub fn obs_source_set_monitoring_type(source: *mut obs_source_t, type_: obs_monitoring_type);
     pub fn obs_source_get_monitoring_type(source: *const obs_source_t) -> obs_monitoring_type;
-    #[doc = " Gets private front-end settings data.  This data is saved/loaded\n automatically.  Returns an incremented reference."]
+#[doc = " Gets private front-end settings data.  This data is saved/loaded\n automatically.  Returns an incremented reference."]
     pub fn obs_source_get_private_settings(item: *mut obs_source_t) -> *mut obs_data_t;
     pub fn obs_source_backup_filters(source: *mut obs_source_t) -> *mut obs_data_array_t;
     pub fn obs_source_restore_filters(source: *mut obs_source_t, array: *mut obs_data_array_t);
     pub fn obs_source_get_type_data(source: *mut obs_source_t) -> *mut ::std::os::raw::c_void;
-    #[doc = " Helper function to set the color matrix information when drawing the source.\n\n @param  color_matrix     The color matrix.  Assigns to the 'color_matrix'\n                          effect variable.\n @param  color_range_min  The minimum color range.  Assigns to the\n                          'color_range_min' effect variable.  If NULL,\n                          {0.0f, 0.0f, 0.0f} is used.\n @param  color_range_max  The maximum color range.  Assigns to the\n                          'color_range_max' effect variable.  If NULL,\n                          {1.0f, 1.0f, 1.0f} is used."]
+#[doc = " Helper function to set the color matrix information when drawing the source.\n\n @param  color_matrix     The color matrix.  Assigns to the 'color_matrix'\n                          effect variable.\n @param  color_range_min  The minimum color range.  Assigns to the\n                          'color_range_min' effect variable.  If NULL,\n                          {0.0f, 0.0f, 0.0f} is used.\n @param  color_range_max  The maximum color range.  Assigns to the\n                          'color_range_max' effect variable.  If NULL,\n                          {1.0f, 1.0f, 1.0f} is used."]
     pub fn obs_source_draw_set_color_matrix(
         color_matrix: *const matrix4,
         color_range_min: *const vec3,
         color_range_max: *const vec3,
     );
-    #[doc = " Helper function to draw sprites for a source (synchronous video).\n\n @param  image   The sprite texture to draw.  Assigns to the 'image' variable\n                 of the current effect.\n @param  x       X position of the sprite.\n @param  y       Y position of the sprite.\n @param  cx      Width of the sprite.  If 0, uses the texture width.\n @param  cy      Height of the sprite.  If 0, uses the texture height.\n @param  flip    Specifies whether to flip the image vertically."]
+#[doc = " Helper function to draw sprites for a source (synchronous video).\n\n @param  image   The sprite texture to draw.  Assigns to the 'image' variable\n                 of the current effect.\n @param  x       X position of the sprite.\n @param  y       Y position of the sprite.\n @param  cx      Width of the sprite.  If 0, uses the texture width.\n @param  cy      Height of the sprite.  If 0, uses the texture height.\n @param  flip    Specifies whether to flip the image vertically."]
     pub fn obs_source_draw(
         image: *mut gs_texture_t,
         x: ::std::os::raw::c_int,
@@ -7254,7 +7261,7 @@ unsafe extern "C" {
         cy: u32,
         flip: bool,
     );
-    #[doc = " Outputs asynchronous video data.  Set to NULL to deactivate the texture\n\n NOTE: Non-YUV formats will always be treated as full range with this\n function!  Use obs_source_output_video2 instead if partial range support is\n desired for non-YUV video formats."]
+#[doc = " Outputs asynchronous video data.  Set to NULL to deactivate the texture\n\n NOTE: Non-YUV formats will always be treated as full range with this\n function!  Use obs_source_output_video2 instead if partial range support is\n desired for non-YUV video formats."]
     pub fn obs_source_output_video(source: *mut obs_source_t, frame: *const obs_source_frame);
     pub fn obs_source_output_video2(source: *mut obs_source_t, frame: *const obs_source_frame2);
     pub fn obs_source_set_async_rotation(
@@ -7262,23 +7269,23 @@ unsafe extern "C" {
         rotation: ::std::os::raw::c_long,
     );
     pub fn obs_source_output_cea708(source: *mut obs_source_t, captions: *const obs_source_cea_708);
-    #[doc = " Preloads asynchronous video data to allow instantaneous playback\n\n NOTE: Non-YUV formats will always be treated as full range with this\n function!  Use obs_source_preload_video2 instead if partial range support is\n desired for non-YUV video formats."]
+#[doc = " Preloads asynchronous video data to allow instantaneous playback\n\n NOTE: Non-YUV formats will always be treated as full range with this\n function!  Use obs_source_preload_video2 instead if partial range support is\n desired for non-YUV video formats."]
     pub fn obs_source_preload_video(source: *mut obs_source_t, frame: *const obs_source_frame);
     pub fn obs_source_preload_video2(source: *mut obs_source_t, frame: *const obs_source_frame2);
-    #[doc = " Shows any preloaded video data"]
+#[doc = " Shows any preloaded video data"]
     pub fn obs_source_show_preloaded_video(source: *mut obs_source_t);
-    #[doc = " Sets current async video frame immediately\n\n NOTE: Non-YUV formats will always be treated as full range with this\n function!  Use obs_source_preload_video2 instead if partial range support is\n desired for non-YUV video formats."]
+#[doc = " Sets current async video frame immediately\n\n NOTE: Non-YUV formats will always be treated as full range with this\n function!  Use obs_source_preload_video2 instead if partial range support is\n desired for non-YUV video formats."]
     pub fn obs_source_set_video_frame(source: *mut obs_source_t, frame: *const obs_source_frame);
     pub fn obs_source_set_video_frame2(source: *mut obs_source_t, frame: *const obs_source_frame2);
-    #[doc = " Outputs audio data (always asynchronous)"]
+#[doc = " Outputs audio data (always asynchronous)"]
     pub fn obs_source_output_audio(source: *mut obs_source_t, audio: *const obs_source_audio);
-    #[doc = " Signal an update to any currently used properties via 'update_properties'"]
+#[doc = " Signal an update to any currently used properties via 'update_properties'"]
     pub fn obs_source_update_properties(source: *mut obs_source_t);
-    #[doc = " Gets the current async video frame"]
+#[doc = " Gets the current async video frame"]
     pub fn obs_source_get_frame(source: *mut obs_source_t) -> *mut obs_source_frame;
-    #[doc = " Releases the current async video frame"]
+#[doc = " Releases the current async video frame"]
     pub fn obs_source_release_frame(source: *mut obs_source_t, frame: *mut obs_source_frame);
-    #[doc = " Default RGB filter handler for generic effect filters.  Processes the\n filter chain and renders them to texture if needed, then the filter is\n drawn with\n\n After calling this, set your parameters for the effect, then call\n obs_source_process_filter_end to draw the filter.\n\n Returns true if filtering should continue, false if the filter is bypassed\n for whatever reason."]
+#[doc = " Default RGB filter handler for generic effect filters.  Processes the\n filter chain and renders them to texture if needed, then the filter is\n drawn with\n\n After calling this, set your parameters for the effect, then call\n obs_source_process_filter_end to draw the filter.\n\n Returns true if filtering should continue, false if the filter is bypassed\n for whatever reason."]
     pub fn obs_source_process_filter_begin(
         filter: *mut obs_source_t,
         format: gs_color_format,
@@ -7290,14 +7297,14 @@ unsafe extern "C" {
         space: gs_color_space,
         allow_direct: obs_allow_direct_render,
     ) -> bool;
-    #[doc = " Draws the filter.\n\n Before calling this function, first call obs_source_process_filter_begin and\n then set the effect parameters, and then call this function to finalize the\n filter."]
+#[doc = " Draws the filter.\n\n Before calling this function, first call obs_source_process_filter_begin and\n then set the effect parameters, and then call this function to finalize the\n filter."]
     pub fn obs_source_process_filter_end(
         filter: *mut obs_source_t,
         effect: *mut gs_effect_t,
         width: u32,
         height: u32,
     );
-    #[doc = " Draws the filter with a specific technique.\n\n Before calling this function, first call obs_source_process_filter_begin and\n then set the effect parameters, and then call this function to finalize the\n filter."]
+#[doc = " Draws the filter with a specific technique.\n\n Before calling this function, first call obs_source_process_filter_begin and\n then set the effect parameters, and then call this function to finalize the\n filter."]
     pub fn obs_source_process_filter_tech_end(
         filter: *mut obs_source_t,
         effect: *mut gs_effect_t,
@@ -7305,14 +7312,14 @@ unsafe extern "C" {
         height: u32,
         tech_name: *const ::std::os::raw::c_char,
     );
-    #[doc = " Skips the filter if the filter is invalid and cannot be rendered"]
+#[doc = " Skips the filter if the filter is invalid and cannot be rendered"]
     pub fn obs_source_skip_video_filter(filter: *mut obs_source_t);
-    #[doc = " Adds an active child source.  Must be called by parent sources on child\n sources when the child is added and active.  This ensures that the source is\n properly activated if the parent is active.\n\n @returns true if source can be added, false if it causes recursion"]
+#[doc = " Adds an active child source.  Must be called by parent sources on child\n sources when the child is added and active.  This ensures that the source is\n properly activated if the parent is active.\n\n @returns true if source can be added, false if it causes recursion"]
     pub fn obs_source_add_active_child(parent: *mut obs_source_t, child: *mut obs_source_t)
-        -> bool;
-    #[doc = " Removes an active child source.  Must be called by parent sources on child\n sources when the child is removed or inactive.  This ensures that the source\n is properly deactivated if the parent is no longer active."]
+    -> bool;
+#[doc = " Removes an active child source.  Must be called by parent sources on child\n sources when the child is removed or inactive.  This ensures that the source\n is properly deactivated if the parent is no longer active."]
     pub fn obs_source_remove_active_child(parent: *mut obs_source_t, child: *mut obs_source_t);
-    #[doc = " Sends a mouse down/up event to a source"]
+#[doc = " Sends a mouse down/up event to a source"]
     pub fn obs_source_send_mouse_click(
         source: *mut obs_source_t,
         event: *const obs_mouse_event,
@@ -7320,45 +7327,45 @@ unsafe extern "C" {
         mouse_up: bool,
         click_count: u32,
     );
-    #[doc = " Sends a mouse move event to a source."]
+#[doc = " Sends a mouse move event to a source."]
     pub fn obs_source_send_mouse_move(
         source: *mut obs_source_t,
         event: *const obs_mouse_event,
         mouse_leave: bool,
     );
-    #[doc = " Sends a mouse wheel event to a source"]
+#[doc = " Sends a mouse wheel event to a source"]
     pub fn obs_source_send_mouse_wheel(
         source: *mut obs_source_t,
         event: *const obs_mouse_event,
         x_delta: ::std::os::raw::c_int,
         y_delta: ::std::os::raw::c_int,
     );
-    #[doc = " Sends a got-focus or lost-focus event to a source"]
+#[doc = " Sends a got-focus or lost-focus event to a source"]
     pub fn obs_source_send_focus(source: *mut obs_source_t, focus: bool);
-    #[doc = " Sends a key up/down event to a source"]
+#[doc = " Sends a key up/down event to a source"]
     pub fn obs_source_send_key_click(
         source: *mut obs_source_t,
         event: *const obs_key_event,
         key_up: bool,
     );
-    #[doc = " Sets the default source flags."]
+#[doc = " Sets the default source flags."]
     pub fn obs_source_set_default_flags(source: *mut obs_source_t, flags: u32);
-    #[doc = " Gets the base width for a source (not taking in to account filtering)"]
+#[doc = " Gets the base width for a source (not taking in to account filtering)"]
     pub fn obs_source_get_base_width(source: *mut obs_source_t) -> u32;
-    #[doc = " Gets the base height for a source (not taking in to account filtering)"]
+#[doc = " Gets the base height for a source (not taking in to account filtering)"]
     pub fn obs_source_get_base_height(source: *mut obs_source_t) -> u32;
     pub fn obs_source_audio_pending(source: *const obs_source_t) -> bool;
     pub fn obs_source_get_audio_timestamp(source: *const obs_source_t) -> u64;
     pub fn obs_source_get_audio_mix(source: *const obs_source_t, audio: *mut obs_source_audio_mix);
     pub fn obs_source_set_async_unbuffered(source: *mut obs_source_t, unbuffered: bool);
     pub fn obs_source_async_unbuffered(source: *const obs_source_t) -> bool;
-    #[doc = " Used to decouple audio from video so that audio doesn't attempt to sync up\n with video.  I.E. Audio acts independently.  Only works when in unbuffered\n mode."]
+#[doc = " Used to decouple audio from video so that audio doesn't attempt to sync up\n with video.  I.E. Audio acts independently.  Only works when in unbuffered\n mode."]
     pub fn obs_source_set_async_decoupled(source: *mut obs_source_t, decouple: bool);
     pub fn obs_source_async_decoupled(source: *const obs_source_t) -> bool;
     pub fn obs_source_set_audio_active(source: *mut obs_source_t, show: bool);
     pub fn obs_source_audio_active(source: *const obs_source_t) -> bool;
     pub fn obs_source_get_last_obs_version(source: *const obs_source_t) -> u32;
-    #[doc = " Media controls"]
+#[doc = " Media controls"]
     pub fn obs_source_media_play_pause(source: *mut obs_source_t, pause: bool);
     pub fn obs_source_media_restart(source: *mut obs_source_t);
     pub fn obs_source_media_stop(source: *mut obs_source_t);
@@ -7370,7 +7377,7 @@ unsafe extern "C" {
     pub fn obs_source_media_get_state(source: *mut obs_source_t) -> obs_media_state;
     pub fn obs_source_media_started(source: *mut obs_source_t);
     pub fn obs_source_media_ended(source: *mut obs_source_t);
-    #[doc = " Get canvas this source belongs to (reference incremented)"]
+#[doc = " Get canvas this source belongs to (reference incremented)"]
     pub fn obs_source_get_canvas(source: *const obs_source_t) -> *mut obs_canvas_t;
     pub fn obs_transition_get_source(
         transition: *mut obs_source_t,
@@ -7398,7 +7405,7 @@ unsafe extern "C" {
     pub fn obs_transition_get_alignment(transition: *const obs_source_t) -> u32;
     pub fn obs_transition_set_size(transition: *mut obs_source_t, cx: u32, cy: u32);
     pub fn obs_transition_get_size(transition: *const obs_source_t, cx: *mut u32, cy: *mut u32);
-    #[doc = " Enables fixed transitions (videos or specific types of transitions that\n are of fixed duration and linearly interpolated"]
+#[doc = " Enables fixed transitions (videos or specific types of transitions that\n are of fixed duration and linearly interpolated"]
     pub fn obs_transition_enable_fixed(
         transition: *mut obs_source_t,
         enable: bool,
@@ -7417,7 +7424,7 @@ unsafe extern "C" {
         placeholder_texture: *mut gs_texture_t,
     );
     pub fn obs_transition_video_get_color_space(transition: *mut obs_source_t) -> gs_color_space;
-    #[doc = " Directly renders its sub-source instead of to texture.  Returns false if no\n longer transitioning"]
+#[doc = " Directly renders its sub-source instead of to texture.  Returns false if no\n longer transitioning"]
     pub fn obs_transition_video_render_direct(
         transition: *mut obs_source_t,
         target: obs_transition_target,
@@ -7434,10 +7441,10 @@ unsafe extern "C" {
     ) -> bool;
     pub fn obs_transition_swap_begin(tr_dest: *mut obs_source_t, tr_source: *mut obs_source_t);
     pub fn obs_transition_swap_end(tr_dest: *mut obs_source_t, tr_source: *mut obs_source_t);
-    #[doc = " Creates a scene.\n\n   A scene is a source which is a container of other sources with specific\n display orientations.  Scenes can also be used like any other source."]
+#[doc = " Creates a scene.\n\n   A scene is a source which is a container of other sources with specific\n display orientations.  Scenes can also be used like any other source."]
     pub fn obs_scene_create(name: *const ::std::os::raw::c_char) -> *mut obs_scene_t;
     pub fn obs_scene_create_private(name: *const ::std::os::raw::c_char) -> *mut obs_scene_t;
-    #[doc = " Duplicates a scene."]
+#[doc = " Duplicates a scene."]
     pub fn obs_scene_duplicate(
         scene: *mut obs_scene_t,
         name: *const ::std::os::raw::c_char,
@@ -7445,11 +7452,11 @@ unsafe extern "C" {
     ) -> *mut obs_scene_t;
     pub fn obs_scene_release(scene: *mut obs_scene_t);
     pub fn obs_scene_get_ref(scene: *mut obs_scene_t) -> *mut obs_scene_t;
-    #[doc = " Gets the scene's source context"]
+#[doc = " Gets the scene's source context"]
     pub fn obs_scene_get_source(scene: *const obs_scene_t) -> *mut obs_source_t;
-    #[doc = " Gets the scene from its source, or NULL if not a scene"]
+#[doc = " Gets the scene from its source, or NULL if not a scene"]
     pub fn obs_scene_from_source(source: *const obs_source_t) -> *mut obs_scene_t;
-    #[doc = " Determines whether a source is within a scene"]
+#[doc = " Determines whether a source is within a scene"]
     pub fn obs_scene_find_source(
         scene: *mut obs_scene_t,
         name: *const ::std::os::raw::c_char,
@@ -7459,8 +7466,8 @@ unsafe extern "C" {
         name: *const ::std::os::raw::c_char,
     ) -> *mut obs_sceneitem_t;
     pub fn obs_scene_find_sceneitem_by_id(scene: *mut obs_scene_t, id: i64)
-        -> *mut obs_sceneitem_t;
-    #[doc = " Enumerates sources within a scene"]
+    -> *mut obs_sceneitem_t;
+#[doc = " Enumerates sources within a scene"]
     pub fn obs_scene_enum_items(
         scene: *mut obs_scene_t,
         callback: ::std::option::Option<
@@ -7484,7 +7491,7 @@ unsafe extern "C" {
     ) -> bool;
     pub fn obs_source_is_scene(source: *const obs_source_t) -> bool;
     pub fn obs_source_type_is_scene(id: *const ::std::os::raw::c_char) -> bool;
-    #[doc = " Adds/creates a new scene item for a source"]
+#[doc = " Adds/creates a new scene item for a source"]
     pub fn obs_scene_add(
         scene: *mut obs_scene_t,
         source: *mut obs_source_t,
@@ -7496,26 +7503,26 @@ unsafe extern "C" {
     );
     pub fn obs_sceneitem_addref(item: *mut obs_sceneitem_t);
     pub fn obs_sceneitem_release(item: *mut obs_sceneitem_t);
-    #[doc = " Removes a scene item."]
+#[doc = " Removes a scene item."]
     pub fn obs_sceneitem_remove(item: *mut obs_sceneitem_t);
-    #[doc = " Adds a scene item."]
+#[doc = " Adds a scene item."]
     pub fn obs_sceneitems_add(scene: *mut obs_scene_t, data: *mut obs_data_array_t);
-    #[doc = " Saves Sceneitem into an array, arr"]
+#[doc = " Saves Sceneitem into an array, arr"]
     pub fn obs_sceneitem_save(item: *mut obs_sceneitem_t, arr: *mut obs_data_array_t);
-    #[doc = " Set the ID of a sceneitem"]
+#[doc = " Set the ID of a sceneitem"]
     pub fn obs_sceneitem_set_id(sceneitem: *mut obs_sceneitem_t, id: i64);
-    #[doc = " Save all the transform states for a current scene's sceneitems"]
+#[doc = " Save all the transform states for a current scene's sceneitems"]
     pub fn obs_scene_save_transform_states(
         scene: *mut obs_scene_t,
         all_items: bool,
     ) -> *mut obs_data_t;
-    #[doc = " Load all the transform states of sceneitems in that scene"]
+#[doc = " Load all the transform states of sceneitems in that scene"]
     pub fn obs_scene_load_transform_states(state: *const ::std::os::raw::c_char);
-    #[doc = "  Gets a sceneitem's order in its scene"]
+#[doc = "  Gets a sceneitem's order in its scene"]
     pub fn obs_sceneitem_get_order_position(item: *mut obs_sceneitem_t) -> ::std::os::raw::c_int;
-    #[doc = " Gets the scene parent associated with the scene item."]
+#[doc = " Gets the scene parent associated with the scene item."]
     pub fn obs_sceneitem_get_scene(item: *const obs_sceneitem_t) -> *mut obs_scene_t;
-    #[doc = " Gets the source of a scene item."]
+#[doc = " Gets the source of a scene item."]
     pub fn obs_sceneitem_get_source(item: *const obs_sceneitem_t) -> *mut obs_source_t;
     pub fn obs_sceneitem_select(item: *mut obs_sceneitem_t, select: bool);
     pub fn obs_sceneitem_selected(item: *const obs_sceneitem_t) -> bool;
@@ -7564,7 +7571,7 @@ unsafe extern "C" {
     pub fn obs_sceneitem_force_update_transform(item: *mut obs_sceneitem_t);
     pub fn obs_sceneitem_defer_update_begin(item: *mut obs_sceneitem_t);
     pub fn obs_sceneitem_defer_update_end(item: *mut obs_sceneitem_t);
-    #[doc = " Gets private front-end settings data.  This data is saved/loaded\n automatically.  Returns an incremented reference."]
+#[doc = " Gets private front-end settings data.  This data is saved/loaded\n automatically.  Returns an incremented reference."]
     pub fn obs_sceneitem_get_private_settings(item: *mut obs_sceneitem_t) -> *mut obs_data_t;
     pub fn obs_scene_add_group(
         scene: *mut obs_scene_t,
@@ -7616,7 +7623,7 @@ unsafe extern "C" {
         >,
         param: *mut ::std::os::raw::c_void,
     );
-    #[doc = " Gets the group from its source, or NULL if not a group"]
+#[doc = " Gets the group from its source, or NULL if not a group"]
     pub fn obs_group_from_source(source: *const obs_source_t) -> *mut obs_scene_t;
     pub fn obs_sceneitem_defer_group_resize_begin(item: *mut obs_sceneitem_t);
     pub fn obs_sceneitem_defer_group_resize_end(item: *mut obs_sceneitem_t);
@@ -7646,18 +7653,18 @@ unsafe extern "C" {
     pub fn obs_output_get_display_name(
         id: *const ::std::os::raw::c_char,
     ) -> *const ::std::os::raw::c_char;
-    #[doc = " Returns a pointer to the module which provides the output"]
+#[doc = " Returns a pointer to the module which provides the output"]
     pub fn obs_output_get_module(id: *const ::std::os::raw::c_char) -> *mut obs_module_t;
-    #[doc = " Returns the load state of a output's module given the id"]
+#[doc = " Returns the load state of a output's module given the id"]
     pub fn obs_output_load_state(id: *const ::std::os::raw::c_char) -> obs_module_load_state;
-    #[doc = " Creates an output.\n\n   Outputs allow outputting to file, outputting to network, outputting to\n directshow, or other custom outputs."]
+#[doc = " Creates an output.\n\n   Outputs allow outputting to file, outputting to network, outputting to\n directshow, or other custom outputs."]
     pub fn obs_output_create(
         id: *const ::std::os::raw::c_char,
         name: *const ::std::os::raw::c_char,
         settings: *mut obs_data_t,
         hotkey_data: *mut obs_data_t,
     ) -> *mut obs_output_t;
-    #[doc = " Adds/releases a reference to an output.  When the last reference is\n released, the output is destroyed."]
+#[doc = " Adds/releases a reference to an output.  When the last reference is\n released, the output is destroyed."]
     pub fn obs_output_release(output: *mut obs_output_t);
     pub fn obs_weak_output_addref(weak: *mut obs_weak_output_t);
     pub fn obs_weak_output_release(weak: *mut obs_weak_output_t);
@@ -7669,92 +7676,92 @@ unsafe extern "C" {
         output: *mut obs_output_t,
     ) -> bool;
     pub fn obs_output_get_name(output: *const obs_output_t) -> *const ::std::os::raw::c_char;
-    #[doc = " Starts the output."]
+#[doc = " Starts the output."]
     pub fn obs_output_start(output: *mut obs_output_t) -> bool;
-    #[doc = " Stops the output."]
+#[doc = " Stops the output."]
     pub fn obs_output_stop(output: *mut obs_output_t);
-    #[doc = " Sets the current output delay, in seconds (if the output supports delay).\n\n If delay is currently active, it will set the delay value, but will not\n affect the current delay, it will only affect the next time the output is\n activated."]
+#[doc = " Sets the current output delay, in seconds (if the output supports delay).\n\n If delay is currently active, it will set the delay value, but will not\n affect the current delay, it will only affect the next time the output is\n activated."]
     pub fn obs_output_set_delay(output: *mut obs_output_t, delay_sec: u32, flags: u32);
-    #[doc = " Gets the currently set delay value, in seconds."]
+#[doc = " Gets the currently set delay value, in seconds."]
     pub fn obs_output_get_delay(output: *const obs_output_t) -> u32;
-    #[doc = " If delay is active, gets the currently active delay value, in seconds."]
+#[doc = " If delay is active, gets the currently active delay value, in seconds."]
     pub fn obs_output_get_active_delay(output: *const obs_output_t) -> u32;
-    #[doc = " Forces the output to stop.  Usually only used with delay."]
+#[doc = " Forces the output to stop.  Usually only used with delay."]
     pub fn obs_output_force_stop(output: *mut obs_output_t);
-    #[doc = " Returns whether the output is active"]
+#[doc = " Returns whether the output is active"]
     pub fn obs_output_active(output: *const obs_output_t) -> bool;
-    #[doc = " Returns output capability flags"]
+#[doc = " Returns output capability flags"]
     pub fn obs_output_get_flags(output: *const obs_output_t) -> u32;
-    #[doc = " Returns output capability flags"]
+#[doc = " Returns output capability flags"]
     pub fn obs_get_output_flags(id: *const ::std::os::raw::c_char) -> u32;
-    #[doc = " Gets the default settings for an output type"]
+#[doc = " Gets the default settings for an output type"]
     pub fn obs_output_defaults(id: *const ::std::os::raw::c_char) -> *mut obs_data_t;
-    #[doc = " Returns the property list, if any.  Free with obs_properties_destroy"]
+#[doc = " Returns the property list, if any.  Free with obs_properties_destroy"]
     pub fn obs_get_output_properties(id: *const ::std::os::raw::c_char) -> *mut obs_properties_t;
-    #[doc = " Returns the property list of an existing output, if any.  Free with\n obs_properties_destroy"]
+#[doc = " Returns the property list of an existing output, if any.  Free with\n obs_properties_destroy"]
     pub fn obs_output_properties(output: *const obs_output_t) -> *mut obs_properties_t;
-    #[doc = " Updates the settings for this output context"]
+#[doc = " Updates the settings for this output context"]
     pub fn obs_output_update(output: *mut obs_output_t, settings: *mut obs_data_t);
-    #[doc = " Specifies whether the output can be paused"]
+#[doc = " Specifies whether the output can be paused"]
     pub fn obs_output_can_pause(output: *const obs_output_t) -> bool;
-    #[doc = " Pauses the output (if the functionality is allowed by the output"]
+#[doc = " Pauses the output (if the functionality is allowed by the output"]
     pub fn obs_output_pause(output: *mut obs_output_t, pause: bool) -> bool;
-    #[doc = " Returns whether output is paused"]
+#[doc = " Returns whether output is paused"]
     pub fn obs_output_paused(output: *const obs_output_t) -> bool;
     pub fn obs_output_get_settings(output: *const obs_output_t) -> *mut obs_data_t;
-    #[doc = " Returns the signal handler for an output"]
+#[doc = " Returns the signal handler for an output"]
     pub fn obs_output_get_signal_handler(output: *const obs_output_t) -> *mut signal_handler_t;
-    #[doc = " Returns the procedure handler for an output"]
+#[doc = " Returns the procedure handler for an output"]
     pub fn obs_output_get_proc_handler(output: *const obs_output_t) -> *mut proc_handler_t;
-    #[doc = " Sets the current audio/video media contexts associated with this output,\n required for non-encoded outputs.  Can be null."]
+#[doc = " Sets the current audio/video media contexts associated with this output,\n required for non-encoded outputs.  Can be null."]
     pub fn obs_output_set_media(
         output: *mut obs_output_t,
         video: *mut video_t,
         audio: *mut audio_t,
     );
-    #[doc = " Returns the video media context associated with this output"]
+#[doc = " Returns the video media context associated with this output"]
     pub fn obs_output_video(output: *const obs_output_t) -> *mut video_t;
-    #[doc = " Returns the audio media context associated with this output"]
+#[doc = " Returns the audio media context associated with this output"]
     pub fn obs_output_audio(output: *const obs_output_t) -> *mut audio_t;
-    #[doc = " Sets the current audio mixer for non-encoded outputs"]
+#[doc = " Sets the current audio mixer for non-encoded outputs"]
     pub fn obs_output_set_mixer(output: *mut obs_output_t, mixer_idx: usize);
-    #[doc = " Gets the current audio mixer for non-encoded outputs"]
+#[doc = " Gets the current audio mixer for non-encoded outputs"]
     pub fn obs_output_get_mixer(output: *const obs_output_t) -> usize;
-    #[doc = " Sets the current audio mixes (mask) for a non-encoded multi-track output"]
+#[doc = " Sets the current audio mixes (mask) for a non-encoded multi-track output"]
     pub fn obs_output_set_mixers(output: *mut obs_output_t, mixers: usize);
-    #[doc = " Gets the current audio mixes (mask) for a non-encoded multi-track output"]
+#[doc = " Gets the current audio mixes (mask) for a non-encoded multi-track output"]
     pub fn obs_output_get_mixers(output: *const obs_output_t) -> usize;
-    #[doc = " Sets the current video encoder associated with this output,\n required for encoded outputs"]
+#[doc = " Sets the current video encoder associated with this output,\n required for encoded outputs"]
     pub fn obs_output_set_video_encoder(output: *mut obs_output_t, encoder: *mut obs_encoder_t);
-    #[doc = " Sets the current video encoder associated with this output,\n required for encoded outputs.\n\n The idx parameter specifies the video encoder index.\n Only used with outputs that have multiple video outputs (FFmpeg typically),\n otherwise the parameter is ignored."]
+#[doc = " Sets the current video encoder associated with this output,\n required for encoded outputs.\n\n The idx parameter specifies the video encoder index.\n Only used with outputs that have multiple video outputs (FFmpeg typically),\n otherwise the parameter is ignored."]
     pub fn obs_output_set_video_encoder2(
         output: *mut obs_output_t,
         encoder: *mut obs_encoder_t,
         idx: usize,
     );
-    #[doc = " Sets the current audio encoder associated with this output,\n required for encoded outputs.\n\n The idx parameter specifies the audio encoder index to set the encoder to.\n Only used with outputs that have multiple audio outputs (RTMP typically),\n otherwise the parameter is ignored."]
+#[doc = " Sets the current audio encoder associated with this output,\n required for encoded outputs.\n\n The idx parameter specifies the audio encoder index to set the encoder to.\n Only used with outputs that have multiple audio outputs (RTMP typically),\n otherwise the parameter is ignored."]
     pub fn obs_output_set_audio_encoder(
         output: *mut obs_output_t,
         encoder: *mut obs_encoder_t,
         idx: usize,
     );
-    #[doc = " Returns the current video encoder associated with this output"]
+#[doc = " Returns the current video encoder associated with this output"]
     pub fn obs_output_get_video_encoder(output: *const obs_output_t) -> *mut obs_encoder_t;
-    #[doc = " Returns the current video encoder associated with this output.\n\n The idx parameter specifies the video encoder index.\n Only used with outputs that have multiple video outputs (FFmpeg typically),\n otherwise specifying an idx > 0 returns a NULL."]
+#[doc = " Returns the current video encoder associated with this output.\n\n The idx parameter specifies the video encoder index.\n Only used with outputs that have multiple video outputs (FFmpeg typically),\n otherwise specifying an idx > 0 returns a NULL."]
     pub fn obs_output_get_video_encoder2(
         output: *const obs_output_t,
         idx: usize,
     ) -> *mut obs_encoder_t;
-    #[doc = " Returns the current audio encoder associated with this output\n\n The idx parameter specifies the audio encoder index.  Only used with\n outputs that have multiple audio outputs, otherwise the parameter is\n ignored."]
+#[doc = " Returns the current audio encoder associated with this output\n\n The idx parameter specifies the audio encoder index.  Only used with\n outputs that have multiple audio outputs, otherwise the parameter is\n ignored."]
     pub fn obs_output_get_audio_encoder(
         output: *const obs_output_t,
         idx: usize,
     ) -> *mut obs_encoder_t;
-    #[doc = " Sets the current service associated with this output."]
+#[doc = " Sets the current service associated with this output."]
     pub fn obs_output_set_service(output: *mut obs_output_t, service: *mut obs_service_t);
-    #[doc = " Gets the current service associated with this output."]
+#[doc = " Gets the current service associated with this output."]
     pub fn obs_output_get_service(output: *const obs_output_t) -> *mut obs_service_t;
-    #[doc = " Sets the reconnect settings.  Set retry_count to 0 to disable reconnecting."]
+#[doc = " Sets the reconnect settings.  Set retry_count to 0 to disable reconnecting."]
     pub fn obs_output_set_reconnect_settings(
         output: *mut obs_output_t,
         retry_count: ::std::os::raw::c_int,
@@ -7763,22 +7770,22 @@ unsafe extern "C" {
     pub fn obs_output_get_total_bytes(output: *const obs_output_t) -> u64;
     pub fn obs_output_get_frames_dropped(output: *const obs_output_t) -> ::std::os::raw::c_int;
     pub fn obs_output_get_total_frames(output: *const obs_output_t) -> ::std::os::raw::c_int;
-    #[doc = " Sets the preferred scaled resolution for this output.  Set width and height\n to 0 to disable scaling.\n\n If this output uses an encoder, it will call obs_encoder_set_scaled_size on\n the encoder before the stream is started.  If the encoder is already active,\n then this function will trigger a warning and do nothing."]
+#[doc = " Sets the preferred scaled resolution for this output.  Set width and height\n to 0 to disable scaling.\n\n If this output uses an encoder, it will call obs_encoder_set_scaled_size on\n the encoder before the stream is started.  If the encoder is already active,\n then this function will trigger a warning and do nothing."]
     pub fn obs_output_set_preferred_size(output: *mut obs_output_t, width: u32, height: u32);
-    #[doc = " Sets the preferred scaled resolution for this output.  Set width and height\n to 0 to disable scaling.\n\n If this output uses an encoder, it will call obs_encoder_set_scaled_size on\n the encoder before the stream is started.  If the encoder is already active,\n then this function will trigger a warning and do nothing.\n\n The idx parameter specifies the video encoder index to apply the scaling to.\n Only used with outputs that have multiple video outputs (FFmpeg typically),\n otherwise the parameter is ignored."]
+#[doc = " Sets the preferred scaled resolution for this output.  Set width and height\n to 0 to disable scaling.\n\n If this output uses an encoder, it will call obs_encoder_set_scaled_size on\n the encoder before the stream is started.  If the encoder is already active,\n then this function will trigger a warning and do nothing.\n\n The idx parameter specifies the video encoder index to apply the scaling to.\n Only used with outputs that have multiple video outputs (FFmpeg typically),\n otherwise the parameter is ignored."]
     pub fn obs_output_set_preferred_size2(
         output: *mut obs_output_t,
         width: u32,
         height: u32,
         idx: usize,
     );
-    #[doc = " For video outputs, returns the width of the encoded image"]
+#[doc = " For video outputs, returns the width of the encoded image"]
     pub fn obs_output_get_width(output: *const obs_output_t) -> u32;
-    #[doc = " For video outputs, returns the width of the encoded image.\n\n The idx parameter specifies the video encoder index.\n Only used with outputs that have multiple video outputs (FFmpeg typically),\n otherwise the parameter is ignored and returns 0."]
+#[doc = " For video outputs, returns the width of the encoded image.\n\n The idx parameter specifies the video encoder index.\n Only used with outputs that have multiple video outputs (FFmpeg typically),\n otherwise the parameter is ignored and returns 0."]
     pub fn obs_output_get_width2(output: *const obs_output_t, idx: usize) -> u32;
-    #[doc = " For video outputs, returns the height of the encoded image"]
+#[doc = " For video outputs, returns the height of the encoded image"]
     pub fn obs_output_get_height(output: *const obs_output_t) -> u32;
-    #[doc = " For video outputs, returns the height of the encoded image.\n\n The idx parameter specifies the video encoder index.\n Only used with outputs that have multiple video outputs (FFmpeg typically),\n otherwise the parameter is ignored and returns 0."]
+#[doc = " For video outputs, returns the height of the encoded image.\n\n The idx parameter specifies the video encoder index.\n Only used with outputs that have multiple video outputs (FFmpeg typically),\n otherwise the parameter is ignored and returns 0."]
     pub fn obs_output_get_height2(output: *const obs_output_t, idx: usize) -> u32;
     pub fn obs_output_get_id(output: *const obs_output_t) -> *const ::std::os::raw::c_char;
     pub fn obs_output_caption(output: *mut obs_output_t, captions: *const obs_source_cea_708);
@@ -7794,7 +7801,7 @@ unsafe extern "C" {
     pub fn obs_output_get_congestion(output: *mut obs_output_t) -> f32;
     pub fn obs_output_get_connect_time_ms(output: *mut obs_output_t) -> ::std::os::raw::c_int;
     pub fn obs_output_reconnecting(output: *const obs_output_t) -> bool;
-    #[doc = " Pass a string of the last output error, for UI use"]
+#[doc = " Pass a string of the last output error, for UI use"]
     pub fn obs_output_set_last_error(
         output: *mut obs_output_t,
         message: *const ::std::os::raw::c_char,
@@ -7864,44 +7871,44 @@ unsafe extern "C" {
         param: *mut ::std::os::raw::c_void,
     );
     pub fn obs_output_get_type_data(output: *mut obs_output_t) -> *mut ::std::os::raw::c_void;
-    #[doc = " Gets the video conversion info.  Used only for raw output"]
+#[doc = " Gets the video conversion info.  Used only for raw output"]
     pub fn obs_output_get_video_conversion(output: *mut obs_output_t) -> *const video_scale_info;
-    #[doc = " Optionally sets the video conversion info.  Used only for raw output"]
+#[doc = " Optionally sets the video conversion info.  Used only for raw output"]
     pub fn obs_output_set_video_conversion(
         output: *mut obs_output_t,
         conversion: *const video_scale_info,
     );
-    #[doc = " Optionally sets the audio conversion info.  Used only for raw output"]
+#[doc = " Optionally sets the audio conversion info.  Used only for raw output"]
     pub fn obs_output_set_audio_conversion(
         output: *mut obs_output_t,
         conversion: *const audio_convert_info,
     );
-    #[doc = " Returns whether data capture can begin"]
+#[doc = " Returns whether data capture can begin"]
     pub fn obs_output_can_begin_data_capture(output: *const obs_output_t, flags: u32) -> bool;
-    #[doc = " Initializes encoders (if any)"]
+#[doc = " Initializes encoders (if any)"]
     pub fn obs_output_initialize_encoders(output: *mut obs_output_t, flags: u32) -> bool;
-    #[doc = " Begins data capture from media/encoders.\n\n @param  output  Output context\n @return         true if successful, false otherwise."]
+#[doc = " Begins data capture from media/encoders.\n\n @param  output  Output context\n @return         true if successful, false otherwise."]
     pub fn obs_output_begin_data_capture(output: *mut obs_output_t, flags: u32) -> bool;
-    #[doc = " Ends data capture from media/encoders"]
+#[doc = " Ends data capture from media/encoders"]
     pub fn obs_output_end_data_capture(output: *mut obs_output_t);
-    #[doc = " Signals that the output has stopped itself.\n\n @param  output  Output context\n @param  code    Error code (or OBS_OUTPUT_SUCCESS if not an error)"]
+#[doc = " Signals that the output has stopped itself.\n\n @param  output  Output context\n @param  code    Error code (or OBS_OUTPUT_SUCCESS if not an error)"]
     pub fn obs_output_signal_stop(output: *mut obs_output_t, code: ::std::os::raw::c_int);
     pub fn obs_output_get_pause_offset(output: *mut obs_output_t) -> u64;
     pub fn obs_encoder_get_display_name(
         id: *const ::std::os::raw::c_char,
     ) -> *const ::std::os::raw::c_char;
-    #[doc = " Returns a pointer to the module which provides the encoder"]
+#[doc = " Returns a pointer to the module which provides the encoder"]
     pub fn obs_encoder_get_module(id: *const ::std::os::raw::c_char) -> *mut obs_module_t;
-    #[doc = " Returns the load state of an encoder's module given the id"]
+#[doc = " Returns the load state of an encoder's module given the id"]
     pub fn obs_encoder_load_state(id: *const ::std::os::raw::c_char) -> obs_module_load_state;
-    #[doc = " Creates a video encoder context\n\n @param  id        Video encoder ID\n @param  name      Name to assign to this context\n @param  settings  Settings\n @return           The video encoder context, or NULL if failed or not found."]
+#[doc = " Creates a video encoder context\n\n @param  id        Video encoder ID\n @param  name      Name to assign to this context\n @param  settings  Settings\n @return           The video encoder context, or NULL if failed or not found."]
     pub fn obs_video_encoder_create(
         id: *const ::std::os::raw::c_char,
         name: *const ::std::os::raw::c_char,
         settings: *mut obs_data_t,
         hotkey_data: *mut obs_data_t,
     ) -> *mut obs_encoder_t;
-    #[doc = " Creates an audio encoder context\n\n @param  id        Audio Encoder ID\n @param  name      Name to assign to this context\n @param  settings  Settings\n @param  mixer_idx Index of the mixer to use for this audio encoder\n @return           The video encoder context, or NULL if failed or not found."]
+#[doc = " Creates an audio encoder context\n\n @param  id        Audio Encoder ID\n @param  name      Name to assign to this context\n @param  settings  Settings\n @param  mixer_idx Index of the mixer to use for this audio encoder\n @return           The video encoder context, or NULL if failed or not found."]
     pub fn obs_audio_encoder_create(
         id: *const ::std::os::raw::c_char,
         name: *const ::std::os::raw::c_char,
@@ -7909,7 +7916,7 @@ unsafe extern "C" {
         mixer_idx: usize,
         hotkey_data: *mut obs_data_t,
     ) -> *mut obs_encoder_t;
-    #[doc = " Adds/releases a reference to an encoder.  When the last reference is\n released, the encoder is destroyed."]
+#[doc = " Adds/releases a reference to an encoder.  When the last reference is\n released, the encoder is destroyed."]
     pub fn obs_encoder_release(encoder: *mut obs_encoder_t);
     pub fn obs_weak_encoder_addref(weak: *mut obs_weak_encoder_t);
     pub fn obs_weak_encoder_release(weak: *mut obs_weak_encoder_t);
@@ -7922,32 +7929,32 @@ unsafe extern "C" {
     ) -> bool;
     pub fn obs_encoder_set_name(encoder: *mut obs_encoder_t, name: *const ::std::os::raw::c_char);
     pub fn obs_encoder_get_name(encoder: *const obs_encoder_t) -> *const ::std::os::raw::c_char;
-    #[doc = " Returns the codec of an encoder by the id"]
+#[doc = " Returns the codec of an encoder by the id"]
     pub fn obs_get_encoder_codec(
         id: *const ::std::os::raw::c_char,
     ) -> *const ::std::os::raw::c_char;
-    #[doc = " Returns the type of an encoder by the id"]
+#[doc = " Returns the type of an encoder by the id"]
     pub fn obs_get_encoder_type(id: *const ::std::os::raw::c_char) -> obs_encoder_type;
-    #[doc = " Returns the codec of the encoder"]
+#[doc = " Returns the codec of the encoder"]
     pub fn obs_encoder_get_codec(encoder: *const obs_encoder_t) -> *const ::std::os::raw::c_char;
-    #[doc = " Returns the type of an encoder"]
+#[doc = " Returns the type of an encoder"]
     pub fn obs_encoder_get_type(encoder: *const obs_encoder_t) -> obs_encoder_type;
-    #[doc = " Sets the scaled resolution for a video encoder.  Set width and height to 0\n to disable scaling.  If the encoder is active, this function will trigger\n a warning, and do nothing."]
+#[doc = " Sets the scaled resolution for a video encoder.  Set width and height to 0\n to disable scaling.  If the encoder is active, this function will trigger\n a warning, and do nothing."]
     pub fn obs_encoder_set_scaled_size(encoder: *mut obs_encoder_t, width: u32, height: u32);
-    #[doc = " Enable/disable GPU based scaling for a video encoder.\n OBS_SCALE_DISABLE disables GPU based scaling (default),\n any other value enables GPU based scaling. If the encoder\n is active, this function will trigger a warning, and do nothing."]
+#[doc = " Enable/disable GPU based scaling for a video encoder.\n OBS_SCALE_DISABLE disables GPU based scaling (default),\n any other value enables GPU based scaling. If the encoder\n is active, this function will trigger a warning, and do nothing."]
     pub fn obs_encoder_set_gpu_scale_type(
         encoder: *mut obs_encoder_t,
         gpu_scale_type: obs_scale_type,
     );
-    #[doc = " Set frame rate divisor for a video encoder. This allows recording at\n a partial frame rate compared to the base frame rate, e.g. 60 FPS with\n divisor = 2 will record at 30 FPS, with divisor = 3 at 20, etc.\n\n Can only be called on stopped encoders, changing this on the fly is not supported"]
+#[doc = " Set frame rate divisor for a video encoder. This allows recording at\n a partial frame rate compared to the base frame rate, e.g. 60 FPS with\n divisor = 2 will record at 30 FPS, with divisor = 3 at 20, etc.\n\n Can only be called on stopped encoders, changing this on the fly is not supported"]
     pub fn obs_encoder_set_frame_rate_divisor(encoder: *mut obs_encoder_t, divisor: u32) -> bool;
-    #[doc = " Adds region of interest (ROI) for an encoder. This allows prioritizing\n quality of regions of the frame.\n If regions overlap, regions added earlier take precedence.\n\n Returns false if the encoder does not support ROI or region is invalid."]
+#[doc = " Adds region of interest (ROI) for an encoder. This allows prioritizing\n quality of regions of the frame.\n If regions overlap, regions added earlier take precedence.\n\n Returns false if the encoder does not support ROI or region is invalid."]
     pub fn obs_encoder_add_roi(encoder: *mut obs_encoder_t, roi: *const obs_encoder_roi) -> bool;
-    #[doc = " For video encoders, returns true if any ROIs were set"]
+#[doc = " For video encoders, returns true if any ROIs were set"]
     pub fn obs_encoder_has_roi(encoder: *const obs_encoder_t) -> bool;
-    #[doc = " Clear all regions"]
+#[doc = " Clear all regions"]
     pub fn obs_encoder_clear_roi(encoder: *mut obs_encoder_t);
-    #[doc = " Enumerate regions with callback (reverse order of addition)"]
+#[doc = " Enumerate regions with callback (reverse order of addition)"]
     pub fn obs_encoder_enum_roi(
         encoder: *mut obs_encoder_t,
         enum_proc: ::std::option::Option<
@@ -7955,77 +7962,77 @@ unsafe extern "C" {
         >,
         param: *mut ::std::os::raw::c_void,
     );
-    #[doc = " Get ROI increment, encoders must rebuild their ROI map if it has changed"]
+#[doc = " Get ROI increment, encoders must rebuild their ROI map if it has changed"]
     pub fn obs_encoder_get_roi_increment(encoder: *const obs_encoder_t) -> u32;
-    #[doc = " For video encoders, returns true if pre-encode scaling is enabled"]
+#[doc = " For video encoders, returns true if pre-encode scaling is enabled"]
     pub fn obs_encoder_scaling_enabled(encoder: *const obs_encoder_t) -> bool;
-    #[doc = " For video encoders, returns the width of the encoded image"]
+#[doc = " For video encoders, returns the width of the encoded image"]
     pub fn obs_encoder_get_width(encoder: *const obs_encoder_t) -> u32;
-    #[doc = " For video encoders, returns the height of the encoded image"]
+#[doc = " For video encoders, returns the height of the encoded image"]
     pub fn obs_encoder_get_height(encoder: *const obs_encoder_t) -> u32;
-    #[doc = " For video encoders, returns whether GPU scaling is enabled"]
+#[doc = " For video encoders, returns whether GPU scaling is enabled"]
     pub fn obs_encoder_gpu_scaling_enabled(encoder: *mut obs_encoder_t) -> bool;
-    #[doc = " For video encoders, returns GPU scaling type"]
+#[doc = " For video encoders, returns GPU scaling type"]
     pub fn obs_encoder_get_scale_type(encoder: *mut obs_encoder_t) -> obs_scale_type;
-    #[doc = " For video encoders, returns the frame rate divisor (default is 1)"]
+#[doc = " For video encoders, returns the frame rate divisor (default is 1)"]
     pub fn obs_encoder_get_frame_rate_divisor(encoder: *const obs_encoder_t) -> u32;
-    #[doc = " For video encoders, returns the number of frames encoded"]
+#[doc = " For video encoders, returns the number of frames encoded"]
     pub fn obs_encoder_get_encoded_frames(encoder: *const obs_encoder_t) -> u32;
-    #[doc = " For audio encoders, returns the sample rate of the audio"]
+#[doc = " For audio encoders, returns the sample rate of the audio"]
     pub fn obs_encoder_get_sample_rate(encoder: *const obs_encoder_t) -> u32;
-    #[doc = " For audio encoders, returns the frame size of the audio packet"]
+#[doc = " For audio encoders, returns the frame size of the audio packet"]
     pub fn obs_encoder_get_frame_size(encoder: *const obs_encoder_t) -> usize;
-    #[doc = " For audio encoders, returns the mixer index"]
+#[doc = " For audio encoders, returns the mixer index"]
     pub fn obs_encoder_get_mixer_index(encoder: *const obs_encoder_t) -> usize;
-    #[doc = " Sets the preferred video format for a video encoder.  If the encoder can use\n the format specified, it will force a conversion to that format if the\n obs output format does not match the preferred format.\n\n If the format is set to VIDEO_FORMAT_NONE, will revert to the default\n functionality of converting only when absolutely necessary.\n\n If GPU scaling is enabled, conversion will happen on the GPU."]
+#[doc = " Sets the preferred video format for a video encoder.  If the encoder can use\n the format specified, it will force a conversion to that format if the\n obs output format does not match the preferred format.\n\n If the format is set to VIDEO_FORMAT_NONE, will revert to the default\n functionality of converting only when absolutely necessary.\n\n If GPU scaling is enabled, conversion will happen on the GPU."]
     pub fn obs_encoder_set_preferred_video_format(
         encoder: *mut obs_encoder_t,
         format: video_format,
     );
     pub fn obs_encoder_get_preferred_video_format(encoder: *const obs_encoder_t) -> video_format;
-    #[doc = " Sets the preferred colorspace for an encoder, e.g., to simultaneous SDR and\n HDR output.\n\n Only supported when GPU scaling is enabled."]
+#[doc = " Sets the preferred colorspace for an encoder, e.g., to simultaneous SDR and\n HDR output.\n\n Only supported when GPU scaling is enabled."]
     pub fn obs_encoder_set_preferred_color_space(
         encoder: *mut obs_encoder_t,
         colorspace: video_colorspace,
     );
     pub fn obs_encoder_get_preferred_color_space(encoder: *const obs_encoder_t)
-        -> video_colorspace;
-    #[doc = " Sets the preferred range for an encoder.\n\n Only supported when GPU scaling is enabled."]
+    -> video_colorspace;
+#[doc = " Sets the preferred range for an encoder.\n\n Only supported when GPU scaling is enabled."]
     pub fn obs_encoder_set_preferred_range(encoder: *mut obs_encoder_t, range: video_range_type);
     pub fn obs_encoder_get_preferred_range(encoder: *const obs_encoder_t) -> video_range_type;
-    #[doc = " Gets the default settings for an encoder type"]
+#[doc = " Gets the default settings for an encoder type"]
     pub fn obs_encoder_defaults(id: *const ::std::os::raw::c_char) -> *mut obs_data_t;
     pub fn obs_encoder_get_defaults(encoder: *const obs_encoder_t) -> *mut obs_data_t;
-    #[doc = " Returns the property list, if any.  Free with obs_properties_destroy"]
+#[doc = " Returns the property list, if any.  Free with obs_properties_destroy"]
     pub fn obs_get_encoder_properties(id: *const ::std::os::raw::c_char) -> *mut obs_properties_t;
-    #[doc = " Returns the property list of an existing encoder, if any.  Free with\n obs_properties_destroy"]
+#[doc = " Returns the property list of an existing encoder, if any.  Free with\n obs_properties_destroy"]
     pub fn obs_encoder_properties(encoder: *const obs_encoder_t) -> *mut obs_properties_t;
-    #[doc = " Updates the settings of the encoder context.  Usually used for changing\n bitrate while active"]
+#[doc = " Updates the settings of the encoder context.  Usually used for changing\n bitrate while active"]
     pub fn obs_encoder_update(encoder: *mut obs_encoder_t, settings: *mut obs_data_t);
-    #[doc = " Gets extra data (headers) associated with this context"]
+#[doc = " Gets extra data (headers) associated with this context"]
     pub fn obs_encoder_get_extra_data(
         encoder: *const obs_encoder_t,
         extra_data: *mut *mut u8,
         size: *mut usize,
     ) -> bool;
-    #[doc = " Returns the current settings for this encoder"]
+#[doc = " Returns the current settings for this encoder"]
     pub fn obs_encoder_get_settings(encoder: *const obs_encoder_t) -> *mut obs_data_t;
-    #[doc = " Sets the video output context to be used with this encoder"]
+#[doc = " Sets the video output context to be used with this encoder"]
     pub fn obs_encoder_set_video(encoder: *mut obs_encoder_t, video: *mut video_t);
-    #[doc = " Sets the audio output context to be used with this encoder"]
+#[doc = " Sets the audio output context to be used with this encoder"]
     pub fn obs_encoder_set_audio(encoder: *mut obs_encoder_t, audio: *mut audio_t);
-    #[doc = " Returns the video output context used with this encoder, or NULL if not\n a video context"]
+#[doc = " Returns the video output context used with this encoder, or NULL if not\n a video context"]
     pub fn obs_encoder_video(encoder: *const obs_encoder_t) -> *mut video_t;
-    #[doc = " Returns the parent video output context used with this encoder, or NULL if not\n a video context. Used when an FPS divisor is set, where the original video\n context would not otherwise be gettable."]
+#[doc = " Returns the parent video output context used with this encoder, or NULL if not\n a video context. Used when an FPS divisor is set, where the original video\n context would not otherwise be gettable."]
     pub fn obs_encoder_parent_video(encoder: *const obs_encoder_t) -> *mut video_t;
-    #[doc = " Returns if the encoder's video output context supports shared textures for the specified video format."]
+#[doc = " Returns if the encoder's video output context supports shared textures for the specified video format."]
     pub fn obs_encoder_video_tex_active(
         encoder: *const obs_encoder_t,
         format: video_format,
     ) -> bool;
-    #[doc = " Returns the audio output context used with this encoder, or NULL if not\n a audio context"]
+#[doc = " Returns the audio output context used with this encoder, or NULL if not\n a audio context"]
     pub fn obs_encoder_audio(encoder: *const obs_encoder_t) -> *mut audio_t;
-    #[doc = " Returns true if encoder is active, false otherwise"]
+#[doc = " Returns true if encoder is active, false otherwise"]
     pub fn obs_encoder_active(encoder: *const obs_encoder_t) -> bool;
     pub fn obs_encoder_get_type_data(encoder: *mut obs_encoder_t) -> *mut ::std::os::raw::c_void;
     pub fn obs_encoder_get_id(encoder: *const obs_encoder_t) -> *const ::std::os::raw::c_char;
@@ -8037,16 +8044,16 @@ unsafe extern "C" {
         encoder: *mut obs_encoder_t,
         reroute_id: *const ::std::os::raw::c_char,
     ) -> *mut ::std::os::raw::c_void;
-    #[doc = " Returns whether encoder is paused"]
+#[doc = " Returns whether encoder is paused"]
     pub fn obs_encoder_paused(output: *const obs_encoder_t) -> bool;
     pub fn obs_encoder_get_last_error(encoder: *mut obs_encoder_t)
-        -> *const ::std::os::raw::c_char;
+    -> *const ::std::os::raw::c_char;
     pub fn obs_encoder_set_last_error(
         encoder: *mut obs_encoder_t,
         message: *const ::std::os::raw::c_char,
     );
     pub fn obs_encoder_get_pause_offset(encoder: *const obs_encoder_t) -> u64;
-    #[doc = " Creates an \"encoder group\", allowing synchronized startup of encoders within\n the group. Encoder groups are single owner, and hold strong references to\n encoders within the group. Calling destroy on an active group will not actually\n destroy the group until it becomes completely inactive."]
+#[doc = " Creates an \"encoder group\", allowing synchronized startup of encoders within\n the group. Encoder groups are single owner, and hold strong references to\n encoders within the group. Calling destroy on an active group will not actually\n destroy the group until it becomes completely inactive."]
     pub fn obs_encoder_set_group(
         encoder: *mut obs_encoder_t,
         group: *mut obs_encoder_group_t,
@@ -8056,9 +8063,9 @@ unsafe extern "C" {
     pub fn obs_service_get_display_name(
         id: *const ::std::os::raw::c_char,
     ) -> *const ::std::os::raw::c_char;
-    #[doc = " Returns a pointer to the module which provides the service"]
+#[doc = " Returns a pointer to the module which provides the service"]
     pub fn obs_service_get_module(id: *const ::std::os::raw::c_char) -> *mut obs_module_t;
-    #[doc = " Returns the load state of a service's module given the id"]
+#[doc = " Returns the load state of a service's module given the id"]
     pub fn obs_service_load_state(id: *const ::std::os::raw::c_char) -> obs_module_load_state;
     pub fn obs_service_create(
         id: *const ::std::os::raw::c_char,
@@ -8071,7 +8078,7 @@ unsafe extern "C" {
         name: *const ::std::os::raw::c_char,
         settings: *mut obs_data_t,
     ) -> *mut obs_service_t;
-    #[doc = " Adds/releases a reference to a service.  When the last reference is\n released, the service is destroyed."]
+#[doc = " Adds/releases a reference to a service.  When the last reference is\n released, the service is destroyed."]
     pub fn obs_service_release(service: *mut obs_service_t);
     pub fn obs_weak_service_addref(weak: *mut obs_weak_service_t);
     pub fn obs_weak_service_release(weak: *mut obs_weak_service_t);
@@ -8083,19 +8090,19 @@ unsafe extern "C" {
         service: *mut obs_service_t,
     ) -> bool;
     pub fn obs_service_get_name(service: *const obs_service_t) -> *const ::std::os::raw::c_char;
-    #[doc = " Gets the default settings for a service"]
+#[doc = " Gets the default settings for a service"]
     pub fn obs_service_defaults(id: *const ::std::os::raw::c_char) -> *mut obs_data_t;
-    #[doc = " Returns the property list, if any.  Free with obs_properties_destroy"]
+#[doc = " Returns the property list, if any.  Free with obs_properties_destroy"]
     pub fn obs_get_service_properties(id: *const ::std::os::raw::c_char) -> *mut obs_properties_t;
-    #[doc = " Returns the property list of an existing service context, if any.  Free with\n obs_properties_destroy"]
+#[doc = " Returns the property list of an existing service context, if any.  Free with\n obs_properties_destroy"]
     pub fn obs_service_properties(service: *const obs_service_t) -> *mut obs_properties_t;
-    #[doc = " Gets the service type"]
+#[doc = " Gets the service type"]
     pub fn obs_service_get_type(service: *const obs_service_t) -> *const ::std::os::raw::c_char;
-    #[doc = " Updates the settings of the service context"]
+#[doc = " Updates the settings of the service context"]
     pub fn obs_service_update(service: *mut obs_service_t, settings: *mut obs_data_t);
-    #[doc = " Returns the current settings for this service"]
+#[doc = " Returns the current settings for this service"]
     pub fn obs_service_get_settings(service: *const obs_service_t) -> *mut obs_data_t;
-    #[doc = " Applies service-specific video encoder settings.\n\n @param  video_encoder_settings  Video encoder settings.  Optional.\n @param  audio_encoder_settings  Audio encoder settings.  Optional."]
+#[doc = " Applies service-specific video encoder settings.\n\n @param  video_encoder_settings  Video encoder settings.  Optional.\n @param  audio_encoder_settings  Audio encoder settings.  Optional."]
     pub fn obs_service_apply_encoder_settings(
         service: *mut obs_service_t,
         video_encoder_settings: *mut obs_data_t,
@@ -8120,9 +8127,9 @@ unsafe extern "C" {
     pub fn obs_service_get_supported_audio_codecs(
         service: *const obs_service_t,
     ) -> *mut *const ::std::os::raw::c_char;
-    #[doc = " Returns the protocol for this service context"]
+#[doc = " Returns the protocol for this service context"]
     pub fn obs_service_get_protocol(service: *const obs_service_t)
-        -> *const ::std::os::raw::c_char;
+    -> *const ::std::os::raw::c_char;
     pub fn obs_service_get_preferred_output_type(
         service: *const obs_service_t,
     ) -> *const ::std::os::raw::c_char;
@@ -8139,68 +8146,68 @@ unsafe extern "C" {
     );
     pub fn obs_source_frame_copy(dst: *mut obs_source_frame, src: *const obs_source_frame);
     pub fn obs_source_get_icon_type(id: *const ::std::os::raw::c_char) -> obs_icon_type;
-    #[doc = " Get a strong reference to the main OBS canvas"]
+#[doc = " Get a strong reference to the main OBS canvas"]
     pub fn obs_get_main_canvas() -> *mut obs_canvas_t;
-    #[doc = " Creates a new canvas"]
+#[doc = " Creates a new canvas"]
     pub fn obs_canvas_create(
         name: *const ::std::os::raw::c_char,
         ovi: *mut obs_video_info,
         flags: u32,
     ) -> *mut obs_canvas_t;
-    #[doc = " Creates a new private canvas"]
+#[doc = " Creates a new private canvas"]
     pub fn obs_canvas_create_private(
         name: *const ::std::os::raw::c_char,
         ovi: *mut obs_video_info,
         flags: u32,
     ) -> *mut obs_canvas_t;
-    #[doc = " Signal that references to canvas should be released and mark the canvas as removed."]
+#[doc = " Signal that references to canvas should be released and mark the canvas as removed."]
     pub fn obs_canvas_remove(canvas: *mut obs_canvas_t);
-    #[doc = " Returns if a canvas is marked as removed (i.e., should no longer be used)."]
+#[doc = " Returns if a canvas is marked as removed (i.e., should no longer be used)."]
     pub fn obs_canvas_removed(canvas: *mut obs_canvas_t) -> bool;
-    #[doc = " Set canvas name"]
+#[doc = " Set canvas name"]
     pub fn obs_canvas_set_name(canvas: *mut obs_canvas_t, name: *const ::std::os::raw::c_char);
-    #[doc = " Get canvas name"]
+#[doc = " Get canvas name"]
     pub fn obs_canvas_get_name(canvas: *const obs_canvas_t) -> *const ::std::os::raw::c_char;
-    #[doc = " Get canvas UUID"]
+#[doc = " Get canvas UUID"]
     pub fn obs_canvas_get_uuid(canvas: *const obs_canvas_t) -> *const ::std::os::raw::c_char;
-    #[doc = " Gets flags set on a canvas"]
+#[doc = " Gets flags set on a canvas"]
     pub fn obs_canvas_get_flags(canvas: *const obs_canvas_t) -> u32;
-    #[doc = " Saves a canvas to settings data"]
+#[doc = " Saves a canvas to settings data"]
     pub fn obs_save_canvas(source: *mut obs_canvas_t) -> *mut obs_data_t;
-    #[doc = " Loads a canvas from settings data"]
+#[doc = " Loads a canvas from settings data"]
     pub fn obs_load_canvas(data: *mut obs_data_t) -> *mut obs_canvas_t;
-    #[doc = " Add strong reference"]
+#[doc = " Add strong reference"]
     pub fn obs_canvas_get_ref(canvas: *mut obs_canvas_t) -> *mut obs_canvas_t;
-    #[doc = " Release strong reference"]
+#[doc = " Release strong reference"]
     pub fn obs_canvas_release(canvas: *mut obs_canvas_t);
-    #[doc = " Add weak reference"]
+#[doc = " Add weak reference"]
     pub fn obs_weak_canvas_addref(weak: *mut obs_weak_canvas_t);
-    #[doc = " Release weak reference"]
+#[doc = " Release weak reference"]
     pub fn obs_weak_canvas_release(weak: *mut obs_weak_canvas_t);
-    #[doc = " Get weak reference from strong reference"]
+#[doc = " Get weak reference from strong reference"]
     pub fn obs_canvas_get_weak_canvas(canvas: *mut obs_canvas_t) -> *mut obs_weak_canvas_t;
-    #[doc = " Get strong reference from weak reference"]
+#[doc = " Get strong reference from weak reference"]
     pub fn obs_weak_canvas_get_canvas(weak: *mut obs_weak_canvas_t) -> *mut obs_canvas_t;
-    #[doc = " Returns the signal handler for a canvas"]
+#[doc = " Returns the signal handler for a canvas"]
     pub fn obs_canvas_get_signal_handler(canvas: *mut obs_canvas_t) -> *mut signal_handler_t;
-    #[doc = " Sets the source to be used for this canvas."]
+#[doc = " Sets the source to be used for this canvas."]
     pub fn obs_canvas_set_channel(
         canvas: *mut obs_canvas_t,
         channel: u32,
         source: *mut obs_source_t,
     );
-    #[doc = " Gets the source currently in use for this view context"]
+#[doc = " Gets the source currently in use for this view context"]
     pub fn obs_canvas_get_channel(canvas: *mut obs_canvas_t, channel: u32) -> *mut obs_source_t;
-    #[doc = " Create scene attached to a canvas"]
+#[doc = " Create scene attached to a canvas"]
     pub fn obs_canvas_scene_create(
         canvas: *mut obs_canvas_t,
         name: *const ::std::os::raw::c_char,
     ) -> *mut obs_scene_t;
-    #[doc = " Remove a scene from a canvas"]
+#[doc = " Remove a scene from a canvas"]
     pub fn obs_canvas_scene_remove(scene: *mut obs_scene_t);
-    #[doc = " Move scene to another canvas, detaching it from the previous one and deduplicating the name if needed"]
+#[doc = " Move scene to another canvas, detaching it from the previous one and deduplicating the name if needed"]
     pub fn obs_canvas_move_scene(scene: *mut obs_scene_t, dst: *mut obs_canvas_t);
-    #[doc = " Enumerates scenes belonging to a canvas"]
+#[doc = " Enumerates scenes belonging to a canvas"]
     pub fn obs_canvas_enum_scenes(
         canvas: *mut obs_canvas_t,
         enum_proc: ::std::option::Option<
@@ -8211,25 +8218,25 @@ unsafe extern "C" {
         >,
         param: *mut ::std::os::raw::c_void,
     );
-    #[doc = " Get a canvas source by name"]
+#[doc = " Get a canvas source by name"]
     pub fn obs_canvas_get_source_by_name(
         canvas: *mut obs_canvas_t,
         name: *const ::std::os::raw::c_char,
     ) -> *mut obs_source_t;
-    #[doc = " Get a canvas source by UUID"]
+#[doc = " Get a canvas source by UUID"]
     pub fn obs_canvas_get_scene_by_name(
         canvas: *mut obs_canvas_t,
         name: *const ::std::os::raw::c_char,
     ) -> *mut obs_scene_t;
-    #[doc = " Reset a canvas's video mix"]
+#[doc = " Reset a canvas's video mix"]
     pub fn obs_canvas_reset_video(canvas: *mut obs_canvas_t, ovi: *mut obs_video_info) -> bool;
-    #[doc = " Returns true if the canvas video is configured"]
+#[doc = " Returns true if the canvas video is configured"]
     pub fn obs_canvas_has_video(canvas: *mut obs_canvas_t) -> bool;
-    #[doc = " Get canvas video output"]
+#[doc = " Get canvas video output"]
     pub fn obs_canvas_get_video(canvas: *const obs_canvas_t) -> *mut video_t;
-    #[doc = " Get canvas video info (if it exists)"]
+#[doc = " Get canvas video info (if it exists)"]
     pub fn obs_canvas_get_video_info(canvas: *const obs_canvas_t, ovi: *mut obs_video_info)
-        -> bool;
-    #[doc = " Renders the sources of this canvas's view context"]
+    -> bool;
+#[doc = " Renders the sources of this canvas's view context"]
     pub fn obs_canvas_render(canvas: *mut obs_canvas_t);
 }
