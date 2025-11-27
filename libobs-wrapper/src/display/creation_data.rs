@@ -22,6 +22,22 @@ pub struct ObsDisplayCreationData {
     pub(super) background_color: u32,
 }
 
+pub struct CloneableGsInitData(pub gs_init_data);
+
+impl Clone for CloneableGsInitData {
+    fn clone(&self) -> Self {
+        Self(gs_init_data {
+            cx: self.0.cx,
+            cy: self.0.cy,
+            format: self.0.format,
+            zsformat: self.0.zsformat,
+            window: self.0.window,
+            adapter: self.0.adapter,
+            num_backbuffers: self.0.num_backbuffers,
+        })
+    }
+}
+
 impl ObsDisplayCreationData {
     pub fn new(window_handle: ObsWindowHandle, x: i32, y: i32, width: u32, height: u32) -> Self {
         Self {
@@ -74,8 +90,8 @@ impl ObsDisplayCreationData {
         self
     }
 
-    pub(super) fn build(self, window_override: Option<ObsWindowHandle>) -> gs_init_data {
-        gs_init_data {
+    pub(super) fn build(self, window_override: Option<ObsWindowHandle>) -> CloneableGsInitData {
+        CloneableGsInitData(gs_init_data {
             cx: self.width,
             cy: self.height,
             #[cfg(target_family = "windows")]
@@ -95,6 +111,6 @@ impl ObsDisplayCreationData {
                 .unwrap_or_else(|| self.window_handle.window.0),
             adapter: self.adapter,
             num_backbuffers: self.backbuffers,
-        }
+        })
     }
 }

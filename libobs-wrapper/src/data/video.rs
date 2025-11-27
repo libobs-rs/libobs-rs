@@ -1,4 +1,4 @@
-use std::{boxed::Box, pin::Pin};
+use std::{boxed::Box, fmt::Debug, pin::Pin};
 
 use display_info::DisplayInfo;
 use libobs::obs_video_info;
@@ -39,7 +39,6 @@ impl Default for ObsSdrVideoInfo {
 /// video context after resetting the old OBS
 /// video context. The obs_video_info is pinned in memory
 /// to ensure its address never changes, as required by libobs.
-#[derive(Debug)]
 pub struct ObsVideoInfo {
     ovi: Sendable<Pin<Box<obs_video_info>>>,
     // False positive. This is necessary to ensure
@@ -49,6 +48,20 @@ pub struct ObsVideoInfo {
     graphics_module: ObsString,
 
     sdr_info: ObsSdrVideoInfo,
+}
+
+impl Debug for ObsVideoInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ObsVideoInfo")
+            .field("fps_num", &self.get_fps_num())
+            .field("fps_den", &self.get_fps_den())
+            .field("base_width", &self.get_base_width())
+            .field("base_height", &self.get_base_height())
+            .field("output_width", &self.get_output_width())
+            .field("output_height", &self.get_output_height())
+            .field("sdr_info", &self.get_sdr_info())
+            .finish()
+    }
 }
 
 impl ObsVideoInfo {

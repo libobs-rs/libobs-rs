@@ -202,7 +202,7 @@ impl ObsDisplayRef {
 
         log::trace!("Creating obs display...");
         let display = run_with_obs!(runtime, (init_data), move || unsafe {
-            Sendable(libobs::obs_display_create(&init_data, background_color))
+            Sendable(libobs::obs_display_create(&init_data.0, background_color))
         })?;
 
         if display.0.is_null() {

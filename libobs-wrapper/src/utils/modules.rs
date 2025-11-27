@@ -1,4 +1,7 @@
-use std::ffi::{CStr, CString};
+use std::{
+    ffi::{CStr, CString},
+    fmt::Debug,
+};
 
 use crate::{
     context::ObsContext, enums::ObsLogLevel, logger::internal_log_global, run_with_obs,
@@ -6,13 +9,21 @@ use crate::{
 };
 use libobs::obs_module_failure_info;
 
-#[derive(Debug)]
 pub struct ObsModules {
     paths: StartupPaths,
 
     /// A pointer to the module failure info structure.
     info: Option<Sendable<obs_module_failure_info>>,
     pub(crate) runtime: Option<ObsRuntime>,
+}
+
+impl Debug for ObsModules {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ObsModules")
+            .field("paths", &self.paths)
+            .field("info", &"(internal obs_module_failure_info)")
+            .finish()
+    }
 }
 
 // List of all modules, this is for compatability for obs versions below 32.0.0
