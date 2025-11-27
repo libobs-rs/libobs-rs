@@ -26,7 +26,7 @@ impl Debug for ObsModules {
     }
 }
 
-// List of all modules, this is for compatability for obs versions below 32.0.0
+// List of all modules, this is for compatibility for obs versions below 32.0.0
 static SAFE_MODULES: &str = "decklink|image-source|linux-alsa|linux-capture|linux-pipewire|linux-pulseaudio|linux-v4l2|obs-ffmpeg|obs-filters|obs-nvenc|obs-outputs|obs-qsv11|obs-transitions|obs-vst|obs-websocket|obs-x264|rtmp-services|text-freetype2|vlc-video|decklink-captions|decklink-output-ui|obslua|obspython|frontend-tools";
 
 impl ObsModules {
