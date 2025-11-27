@@ -879,6 +879,7 @@ name = "download-at-runtime"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "env_logger",
  "indicatif 0.17.11",
  "libobs-bootstrapper",
  "libobs-wrapper",
@@ -1871,7 +1872,7 @@ dependencies = [
 
 [[package]]
 name = "libobs-bootstrapper"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "async-stream",

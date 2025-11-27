@@ -17,6 +17,8 @@ pub mod unsafe_send;
 pub mod enums;
 pub mod utils;
 
+pub use libobs as sys;
+
 // Add the macros module to the public exports
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod macros;

@@ -44,6 +44,8 @@ impl ObsBootstrapStatusHandler for ObsBootstrapProgress {
 
 #[tokio::main]
 async fn main() {
+    env_logger::init();
+    println!("Starting OBS bootstrapper...");
     let handler = ObsBootstrapProgress::new();
 
     let res = ObsBootstrapper::bootstrap_with_handler(

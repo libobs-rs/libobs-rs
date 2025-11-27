@@ -1,6 +1,6 @@
 [package]
 name = "libobs-bootstrapper"
-version = "0.1.1"
+version = "0.1.2"
 build = "build.rs"
 description = "Downloads OBS binaries at runtime and bootstraps libobs"
 readme = "./README.md"

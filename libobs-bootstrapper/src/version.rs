@@ -36,7 +36,14 @@ pub fn get_installed_version(obs_dll: &Path) -> anyhow::Result<Option<String>> {
         }
 
         lib.close()?;
-        Ok(Some(version_str?.to_string()))
+
+        let version_str = version_str?.to_string();
+        if version_str.is_empty() {
+            log::trace!("obs.dll version string is empty");
+            return Ok(None);
+        }
+
+        Ok(Some(version_str))
     }
 }
 
