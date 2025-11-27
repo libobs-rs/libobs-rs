@@ -5,7 +5,6 @@ fn main() {
     println!("cargo:rerun-if-changed=headers/display_capture.h");
     println!("cargo:rerun-if-changed=headers/game_capture.h");
     println!("cargo:rerun-if-changed=headers/vec4.c");
-    println!("cargo:rerun-if-changed=src/whitelist.txt");
     println!("cargo:rerun-if-changed=headers/window_capture.h");
     println!("cargo:rerun-if-changed=Cargo.toml");
     println!("cargo:rerun-if-env-changed=LIBOBS_PATH");
