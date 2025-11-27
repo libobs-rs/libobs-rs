@@ -4,6 +4,7 @@
 #[doc = " type, it is represented like this."]
 #[derive(PartialEq, Copy, Clone, Debug, Hash)]
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct __BindgenOpaqueArray<T: Copy, const N: usize>(pub [T; N]);
 impl<T: Copy + Default, const N: usize> Default for __BindgenOpaqueArray<T, N> {
     fn default() -> Self {
@@ -14,6 +15,7 @@ impl<T: Copy + Default, const N: usize> Default for __BindgenOpaqueArray<T, N> {
 #[repr(transparent)]
 pub struct __BindgenFloat16(pub u16);
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct __BindgenUnionField<T>(::std::marker::PhantomData<T>);
 impl<T> __BindgenUnionField<T> {
     #[inline]
@@ -767,6 +769,7 @@ const _: () = {
         [::std::mem::offset_of!(base_allocator, free) - 16usize];
 };
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct darray {
     pub array: *mut ::std::os::raw::c_void,
     pub num: usize,
@@ -800,6 +803,7 @@ pub struct profiler_name_store {
 }
 pub type profiler_name_store_t = profiler_name_store;
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct profiler_time_entry {
     pub time_delta: u64,
     pub count: u64,
@@ -814,12 +818,14 @@ const _: () = {
         [::std::mem::offset_of!(profiler_time_entry, count) - 8usize];
 };
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct profiler_time_entries_t {
     pub da: __BindgenUnionField<darray>,
     pub __bindgen_anon_1: __BindgenUnionField<profiler_time_entries_t__bindgen_ty_1>,
     pub bindgen_union_field: [u64; 3usize],
 }
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct profiler_time_entries_t__bindgen_ty_1 {
     pub array: *mut profiler_time_entry_t,
     pub num: usize,
@@ -1054,6 +1060,7 @@ const _: () = {
     ["Offset of field: gs_monitor_info::cy"][::std::mem::offset_of!(gs_monitor_info, cy) - 16usize];
 };
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct gs_tvertarray {
     pub width: usize,
     pub array: *mut ::std::os::raw::c_void,
@@ -1068,6 +1075,7 @@ const _: () = {
         [::std::mem::offset_of!(gs_tvertarray, array) - 8usize];
 };
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct gs_vb_data {
     pub num: usize,
     pub points: *mut vec3,
@@ -1091,6 +1099,7 @@ const _: () = {
     ["Offset of field: gs_vb_data::tvarray"][::std::mem::offset_of!(gs_vb_data, tvarray) - 48usize];
 };
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct gs_sampler_info {
     pub filter: gs_sample_filter,
     pub address_u: gs_address_mode,
@@ -1117,6 +1126,7 @@ const _: () = {
         [::std::mem::offset_of!(gs_sampler_info, border_color) - 20usize];
 };
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct gs_display_mode {
     pub width: u32,
     pub height: u32,
@@ -1341,6 +1351,7 @@ const _: () = {
     ["Offset of field: gs_window::hwnd"][::std::mem::offset_of!(gs_window, hwnd) - 0usize];
 };
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct gs_init_data {
     pub window: gs_window,
     pub cx: u32,
@@ -1554,6 +1565,7 @@ pub const speaker_layout_SPEAKERS_7POINT1: speaker_layout = 8;
 #[doc = " The speaker layout describes where the speakers are located in the room.\n For OBS it dictates:\n  *  how many channels are available and\n  *  which channels are used for which speakers.\n\n Standard channel layouts where retrieved from ffmpeg documentation at:\n     https://trac.ffmpeg.org/wiki/AudioChannelManipulation"]
 pub type speaker_layout = ::std::os::raw::c_int;
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct audio_data {
     pub data: [*mut u8; 8usize],
     pub frames: u32,
@@ -1591,6 +1603,7 @@ pub type audio_input_callback_t = ::std::option::Option<
     ) -> bool,
 >;
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct audio_output_info {
     pub name: *const ::std::os::raw::c_char,
     pub samples_per_sec: u32,
@@ -1617,6 +1630,7 @@ const _: () = {
         [::std::mem::offset_of!(audio_output_info, input_param) - 32usize];
 };
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct audio_convert_info {
     pub samples_per_sec: u32,
     pub format: audio_format,
@@ -1694,6 +1708,7 @@ pub const video_range_type_VIDEO_RANGE_PARTIAL: video_range_type = 1;
 pub const video_range_type_VIDEO_RANGE_FULL: video_range_type = 2;
 pub type video_range_type = ::std::os::raw::c_int;
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct video_data {
     pub data: [*mut u8; 8usize],
     pub linesize: [u32; 8usize],
@@ -1710,6 +1725,7 @@ const _: () = {
         [::std::mem::offset_of!(video_data, timestamp) - 96usize];
 };
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct video_output_info {
     pub name: *const ::std::os::raw::c_char,
     pub format: video_format,
@@ -1751,6 +1767,7 @@ pub const video_scale_type_VIDEO_SCALE_BILINEAR: video_scale_type = 3;
 pub const video_scale_type_VIDEO_SCALE_BICUBIC: video_scale_type = 4;
 pub type video_scale_type = ::std::os::raw::c_int;
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct video_scale_info {
     pub format: video_format,
     pub width: u32,
@@ -1781,6 +1798,7 @@ pub const call_param_type_CALL_PARAM_TYPE_PTR: call_param_type = 4;
 pub const call_param_type_CALL_PARAM_TYPE_STRING: call_param_type = 5;
 pub type call_param_type = ::std::os::raw::c_int;
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct calldata {
     pub stack: *mut u8,
     pub size: usize,
@@ -1823,6 +1841,7 @@ pub type proc_handler_proc_t = ::std::option::Option<
     unsafe extern "C" fn(arg1: *mut ::std::os::raw::c_void, arg2: *mut calldata_t),
 >;
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct media_frames_per_second {
     pub numerator: u32,
     pub denominator: u32,
@@ -1974,6 +1993,7 @@ pub const obs_mouse_button_type_MOUSE_MIDDLE: obs_mouse_button_type = 1;
 pub const obs_mouse_button_type_MOUSE_RIGHT: obs_mouse_button_type = 2;
 pub type obs_mouse_button_type = ::std::os::raw::c_int;
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct obs_mouse_event {
     pub modifiers: u32,
     pub x: i32,
@@ -1989,6 +2009,7 @@ const _: () = {
     ["Offset of field: obs_mouse_event::y"][::std::mem::offset_of!(obs_mouse_event, y) - 8usize];
 };
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct obs_key_event {
     pub modifiers: u32,
     pub text: *mut ::std::os::raw::c_char,
@@ -2214,6 +2235,7 @@ const _: () = {
 };
 #[doc = " Source definition structure"]
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct obs_source_info {
 #[doc = " Unique string identifier for the source"]
     pub id: *const ::std::os::raw::c_char,
@@ -2542,6 +2564,7 @@ pub const obs_encoder_type_OBS_ENCODER_VIDEO: obs_encoder_type = 1;
 #[doc = " Specifies the encoder type"]
 pub type obs_encoder_type = ::std::os::raw::c_int;
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct encoder_packet_time {
     pub pts: i64,
     pub cts: u64,
@@ -2566,6 +2589,7 @@ const _: () = {
 };
 #[doc = " Encoder output packet"]
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct encoder_packet {
 #[doc = "< Packet data"]
     pub data: *mut u8,
@@ -2627,6 +2651,7 @@ const _: () = {
 };
 #[doc = " Encoder input frame"]
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct encoder_frame {
 #[doc = " Data for the frame/audio"]
     pub data: [*mut u8; 8usize],
@@ -2650,6 +2675,7 @@ const _: () = {
 };
 #[doc = " Encoder region of interest"]
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct obs_encoder_roi {
     pub top: u32,
     pub bottom: u32,
@@ -2674,6 +2700,7 @@ const _: () = {
 };
 #[doc = " Encoder input texture"]
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct encoder_texture {
 #[doc = " Shared texture handle, only set on Windows"]
     pub handle: u32,
@@ -2691,6 +2718,7 @@ const _: () = {
 };
 #[doc = " Encoder interface\n\n Encoders have a limited usage with OBS.  You are not generally supposed to\n implement every encoder out there.  Generally, these are limited or specific\n encoders for h264/aac for streaming and recording.  It doesn't have to be\n *just* h264 or aac of course, but generally those are the expected encoders.\n\n That being said, other encoders will be kept in mind for future use."]
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct obs_encoder_info {
 #[doc = " Specifies the named identifier of this encoder"]
     pub id: *const ::std::os::raw::c_char,
@@ -2847,6 +2875,7 @@ const _: () = {
         [::std::mem::offset_of!(obs_encoder_info, encode_texture2) - 168usize];
 };
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct obs_output_info {
     pub id: *const ::std::os::raw::c_char,
     pub flags: u32,
@@ -3809,6 +3838,7 @@ pub const obs_key_OBS_KEY_LAST_VALUE: obs_key = 636;
 pub type obs_key = ::std::os::raw::c_int;
 pub use self::obs_key as obs_key_t;
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct obs_key_combination {
     pub modifiers: u32,
     pub key: obs_key_t,
@@ -4061,6 +4091,7 @@ pub const obs_module_load_state_OBS_MODULE_FAILED_TO_INITIALIZE: obs_module_load
 #[doc = " Used by libobs to define the state of a plugin/module."]
 pub type obs_module_load_state = ::std::os::raw::c_int;
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct obs_transform_info {
     pub pos: vec2,
     pub rot: f32,
@@ -4094,6 +4125,7 @@ const _: () = {
 };
 #[doc = " Video initialization structure"]
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct obs_video_info {
 #[doc = " Graphics module to use (usually \"libobs-opengl\" or \"libobs-d3d11\")"]
     pub graphics_module: *const ::std::os::raw::c_char,
@@ -4155,6 +4187,7 @@ const _: () = {
 };
 #[doc = " Audio initialization structure"]
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct obs_audio_info {
     pub samples_per_sec: u32,
     pub speakers: speaker_layout,
@@ -4169,6 +4202,7 @@ const _: () = {
         [::std::mem::offset_of!(obs_audio_info, speakers) - 4usize];
 };
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct obs_audio_info2 {
     pub samples_per_sec: u32,
     pub speakers: speaker_layout,
@@ -4190,6 +4224,7 @@ const _: () = {
 };
 #[doc = " Sent to source filters via the filter_audio callback to allow filtering of\n audio data"]
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct obs_audio_data {
     pub data: [*mut u8; 8usize],
     pub frames: u32,
@@ -4208,6 +4243,7 @@ const _: () = {
 };
 #[doc = " Source audio output structure.  Used with obs_source_output_audio to output\n source audio.  Audio is automatically resampled and remixed as necessary."]
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct obs_source_audio {
     pub data: [*const u8; 8usize],
     pub frames: u32,
@@ -4234,6 +4270,7 @@ const _: () = {
         [::std::mem::offset_of!(obs_source_audio, timestamp) - 80usize];
 };
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct obs_source_cea_708 {
     pub data: *const u8,
     pub packets: u32,
@@ -4252,6 +4289,7 @@ const _: () = {
 };
 #[doc = " Source asynchronous video output structure.  Used with\n obs_source_output_video to output asynchronous video.  Video is buffered as\n necessary to play according to timestamps.  When used with audio output,\n audio is synced to video as it is played.\n\n If a YUV format is specified, it will be automatically upsampled and\n converted to RGB via shader on the graphics processor.\n\n NOTE: Non-YUV formats will always be treated as full range with this\n structure!  Use obs_source_frame2 along with obs_source_output_video2\n instead if partial range support is desired for non-YUV video formats."]
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct obs_source_frame {
     pub data: [*mut u8; 8usize],
     pub linesize: [u32; 8usize],
@@ -4308,6 +4346,7 @@ const _: () = {
         [::std::mem::offset_of!(obs_source_frame, prev_frame) - 216usize];
 };
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct obs_source_frame2 {
     pub data: [*mut u8; 8usize],
     pub linesize: [u32; 8usize],
@@ -4371,6 +4410,7 @@ const _: () = {
         [::std::mem::offset_of!(obs_cmdline_args, argv) - 8usize];
 };
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct obs_module_failure_info {
     pub failed_modules: *mut *mut ::std::os::raw::c_char,
     pub count: usize,
