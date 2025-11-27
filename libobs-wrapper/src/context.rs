@@ -378,7 +378,7 @@ impl ObsContext {
         self.inner_display_fn(data)
     }
 
-    /// This f unction is used internally to create displays.
+    /// This function is used internally to create displays.
     fn inner_display_fn(
         &mut self,
         data: ObsDisplayCreationData,
