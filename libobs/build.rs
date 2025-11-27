@@ -96,12 +96,12 @@ mod bindings {
     pub fn generate_bindings() {
         let builder = bindgen::builder()
             .header("headers/wrapper.h")
+            .blocklist_function("^_.*")
             .clang_arg(format!("-I{}", "headers/obs"));
 
         #[cfg(all(not(target_os = "linux"), not(feature = "include_win_bindings")))]
         let builder = builder
             .blocklist_function("blogva")
-            .blocklist_function("^_.*")
             .blocklist_function("^ms_.*")
             .blocklist_file(".*windows\\.h")
             .blocklist_file(".*winuser\\.h")
