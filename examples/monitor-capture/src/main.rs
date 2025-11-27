@@ -26,7 +26,7 @@ impl ObsLogger for NoLogger {
 fn main() -> anyhow::Result<()> {
     // Start the OBS context
     let startup_info = StartupInfo::default()
-        //FIXME This is not recommended in production. This is just for the purpose of this example.
+        // FIXME This is not recommended in production. This is just for the purpose of this example.
         .set_logger(Box::new(NoLogger {}));
     let mut context = ObsContext::new(startup_info)?;
 
