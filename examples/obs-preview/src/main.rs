@@ -248,7 +248,7 @@ impl ApplicationHandler for App {
 
     fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
         println!("Stopping output...");
-        // The obs context is droppde here before the window / event loop is closed!
+        // The obs context is dropped here before the window / event loop is closed!
         let mut inner = self.obs.write().unwrap().take().unwrap();
         inner.context.remove_display(&inner.display).unwrap();
     }
