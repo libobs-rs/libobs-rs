@@ -1,7 +1,6 @@
 use std::sync::{Arc, RwLock};
 use std::{ffi::CStr, ptr};
 
-use anyhow::bail;
 use getters0::Getters;
 use libobs::obs_output;
 
@@ -89,42 +88,39 @@ impl ObsOutputRef {
     /// # Returns
     /// A Result containing the new ObsOutputRef or an error
     pub(crate) fn new(output: OutputInfo, runtime: ObsRuntime) -> Result<Self, ObsError> {
-        let (output, id, name, settings, hotkey_data) = runtime
-            .run_with_obs_result(|| {
-                let OutputInfo {
-                    id,
-                    name,
-                    settings,
-                    hotkey_data,
-                } = output;
+        let (output, id, name, settings, hotkey_data) = runtime.run_with_obs_result(|| {
+            let OutputInfo {
+                id,
+                name,
+                settings,
+                hotkey_data,
+            } = output;
 
-                let settings_ptr = match settings.as_ref() {
-                    Some(x) => x.as_ptr(),
-                    None => Sendable(ptr::null_mut()),
-                };
+            let settings_ptr = match settings.as_ref() {
+                Some(x) => x.as_ptr(),
+                None => Sendable(ptr::null_mut()),
+            };
 
-                let hotkey_data_ptr = match hotkey_data.as_ref() {
-                    Some(x) => x.as_ptr(),
-                    None => Sendable(ptr::null_mut()),
-                };
+            let hotkey_data_ptr = match hotkey_data.as_ref() {
+                Some(x) => x.as_ptr(),
+                None => Sendable(ptr::null_mut()),
+            };
 
-                let output = unsafe {
-                    libobs::obs_output_create(
-                        id.as_ptr().0,
-                        name.as_ptr().0,
-                        settings_ptr.0,
-                        hotkey_data_ptr.0,
-                    )
-                };
+            let output = unsafe {
+                libobs::obs_output_create(
+                    id.as_ptr().0,
+                    name.as_ptr().0,
+                    settings_ptr.0,
+                    hotkey_data_ptr.0,
+                )
+            };
 
-                if output.is_null() {
-                    bail!("Null pointer returned from obs_output_create");
-                }
+            (Sendable(output), id, name, settings, hotkey_data)
+        })?;
 
-                Ok((Sendable(output), id, name, settings, hotkey_data))
-            })
-            .map_err(|e| ObsError::InvocationError(e.to_string()))?
-            .map_err(|_| ObsError::NullPointer)?;
+        if output.0.is_null() {
+            return Err(ObsError::NullPointer);
+        }
 
         let signal_manager = ObsOutputSignals::new(&output, runtime.clone())?;
         Ok(Self {

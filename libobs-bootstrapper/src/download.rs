@@ -1,6 +1,5 @@
 use std::{env::temp_dir, path::PathBuf};
 
-use anyhow::Context;
 use async_stream::stream;
 use futures_core::Stream;
 use futures_util::StreamExt;
@@ -11,26 +10,38 @@ use tokio::{fs::File, io::AsyncWriteExt};
 use uuid::Uuid;
 
 use super::{LIBRARY_OBS_VERSION, github_types};
+use crate::error::ObsBootstrapError;
 
 pub enum DownloadStatus {
-    Error(anyhow::Error),
+    Error(ObsBootstrapError),
     Progress(f32, String),
     Done(PathBuf),
 }
 
-pub(crate) async fn download_obs(repo: &str) -> anyhow::Result<impl Stream<Item = DownloadStatus>> {
+pub(crate) async fn download_obs(
+    repo: &str,
+) -> Result<impl Stream<Item = DownloadStatus>, ObsBootstrapError> {
     // Fetch latest OBS release
     let client = reqwest::ClientBuilder::new()
         .user_agent("libobs-rs")
-        .build()?;
+        .build()
+        .map_err(|e| ObsBootstrapError::DownloadError(e.to_string()))?;
 
     let releases_url = format!("https://api.github.com/repos/{}/releases", repo);
-    let releases: github_types::Root = client.get(&releases_url).send().await?.json().await?;
+    let releases: github_types::Root = client
+        .get(&releases_url)
+        .send()
+        .await
+        .map_err(|e| ObsBootstrapError::DownloadError(e.to_string()))?
+        .json()
+        .await
+        .map_err(|e| ObsBootstrapError::DownloadError(e.to_string()))?;
 
     let mut possible_versions = vec![];
     for release in releases {
         let tag = release.tag_name.replace("obs-build-", "");
-        let version = Version::parse(&tag).context("Parsing version")?;
+        let version = Version::parse(&tag)
+            .map_err(|e| ObsBootstrapError::VersionError(format!("Parsing version: {}", e)))?;
 
         // The minor and major version must be the same, patches shouldn't have braking changes
         if version.major == LIBOBS_API_MAJOR_VER as u64
@@ -43,16 +54,18 @@ pub(crate) async fn download_obs(repo: &str) -> anyhow::Result<impl Stream<Item 
     let latest_version = possible_versions
         .iter()
         .max_by_key(|r| &r.published_at)
-        .context(format!(
-            "Finding a matching obs version for {}",
-            *LIBRARY_OBS_VERSION
-        ))?;
+        .ok_or_else(|| {
+            ObsBootstrapError::DownloadError(format!(
+                "Finding a matching obs version for {}",
+                *LIBRARY_OBS_VERSION
+            ))
+        })?;
 
     let archive_url = latest_version
         .assets
         .iter()
         .find(|a| a.name.ends_with(".7z"))
-        .context("Finding 7z asset")?
+        .ok_or_else(|| ObsBootstrapError::DownloadError("Finding 7z asset".to_string()))?
         .browser_download_url
         .clone();
 
@@ -60,11 +73,15 @@ pub(crate) async fn download_obs(repo: &str) -> anyhow::Result<impl Stream<Item 
         .assets
         .iter()
         .find(|a| a.name.ends_with(".sha256"))
-        .context("Finding sha256 asset")?
+        .ok_or_else(|| ObsBootstrapError::DownloadError("Finding sha256 asset".to_string()))?
         .browser_download_url
         .clone();
 
-    let res = client.get(archive_url).send().await?;
+    let res = client
+        .get(archive_url)
+        .send()
+        .await
+        .map_err(|e| ObsBootstrapError::DownloadError(e.to_string()))?;
     let length = res.content_length().unwrap_or(0);
 
     let mut bytes_stream = res.bytes_stream();
@@ -74,14 +91,14 @@ pub(crate) async fn download_obs(repo: &str) -> anyhow::Result<impl Stream<Item 
         .join(format!("{}.7z", Uuid::new_v4()));
     let mut tmp_file = File::create_new(&path)
         .await
-        .context("Creating temporary file")?;
+        .map_err(|e| ObsBootstrapError::IoError(format!("Creating temporary file: {}", e)))?;
 
     let mut curr_len = 0;
     let mut hasher = Sha256::new();
     Ok(stream! {
         yield DownloadStatus::Progress(0.0, "Downloading OBS".to_string());
         while let Some(chunk) = bytes_stream.next().await {
-            let chunk = chunk.context("Retrieving data from stream");
+            let chunk = chunk.map_err(|e| ObsBootstrapError::DownloadError(format!("Retrieving data from stream: {}", e)));
             if let Err(e) = chunk {
                 yield DownloadStatus::Error(e);
                 return;
@@ -89,7 +106,7 @@ pub(crate) async fn download_obs(repo: &str) -> anyhow::Result<impl Stream<Item 
 
             let chunk = chunk.unwrap();
             hasher.update(&chunk);
-            let r = tmp_file.write_all(&chunk).await.context("Writing to temporary file");
+            let r = tmp_file.write_all(&chunk).await.map_err(|e| ObsBootstrapError::IoError(format!("Writing to temporary file: {}", e)));
             if let Err(e) = r {
                 yield DownloadStatus::Error(e);
                 return;
@@ -100,20 +117,20 @@ pub(crate) async fn download_obs(repo: &str) -> anyhow::Result<impl Stream<Item 
         }
 
         // Getting remote hash
-        let remote_hash = client.get(hash_url).send().await.context("Fetching hash");
+        let remote_hash = client.get(hash_url).send().await.map_err(|e| ObsBootstrapError::DownloadError(format!("Fetching hash: {}", e)));
         if let Err(e) = remote_hash {
             yield DownloadStatus::Error(e);
             return;
         }
 
-        let remote_hash = remote_hash.unwrap().text().await.context("Reading hash");
+        let remote_hash = remote_hash.unwrap().text().await.map_err(|e| ObsBootstrapError::DownloadError(format!("Reading hash: {}", e)));
         if let Err(e) = remote_hash {
             yield DownloadStatus::Error(e);
             return;
         }
 
         let remote_hash = remote_hash.unwrap();
-        let remote_hash = hex::decode(remote_hash.trim()).context("Decoding hash");
+        let remote_hash = hex::decode(remote_hash.trim()).map_err(|e| ObsBootstrapError::DownloadError(format!("Decoding hash: {}", e)));
         if let Err(e) = remote_hash {
             yield DownloadStatus::Error(e);
             return;
@@ -124,7 +141,7 @@ pub(crate) async fn download_obs(repo: &str) -> anyhow::Result<impl Stream<Item 
         // Calculating local hash
         let local_hash = hasher.finalize();
         if local_hash.to_vec() != remote_hash {
-            yield DownloadStatus::Error(anyhow::anyhow!("Hash mismatch"));
+            yield DownloadStatus::Error(ObsBootstrapError::DownloadError("Hash mismatch".to_string()));
             return;
         }
 

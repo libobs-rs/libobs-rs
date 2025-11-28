@@ -20,7 +20,6 @@ edition = "2021"
 workspace = true
 
 [dependencies]
-anyhow = "1.0.97"
 libobs = { workspace = true, features = [] }
 display-info = "0.5.4"
 num-derive = "0.4.2"

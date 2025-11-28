@@ -55,6 +55,18 @@ pub enum ObsError {
 
     /// Error during platform-specific initialization
     PlatformInitError(String),
+
+    /// Error reading/writing to a file
+    IoError(String),
+
+    /// Failed to get data from signal calldata
+    SignalDataError(String),
+
+    /// Failed to convert an enum from a code
+    EnumConversionError(String),
+
+    /// Failed to send/receive on a runtime channel
+    RuntimeChannelError(String),
 }
 
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -89,6 +101,10 @@ impl Display for ObsError {
             ObsError::StringConversionError => write!(f, "Error converting a string between Rust and OBS"),
             ObsError::PlatformInitError(e) => write!(f, "Error during platform-specific initialization: {}", e),
             ObsError::InvalidOperation(e) => write!(f, "Invalid operation: {}", e),
+            ObsError::IoError(e) => write!(f, "I/O error: {}", e),
+            ObsError::SignalDataError(e) => write!(f, "Signal data error: {}", e),
+            ObsError::EnumConversionError(e) => write!(f, "Enum conversion error: {}", e),
+            ObsError::RuntimeChannelError(e) => write!(f, "Runtime channel error: {}", e),
         }
     }
 }

@@ -1873,7 +1873,6 @@ dependencies = [
 name = "libobs-bootstrapper"
 version = "0.2.2"
 dependencies = [
- "anyhow",
  "async-stream",
  "futures-core",
  "futures-util",
@@ -1936,7 +1935,6 @@ dependencies = [
 name = "libobs-wrapper"
 version = "6.0.3+32.0.2"
 dependencies = [
- "anyhow",
  "arboard",
  "chrono",
  "colored 3.0.0",
