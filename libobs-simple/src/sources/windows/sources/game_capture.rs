@@ -117,6 +117,7 @@ define_object_manager!(
         /// Whether to capture audio from window source (BETA) <br>
         /// When enabled, creates an "Application Audio Capture" source that automatically updates to the currently captured window/application. <br>
         /// Note that if Desktop Audio is configured, this could result in doubled audio.
+        #[obs_property(type_t = "bool")]
         capture_audio: bool,
     }
 );
