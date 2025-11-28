@@ -64,20 +64,13 @@ pub fn should_update(version_str: &str) -> Result<bool, ObsBootstrapError> {
             version_str
         )));
     }
-    let major = version[0].parse::<u64>();
-    let minor = version[1].parse::<u64>();
-    let patch = version[2].parse::<u64>();
 
-    if major.is_err() || minor.is_err() || patch.is_err() {
-        return Err(ObsBootstrapError::VersionError(format!(
-            "Invalid version string: {}",
-            version_str
-        )));
-    }
+    let parse_error =
+        || ObsBootstrapError::VersionError(format!("Invalid version string: {}", version_str));
 
-    let major = major.unwrap();
-    let minor = minor.unwrap();
-    let patch = patch.unwrap();
+    let major = version[0].parse::<u64>().map_err(|_| parse_error())?;
+    let minor = version[1].parse::<u64>().map_err(|_| parse_error())?;
+    let patch = version[2].parse::<u64>().map_err(|_| parse_error())?;
 
     Ok(major != LIBOBS_API_MAJOR_VER as u64
         || minor != LIBOBS_API_MINOR_VER as u64
