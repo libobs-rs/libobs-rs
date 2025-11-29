@@ -161,7 +161,7 @@ impl GameCaptureSource {
 
         if capture_audio && !audio_capture_available() {
             return Err(ObsSimpleError::FeatureNotAvailable(
-                "Game Audio Capture is not available on this system".to_string(),
+                "Game Audio Capture is not available on this system",
             ));
         }
 

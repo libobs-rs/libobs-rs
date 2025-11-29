@@ -6,11 +6,11 @@ pub enum ObsSimpleError {
     /// The underlying libobs-wrapper error
     WrapperError(libobs_wrapper::utils::ObsError),
     /// Feature is not available on this system
-    FeatureNotAvailable(String),
+    FeatureNotAvailable(&'static str),
     /// Error from display-info crate
-    DisplayInfoError(String),
+    DisplayInfoError(&'static str),
     /// Error from window helper
-    WindowHelperError(String),
+    WindowHelperError(&'static str),
 }
 
 impl Display for ObsSimpleError {
