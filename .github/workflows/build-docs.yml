@@ -1,49 +1,49 @@
-name: Build Documentation
-
+name: Build and Deploy Documentation
 
 on:
   push:
-    tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
+    branches: ["main"]
   workflow_dispatch:
 
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
 concurrency:
-  group: 'pages-build'
-  cancel-in-progress: true
+  group: "pages"
+  cancel-in-progress: false
 
 jobs:
-  build-docs:
-    permissions:
-      contents: write
+  build-and-deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Cache dependencies
-        uses: actions/cache@v4
-        if: always()
+      - name: Checkout libobs-rs
+        uses: actions/checkout@v4
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-      - name: Generate documentation
-        run: cargo doc --no-deps --lib
-        shell: pwsh
-      - name: Configure Git
-        run: |
-          git config user.name github-actions
-          git config user.email github-actions@github.com
-        shell: pwsh
-      - name: Deploy to gh-pages
-        run: |
-          git config --global core.safecrlf false
-          git fetch origin gh-pages
-          git checkout gh-pages
-          git reset --hard
-          git add target/doc -f .github/workflows/deploy.yml
-          git commit -m "Update documentation" --quiet
-          git push -f origin gh-pages
-        shell: pwsh
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          repository: libobs-rs/libobs-rs
+          path: libobs-rs
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@nightly
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build Documentation
+        working-directory: libobs-rs
+        run: cargo +nightly doc --no-deps --workspace --lib --features "__test_environment"
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: 'libobs-rs/target/doc'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

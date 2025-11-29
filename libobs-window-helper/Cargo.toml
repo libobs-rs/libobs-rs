@@ -6,7 +6,7 @@ edition = "2021"
 readme = "README.md"
 keywords = ["obs", "libobs", "window", "helper", "window-list"]
 repository = "https://github.com/libobs-rs/libobs-rs"
-documentation = "https://sshcrack.github.io/libobs-docs/libobs_window_helper/"
+documentation = "https://libobs-rs.github.io/libobs-docs/libobs_window_helper/"
 authors = ["Hendrik Lind <hendrik@sshcrack.me>"]
 license = "GPL-3.0"
 
