@@ -25,17 +25,17 @@ pub(crate) async fn download_obs(
     let client = reqwest::ClientBuilder::new()
         .user_agent("libobs-rs")
         .build()
-        .map_err(|e| ObsBootstrapError::DownloadError(e.to_string()))?;
+        .map_err(|e| ObsBootstrapError::DownloadError("Building the reqwest client", e))?;
 
     let releases_url = format!("https://api.github.com/repos/{}/releases", repo);
     let releases: github_types::Root = client
         .get(&releases_url)
         .send()
         .await
-        .map_err(|e| ObsBootstrapError::DownloadError(e.to_string()))?
+        .map_err(|e| ObsBootstrapError::DownloadError("Sending Github API request", e))?
         .json()
         .await
-        .map_err(|e| ObsBootstrapError::DownloadError(e.to_string()))?;
+        .map_err(|e| ObsBootstrapError::DownloadError("Converting Github API requet to JSON", e))?;
 
     let mut possible_versions = vec![];
     for release in releases {
@@ -55,7 +55,7 @@ pub(crate) async fn download_obs(
         .iter()
         .max_by_key(|r| &r.published_at)
         .ok_or_else(|| {
-            ObsBootstrapError::DownloadError(format!(
+            ObsBootstrapError::InvalidFormatError(format!(
                 "Finding a matching obs version for {}",
                 *LIBRARY_OBS_VERSION
             ))
@@ -65,7 +65,7 @@ pub(crate) async fn download_obs(
         .assets
         .iter()
         .find(|a| a.name.ends_with(".7z"))
-        .ok_or_else(|| ObsBootstrapError::DownloadError("Finding 7z asset".to_string()))?
+        .ok_or_else(|| ObsBootstrapError::InvalidFormatError("Finding 7z asset".to_string()))?
         .browser_download_url
         .clone();
 
@@ -73,7 +73,7 @@ pub(crate) async fn download_obs(
         .assets
         .iter()
         .find(|a| a.name.ends_with(".sha256"))
-        .ok_or_else(|| ObsBootstrapError::DownloadError("Finding sha256 asset".to_string()))?
+        .ok_or_else(|| ObsBootstrapError::InvalidFormatError("Finding sha256 asset".to_string()))?
         .browser_download_url
         .clone();
 
@@ -81,7 +81,7 @@ pub(crate) async fn download_obs(
         .get(archive_url)
         .send()
         .await
-        .map_err(|e| ObsBootstrapError::DownloadError(e.to_string()))?;
+        .map_err(|e| ObsBootstrapError::DownloadError("Sending archive request", e))?;
     let length = res.content_length().unwrap_or(0);
 
     let mut bytes_stream = res.bytes_stream();
@@ -98,7 +98,7 @@ pub(crate) async fn download_obs(
     Ok(stream! {
         yield DownloadStatus::Progress(0.0, "Downloading OBS".to_string());
         while let Some(chunk) = bytes_stream.next().await {
-            let chunk = chunk.map_err(|e| ObsBootstrapError::DownloadError(format!("Retrieving data from stream: {}", e)));
+            let chunk = chunk.map_err(|e| ObsBootstrapError::DownloadError("Receiving chunk of archive data", e));
             if let Err(e) = chunk {
                 yield DownloadStatus::Error(e);
                 return;
@@ -117,20 +117,20 @@ pub(crate) async fn download_obs(
         }
 
         // Getting remote hash
-        let remote_hash = client.get(hash_url).send().await.map_err(|e| ObsBootstrapError::DownloadError(format!("Fetching hash: {}", e)));
+        let remote_hash = client.get(hash_url).send().await.map_err(|e| ObsBootstrapError::DownloadError("Fetching hash", e));
         if let Err(e) = remote_hash {
             yield DownloadStatus::Error(e);
             return;
         }
 
-        let remote_hash = remote_hash.unwrap().text().await.map_err(|e| ObsBootstrapError::DownloadError(format!("Reading hash: {}", e)));
+        let remote_hash = remote_hash.unwrap().text().await.map_err(|e| ObsBootstrapError::DownloadError("Reading hash", e));
         if let Err(e) = remote_hash {
             yield DownloadStatus::Error(e);
             return;
         }
 
         let remote_hash = remote_hash.unwrap();
-        let remote_hash = hex::decode(remote_hash.trim()).map_err(|e| ObsBootstrapError::DownloadError(format!("Decoding hash: {}", e)));
+        let remote_hash = hex::decode(remote_hash.trim()).map_err(|e| ObsBootstrapError::InvalidFormatError(e.to_string()));
         if let Err(e) = remote_hash {
             yield DownloadStatus::Error(e);
             return;
@@ -141,7 +141,7 @@ pub(crate) async fn download_obs(
         // Calculating local hash
         let local_hash = hasher.finalize();
         if local_hash.to_vec() != remote_hash {
-            yield DownloadStatus::Error(ObsBootstrapError::DownloadError("Hash mismatch".to_string()));
+            yield DownloadStatus::Error(ObsBootstrapError::HashMismatchError);
             return;
         }
 

@@ -128,7 +128,7 @@ pub(crate) fn bootstrap(
             }
         }
 
-        let archive_file = file.ok_or_else(|| ObsBootstrapError::DownloadError("OBS Archive could not be downloaded.".to_string()));
+        let archive_file = file.ok_or(ObsBootstrapError::InvalidState);
         if let Err(err) = archive_file {
             yield BootstrapStatus::Error(err);
             return;

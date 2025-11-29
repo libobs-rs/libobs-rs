@@ -2,8 +2,7 @@ use std::{sync::Arc, time::Duration};
 
 use indicatif::{ProgressBar, ProgressStyle};
 use libobs_bootstrapper::{
-    ObsBootstrapper, ObsBootstrapperOptions, ObsBootstrapperResult,
-    status_handler::ObsBootstrapStatusHandler,
+    ObsBootstrapError, ObsBootstrapper, ObsBootstrapperOptions, ObsBootstrapperResult, status_handler::ObsBootstrapStatusHandler
 };
 use libobs_wrapper::{context::ObsContext, utils::StartupInfo};
 
@@ -30,12 +29,12 @@ impl ObsBootstrapProgress {
     }
 }
 impl ObsBootstrapStatusHandler for ObsBootstrapProgress {
-    fn handle_downloading(&mut self, prog: f32, msg: String) -> anyhow::Result<()> {
+    fn handle_downloading(&mut self, prog: f32, msg: String) -> Result<(), ObsBootstrapError> {
         self.0.set_message(msg);
         self.0.set_position((prog * 100.0) as u64);
         Ok(())
     }
-    fn handle_extraction(&mut self, prog: f32, msg: String) -> anyhow::Result<()> {
+    fn handle_extraction(&mut self, prog: f32, msg: String) -> Result<(), ObsBootstrapError> {
         self.0.set_message(msg);
         self.0.set_position(100 + (prog * 100.0) as u64);
         Ok(())
