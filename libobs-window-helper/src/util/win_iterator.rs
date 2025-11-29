@@ -1,4 +1,4 @@
-use anyhow::Result;
+use crate::error::WindowHelperError;
 use windows::{
     core::PWSTR,
     Win32::{
@@ -16,7 +16,7 @@ use crate::{
     ProcessInfo,
 };
 
-pub unsafe fn is_uwp_window(hwnd: HWND) -> Result<bool> {
+pub unsafe fn is_uwp_window(hwnd: HWND) -> Result<bool, WindowHelperError> {
     if hwnd.is_invalid() {
         return Ok(false);
     }
@@ -25,7 +25,7 @@ pub unsafe fn is_uwp_window(hwnd: HWND) -> Result<bool> {
     Ok(class == "ApplicationFrameWindow")
 }
 
-pub unsafe fn get_uwp_actual_window(parent: HWND) -> Result<Option<HWND>> {
+pub unsafe fn get_uwp_actual_window(parent: HWND) -> Result<Option<HWND>, WindowHelperError> {
     let ProcessInfo {
         process_id: parent_id,
         ..
@@ -55,7 +55,7 @@ pub unsafe fn next_window(
     mode: WindowSearchMode,
     parent: &mut Option<HWND>,
     use_find_window_ex: bool,
-) -> anyhow::Result<Option<HWND>> {
+) -> Result<Option<HWND>, WindowHelperError> {
     let mut window = window.unwrap_or_default();
 
     let parent_valid = parent.is_some_and(|e| !e.is_invalid());
@@ -108,7 +108,7 @@ pub unsafe fn first_window(
     mode: WindowSearchMode,
     parent: &mut Option<HWND>,
     use_find_window_ex: &mut bool,
-) -> anyhow::Result<HWND> {
+) -> Result<HWND, WindowHelperError> {
     let mut window =
         FindWindowExW(Some(GetDesktopWindow()), None, PWSTR::null(), PWSTR::null()).ok();
 
@@ -139,7 +139,7 @@ pub unsafe fn first_window(
     }
 
     if window.is_none() {
-        return Err(anyhow::anyhow!("No window found"));
+        return Err(WindowHelperError::NoWindowFound);
     }
 
     let window = window.unwrap();

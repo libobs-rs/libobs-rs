@@ -1924,7 +1924,6 @@ dependencies = [
 name = "libobs-window-helper"
 version = "0.2.1"
 dependencies = [
- "anyhow",
  "serde",
  "serde_json",
  "specta 2.0.0-rc.20",

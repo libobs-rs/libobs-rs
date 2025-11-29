@@ -74,7 +74,7 @@ impl WindowCaptureSource {
         mode: WindowSearchMode,
     ) -> Result<Vec<libobs_wrapper::unsafe_send::Sendable<WindowInfo>>, ObsSimpleError> {
         Ok(get_all_windows(mode)
-            .map_err(|e| ObsSimpleError::WindowHelperError(e.to_string()))?
+            .map_err(ObsSimpleError::WindowHelperError)?
             .into_iter()
             .map(libobs_wrapper::unsafe_send::Sendable)
             .collect())

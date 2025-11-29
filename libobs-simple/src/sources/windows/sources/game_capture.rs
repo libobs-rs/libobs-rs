@@ -129,7 +129,7 @@ impl GameCaptureSourceBuilder {
     pub fn get_windows(mode: WindowSearchMode) -> Result<Vec<WindowInfo>, ObsSimpleError> {
         get_all_windows(mode)
             .map(|e| e.into_iter().filter(|x| x.is_game).collect::<Vec<_>>())
-            .map_err(|e| ObsSimpleError::WindowHelperError(e.to_string()))
+            .map_err(ObsSimpleError::WindowHelperError)
     }
 
     /// Checks if a window with the given process ID can be captured by this source.

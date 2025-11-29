@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result as AnyResult};
+use crate::error::WindowHelperError;
 use windows::{
     core::{Error, Result as WinResult},
     Win32::{Foundation::HWND, UI::WindowsAndMessaging::GetWindowThreadProcessId},
@@ -62,20 +62,22 @@ fn encode_string(s: &str) -> String {
 /// # Errors
 ///
 /// Returns an error if there was a problem retrieving the OBS ID.
-pub fn get_window_info(wnd: HWND) -> AnyResult<WindowInfo> {
+pub fn get_window_info(wnd: HWND) -> Result<WindowInfo, WindowHelperError> {
     let (proc_id, full_exe) = get_exe(wnd)?;
     let exe = full_exe
         .file_name()
-        .ok_or(anyhow!("Failed to get file name"))?;
-    let exe = exe.to_str().ok_or(anyhow!("Failed to convert to str"))?;
+        .ok_or(WindowHelperError::FileNameError)?;
+    let exe = exe
+        .to_str()
+        .ok_or(WindowHelperError::StringConversionError)?;
     let exe = exe.to_string();
 
     if is_microsoft_internal_exe(&exe) {
-        return Err(anyhow!("Handle is a Microsoft internal exe"));
+        return Err(WindowHelperError::MicrosoftInternalExe);
     }
 
     if exe == "obs64.exe" {
-        return Err(anyhow!("Handle is obs64.exe"));
+        return Err(WindowHelperError::ObsExe);
     }
 
     let is_game = !is_blacklisted_window(&exe);

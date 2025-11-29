@@ -5,8 +5,7 @@ use std::{
     str::FromStr,
 };
 
-use crate::{get_thread_proc_id, string_conv::ToUtf8String, ProcessInfo};
-use anyhow::{anyhow, Result as AnyResult};
+use crate::{error::WindowHelperError, get_thread_proc_id, string_conv::ToUtf8String, ProcessInfo};
 use windows::core::Error;
 use windows::{
     core::HSTRING,
@@ -49,7 +48,7 @@ const SZ_HEX_CODE_PAGE_ID_UNICODE: &str = "04B0";
 /// # Errors
 ///
 /// Returns an error if there was a problem retrieving the executable path or process ID.
-pub fn get_exe(handle: HWND) -> AnyResult<(u32, PathBuf)> {
+pub fn get_exe(handle: HWND) -> Result<(u32, PathBuf), WindowHelperError> {
     let ProcessInfo {
         process_id: proc_id,
         ..
@@ -67,7 +66,7 @@ pub fn get_exe(handle: HWND) -> AnyResult<(u32, PathBuf)> {
         // HMODULE should be null, not default
         let res = GetModuleFileNameExW(Some(h_proc), None, &mut path);
         if res > 0 {
-            Ok::<String, anyhow::Error>(path.as_ref().to_utf8())
+            Ok::<String, WindowHelperError>(path.as_ref().to_utf8())
         } else {
             Err(Error::from_win32().into())
         }
@@ -80,7 +79,7 @@ pub fn get_exe(handle: HWND) -> AnyResult<(u32, PathBuf)> {
     Ok((proc_id, PathBuf::from_str(&exe)?))
 }
 
-pub fn get_title(handle: HWND) -> AnyResult<String> {
+pub fn get_title(handle: HWND) -> Result<String, WindowHelperError> {
     let len = unsafe { GetWindowTextLengthW(handle) };
     if len == 0 {
         return Err(Error::from_win32().into());
@@ -97,7 +96,7 @@ pub fn get_title(handle: HWND) -> AnyResult<String> {
     Ok(title.to_utf8())
 }
 
-pub fn get_window_class(handle: HWND) -> AnyResult<String> {
+pub fn get_window_class(handle: HWND) -> Result<String, WindowHelperError> {
     let mut class = [0_u16; MAX_PATH as usize + 1];
 
     let len = unsafe { GetClassNameW(handle, &mut class) };
@@ -108,7 +107,7 @@ pub fn get_window_class(handle: HWND) -> AnyResult<String> {
     Ok(class.as_ref().to_utf8())
 }
 
-pub fn get_product_name(full_exe: &Path) -> AnyResult<String> {
+pub fn get_product_name(full_exe: &Path) -> Result<String, WindowHelperError> {
     let exe_wide = HSTRING::from(full_exe.as_os_str());
 
     let mut dummy = 0;
@@ -153,7 +152,9 @@ pub fn get_product_name(full_exe: &Path) -> AnyResult<String> {
 
     let chars_in_buf = required_buffer_size / (std::mem::size_of::<u16>() as u32);
     if pages_ptr.is_null() || chars_in_buf < pages_length {
-        return Err(anyhow!("Invalid state"));
+        return Err(WindowHelperError::InvalidState(
+            "Invalid buffer state".to_string(),
+        ));
     }
 
     let product_name = unsafe { std::slice::from_raw_parts(pages_ptr, pages_length as usize - 1) };
@@ -162,7 +163,7 @@ pub fn get_product_name(full_exe: &Path) -> AnyResult<String> {
     Ok(product_name)
 }
 
-pub fn hwnd_to_monitor(handle: HWND) -> AnyResult<HMONITOR> {
+pub fn hwnd_to_monitor(handle: HWND) -> Result<HMONITOR, WindowHelperError> {
     unsafe {
         let res = MonitorFromWindow(handle, MONITOR_DEFAULTTONEAREST);
         if res.is_invalid() {
@@ -173,7 +174,7 @@ pub fn hwnd_to_monitor(handle: HWND) -> AnyResult<HMONITOR> {
     }
 }
 
-pub fn intersects_with_multiple_monitors(handle: HWND) -> AnyResult<bool> {
+pub fn intersects_with_multiple_monitors(handle: HWND) -> Result<bool, WindowHelperError> {
     unsafe {
         let res = MonitorFromWindow(handle, MONITOR_DEFAULTTONULL);
 
@@ -181,7 +182,7 @@ pub fn intersects_with_multiple_monitors(handle: HWND) -> AnyResult<bool> {
     }
 }
 
-pub fn get_command_line_args(wnd: HWND) -> AnyResult<String> {
+pub fn get_command_line_args(wnd: HWND) -> Result<String, WindowHelperError> {
     let ProcessInfo {
         process_id: proc_id,
         ..
@@ -207,7 +208,7 @@ pub fn get_command_line_args(wnd: HWND) -> AnyResult<String> {
     res
 }
 
-unsafe fn get_command_line_args_priv(handle: HANDLE) -> AnyResult<String> {
+unsafe fn get_command_line_args_priv(handle: HANDLE) -> Result<String, WindowHelperError> {
     let mut pbi = PROCESS_BASIC_INFORMATION::default();
     // get process information
     NtQueryInformationProcess(
