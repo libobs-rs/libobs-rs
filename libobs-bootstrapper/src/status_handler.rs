@@ -4,16 +4,15 @@ use std::{convert::Infallible, fmt::Debug};
 pub trait ObsBootstrapStatusHandler: Debug + Send + Sync {
     type Error: std::error::Error + Send + Sync + 'static;
 
-    fn handle_downloading(
-        &mut self,
-        progress: f32,
-        message: String,
-    ) -> Result<(), Self::Error>;
-    fn handle_extraction(
-        &mut self,
-        progress: f32,
-        message: String,
-    ) -> Result<(), Self::Error>;
+    /// Used to report in some way or another the download progress to the user (this is between 0.0 and 1.0)
+    /// # Errors
+    /// This should return an error if the download process should be aborted. This error will be mapped to `ObsBootstrapError::Abort`. This WILL NOT clean up any files or similar, that is the responsibility of the caller.
+    fn handle_downloading(&mut self, progress: f32, message: String) -> Result<(), Self::Error>;
+
+    /// Used to report in some way another the extraction progress to the user (this is between 0.0 and 1.0)
+    /// # Errors
+    /// This should return an error if the extraction process should be aborted. This error will be mapped to `ObsBootstrapError::Abort`. This WILL NOT clean up any files or similar, that
+    fn handle_extraction(&mut self, progress: f32, message: String) -> Result<(), Self::Error>;
 }
 
 #[derive(Debug)]
@@ -36,11 +35,7 @@ impl Default for ObsBootstrapConsoleHandler {
 impl ObsBootstrapStatusHandler for ObsBootstrapConsoleHandler {
     type Error = Infallible;
 
-    fn handle_downloading(
-        &mut self,
-        progress: f32,
-        message: String,
-    ) -> Result<(), Infallible> {
+    fn handle_downloading(&mut self, progress: f32, message: String) -> Result<(), Infallible> {
         if progress - self.last_download_percentage >= 0.05 || progress == 1.0 {
             self.last_download_percentage = progress;
             println!("Downloading: {}% - {}", progress * 100.0, message);
@@ -48,11 +43,7 @@ impl ObsBootstrapStatusHandler for ObsBootstrapConsoleHandler {
         Ok(())
     }
 
-    fn handle_extraction(
-        &mut self,
-        progress: f32,
-        message: String,
-    ) -> Result<(), Infallible> {
+    fn handle_extraction(&mut self, progress: f32, message: String) -> Result<(), Infallible> {
         if progress - self.last_extract_percentage >= 0.05 || progress == 1.0 {
             self.last_extract_percentage = progress;
             println!("Extracting: {}% - {}", progress * 100.0, message);

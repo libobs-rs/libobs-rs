@@ -11,7 +11,7 @@ pub enum ObsBootstrapError {
     HashMismatchError,
     /// This error should never happen, report to maintainers
     InvalidState,
-    /// This should be emitted in the ObsBootstrapperHandler to abort the download/extraction process (this does not clean up files or similar)
+    /// This error is emitted when a status handler returns an error instead of an Ok(()). This is the Error type that your handler uses.
     Abort(Box<dyn std::error::Error + Send + Sync>),
 }
 
