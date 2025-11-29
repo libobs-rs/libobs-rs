@@ -12,7 +12,7 @@ pub enum ObsBootstrapError {
     /// This error should never happen, report to maintainers
     InvalidState,
     /// This should be emitted in the ObsBootstrapperHandler to abort the download/extraction process (this does not clean up files or similar)
-    Abort,
+    Abort(Box<dyn std::error::Error + Send + Sync>),
 }
 
 impl std::fmt::Display for ObsBootstrapError {
@@ -34,7 +34,9 @@ impl std::fmt::Display for ObsBootstrapError {
                 f,
                 "Invalid state error: This error should never happen, please report to maintainers"
             ),
-            ObsBootstrapError::Abort => write!(f, "Operation aborted by status handler"),
+            ObsBootstrapError::Abort(e) => {
+                write!(f, "Operation aborted by status handler: {:?}", e)
+            }
         }
     }
 }

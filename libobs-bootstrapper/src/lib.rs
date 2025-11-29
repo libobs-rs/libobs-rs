@@ -348,9 +348,9 @@ impl ObsBootstrapper {
     /// - the handler returns an error while handling a download or extraction
     ///   update (mapped respectively to `DownloadError` / `ExtractError`),
     /// - or when the bootstrap stream yields a general error.
-    pub async fn bootstrap_with_handler(
+    pub async fn bootstrap_with_handler<E: Send + Sync + 'static + std::error::Error>(
         options: &options::ObsBootstrapperOptions,
-        mut handler: Box<dyn ObsBootstrapStatusHandler>,
+        mut handler: Box<dyn ObsBootstrapStatusHandler<Error = E>>,
     ) -> Result<ObsBootstrapperResult, ObsBootstrapError> {
         let stream = bootstrap(options)?;
 
@@ -361,10 +361,14 @@ impl ObsBootstrapper {
             while let Some(item) = stream.next().await {
                 match item {
                     BootstrapStatus::Downloading(progress, message) => {
-                        handler.handle_downloading(progress, message)?;
+                        handler
+                            .handle_downloading(progress, message)
+                            .map_err(|e| ObsBootstrapError::Abort(Box::new(e)))?;
                     }
                     BootstrapStatus::Extracting(progress, message) => {
-                        handler.handle_extraction(progress, message)?;
+                        handler
+                            .handle_extraction(progress, message)
+                            .map_err(|e| ObsBootstrapError::Abort(Box::new(e)))?;
                     }
                     BootstrapStatus::Error(err) => {
                         return Err(err);

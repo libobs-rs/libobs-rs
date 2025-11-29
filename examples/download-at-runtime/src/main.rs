@@ -1,8 +1,8 @@
-use std::{sync::Arc, time::Duration};
+use std::{convert::Infallible, sync::Arc, time::Duration};
 
 use indicatif::{ProgressBar, ProgressStyle};
 use libobs_bootstrapper::{
-    ObsBootstrapError, ObsBootstrapper, ObsBootstrapperOptions, ObsBootstrapperResult,
+    ObsBootstrapper, ObsBootstrapperOptions, ObsBootstrapperResult,
     status_handler::ObsBootstrapStatusHandler,
 };
 use libobs_wrapper::{context::ObsContext, utils::StartupInfo};
@@ -30,13 +30,15 @@ impl ObsBootstrapProgress {
     }
 }
 impl ObsBootstrapStatusHandler for ObsBootstrapProgress {
-    fn handle_downloading(&mut self, prog: f32, msg: String) -> Result<(), ObsBootstrapError> {
+    type Error = Infallible;
+
+    fn handle_downloading(&mut self, prog: f32, msg: String) -> Result<(), Infallible> {
         self.0.set_message(msg);
         self.0.set_position((prog * 100.0) as u64);
 
         Ok(())
     }
-    fn handle_extraction(&mut self, prog: f32, msg: String) -> Result<(), ObsBootstrapError> {
+    fn handle_extraction(&mut self, prog: f32, msg: String) -> Result<(), Infallible> {
         self.0.set_message(msg);
         self.0.set_position(100 + (prog * 100.0) as u64);
 
