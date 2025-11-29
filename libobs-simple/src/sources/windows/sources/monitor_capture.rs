@@ -46,7 +46,7 @@ impl MonitorCaptureSource {
     /// Gets all available monitors
     pub fn get_monitors() -> Result<Vec<Sendable<DisplayInfo>>, ObsSimpleError> {
         Ok(DisplayInfo::all()
-            .map_err(|e| ObsSimpleError::DisplayInfoError(e.to_string()))?
+            .map_err(ObsSimpleError::DisplayInfoError)?
             .into_iter()
             .map(Sendable)
             .collect())

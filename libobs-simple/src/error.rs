@@ -1,14 +1,16 @@
 use std::fmt::Display;
 
+use display_info::error::DIError;
+
 /// Error type for libobs-simple operations.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum ObsSimpleError {
     /// The underlying libobs-wrapper error
     WrapperError(libobs_wrapper::utils::ObsError),
     /// Feature is not available on this system
     FeatureNotAvailable(&'static str),
     /// Error from display-info crate
-    DisplayInfoError(&'static str),
+    DisplayInfoError(DIError),
     /// Error from window helper
     #[cfg(feature = "window-list")]
     WindowHelperError(libobs_window_helper::WindowHelperError),
