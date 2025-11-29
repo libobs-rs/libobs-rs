@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use crate::error::ObsBootstrapError;
+use crate::ObsBootstrapError;
 
 //NOTE: Maybe do not require to implement Debug here?
 pub trait ObsBootstrapStatusHandler: Debug + Send + Sync {
@@ -17,12 +17,18 @@ pub trait ObsBootstrapStatusHandler: Debug + Send + Sync {
 }
 
 #[derive(Debug)]
-pub struct ObsBootstrapConsoleHandler;
+pub struct ObsBootstrapConsoleHandler {
+    last_download_percentage: f32,
+    last_extract_percentage: f32,
+}
 
 #[cfg_attr(coverage_nightly, coverage(off))]
 impl Default for ObsBootstrapConsoleHandler {
     fn default() -> Self {
-        Self
+        Self {
+            last_download_percentage: 0.0,
+            last_extract_percentage: 0.0,
+        }
     }
 }
 
@@ -33,7 +39,10 @@ impl ObsBootstrapStatusHandler for ObsBootstrapConsoleHandler {
         progress: f32,
         message: String,
     ) -> Result<(), ObsBootstrapError> {
-        println!("Downloading: {}% - {}", progress * 100.0, message);
+        if progress - self.last_download_percentage >= 0.05 || progress == 1.0 {
+            self.last_download_percentage = progress;
+            println!("Downloading: {}% - {}", progress * 100.0, message);
+        }
         Ok(())
     }
 
@@ -42,7 +51,10 @@ impl ObsBootstrapStatusHandler for ObsBootstrapConsoleHandler {
         progress: f32,
         message: String,
     ) -> Result<(), ObsBootstrapError> {
-        println!("Extracting: {}% - {}", progress * 100.0, message);
+        if progress - self.last_extract_percentage >= 0.05 || progress == 1.0 {
+            self.last_extract_percentage = progress;
+            println!("Extracting: {}% - {}", progress * 100.0, message);
+        }
         Ok(())
     }
 }

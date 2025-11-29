@@ -303,7 +303,11 @@ impl ObsBootstrapper {
     pub async fn bootstrap(
         options: &options::ObsBootstrapperOptions,
     ) -> Result<ObsBootstrapperResult, ObsBootstrapError> {
-        ObsBootstrapper::bootstrap_with_handler(options, Box::new(ObsBootstrapConsoleHandler)).await
+        ObsBootstrapper::bootstrap_with_handler(
+            options,
+            Box::new(ObsBootstrapConsoleHandler::default()),
+        )
+        .await
     }
 
     /// Bootstraps OBS using the provided options and a custom status handler.
