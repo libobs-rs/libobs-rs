@@ -44,10 +44,8 @@ pub(crate) async fn download_obs(
         println!("-- WARNING --");
         println!("Using mock GitHub responses! This is only for testing purposes.");
         println!("-- WARNING --");
-        serde_json::from_str(include_str!(
-            "../mock_responses/libobs_builds_release.json"
-        ))
-        .expect("Parsing mock response")
+        serde_json::from_str(include_str!("../mock_responses/libobs_builds_release.json"))
+            .expect("Parsing mock response")
     };
 
     let mut possible_versions = vec![];
