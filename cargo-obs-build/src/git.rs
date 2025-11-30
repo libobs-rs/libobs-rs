@@ -1,11 +1,11 @@
 use anyhow::{anyhow, bail};
+#[cfg(not(feature = "__mock_github_responses"))]
+use http_req::{request::Request, response::StatusCode, uri::Uri};
 use serde_json::Value;
 use std::collections::HashMap;
-use std::path::Path;
-#[cfg(not(feature="__mock_github_responses"))]
+#[cfg(not(feature = "__mock_github_responses"))]
 use std::fs;
-#[cfg(not(feature="__mock_github_responses"))]
-use http_req::{request::Request, response::StatusCode, uri::Uri};
+use std::path::Path;
 
 #[derive(Clone, Debug)]
 pub struct ReleaseInfo {
@@ -17,7 +17,7 @@ pub struct ReleaseInfo {
 }
 
 /// Try to load cached release info from disk
-#[cfg(not(feature="__mock_github_responses"))]
+#[cfg(not(feature = "__mock_github_responses"))]
 fn load_cached_release(cache_path: &Path) -> Option<ReleaseInfo> {
     if !cache_path.exists() {
         return None;
@@ -71,7 +71,7 @@ fn load_cached_release(cache_path: &Path) -> Option<ReleaseInfo> {
 }
 
 /// Save release info to cache
-#[cfg(not(feature="__mock_github_responses"))]
+#[cfg(not(feature = "__mock_github_responses"))]
 fn save_cached_release(cache_path: &Path, data: &str) -> anyhow::Result<()> {
     if let Some(parent) = cache_path.parent() {
         fs::create_dir_all(parent)?;
@@ -81,7 +81,11 @@ fn save_cached_release(cache_path: &Path, data: &str) -> anyhow::Result<()> {
 }
 
 #[cfg(feature = "__mock_github_responses")]
-pub fn fetch_release(_repo_id: &str, _tag: &Option<String>, _cache_dir: &Path) -> anyhow::Result<ReleaseInfo> {
+pub fn fetch_release(
+    _repo_id: &str,
+    _tag: &Option<String>,
+    _cache_dir: &Path,
+) -> anyhow::Result<ReleaseInfo> {
     println!("cargo:warning=-- WARNING --");
     println!("cargo:warning=Using mock GitHub responses! This is only for testing purposes.");
     println!("cargo:warning=-- WARNING --");

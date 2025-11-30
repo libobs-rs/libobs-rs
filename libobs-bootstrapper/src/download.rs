@@ -18,7 +18,9 @@ pub enum DownloadStatus {
     Done(PathBuf),
 }
 
-pub(crate) async fn download_obs(_repo: &str) -> anyhow::Result<impl Stream<Item = DownloadStatus>> {
+pub(crate) async fn download_obs(
+    _repo: &str,
+) -> anyhow::Result<impl Stream<Item = DownloadStatus>> {
     // Fetch latest OBS release
     let client = reqwest::ClientBuilder::new()
         .user_agent("libobs-rs")
