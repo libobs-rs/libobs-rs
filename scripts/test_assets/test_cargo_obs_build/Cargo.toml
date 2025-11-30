@@ -7,7 +7,7 @@ edition = "2024"
 libobs = { path = "../../../libobs" }
 
 [build-dependencies]
-cargo-obs-build = { path = "../../../cargo-obs-build" }
+cargo-obs-build = { path = "../../../cargo-obs-build", features = ["__mock_github_responses"] }
 
 [package.metadata]
 libobs-cache-dir = "../../../obs-build"

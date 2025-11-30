@@ -1,0 +1,14 @@
+[package]
+name = "test_bootstrapping"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+libobs-bootstrapper = { path = "../../../libobs-bootstrapper", features = [
+    "__mock_github_responses",
+] }
+tokio = { version = "1.48.0", default-features = false, features = [
+    "macros",
+    "rt-multi-thread",
+] }
+libobs = { path = "../../../libobs" }

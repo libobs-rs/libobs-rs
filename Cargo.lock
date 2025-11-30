@@ -1885,6 +1885,7 @@ dependencies = [
  "reqwest",
  "semver",
  "serde",
+ "serde_json",
  "sevenz-rust",
  "sha2",
  "tokio",

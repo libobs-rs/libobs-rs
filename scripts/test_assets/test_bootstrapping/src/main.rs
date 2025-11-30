@@ -1,6 +1,20 @@
 use std::{ffi::CString, ptr};
 
-fn main() {
+use libobs_bootstrapper::{ObsBootstrapper, ObsBootstrapperOptions, ObsBootstrapperResult};
+
+#[tokio::main]
+async fn main() {
+    let res = ObsBootstrapper::bootstrap(&ObsBootstrapperOptions::default().set_no_restart())
+        .await
+        .unwrap();
+
+    if matches!(res, ObsBootstrapperResult::Restart) {
+        println!(
+            "OBS has been downloaded and extracted. The application will now exit. You'll have to restart it yourself"
+        );
+        return;
+    }
+
     let locale = CString::new("en-US").unwrap();
     println!("Locale pointer: {:?}", locale.as_ptr());
 

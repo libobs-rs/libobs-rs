@@ -18,14 +18,26 @@ pub enum DownloadStatus {
     Done(PathBuf),
 }
 
-pub(crate) async fn download_obs(repo: &str) -> anyhow::Result<impl Stream<Item = DownloadStatus>> {
+pub(crate) async fn download_obs(_repo: &str) -> anyhow::Result<impl Stream<Item = DownloadStatus>> {
     // Fetch latest OBS release
     let client = reqwest::ClientBuilder::new()
         .user_agent("libobs-rs")
         .build()?;
 
-    let releases_url = format!("https://api.github.com/repos/{}/releases", repo);
+    #[cfg(not(feature = "__mock_github_responses"))]
+    let releases_url = format!("https://api.github.com/repos/{}/releases", _repo);
+    #[cfg(not(feature = "__mock_github_responses"))]
     let releases: github_types::Root = client.get(&releases_url).send().await?.json().await?;
+
+    #[cfg(feature = "__mock_github_responses")]
+    let releases: github_types::Root = {
+        println!("-- WARNING --");
+        println!("Using mock GitHub responses! This is only for testing purposes.");
+        println!("-- WARNING --");
+        serde_json::from_str(include_str!(
+            "../../scripts/test_assets/mock_github_responses/libobs_builds_releases.json"
+        ))?
+    };
 
     let mut possible_versions = vec![];
     for release in releases {

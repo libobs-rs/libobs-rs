@@ -1,9 +1,11 @@
 use anyhow::{anyhow, bail};
-use http_req::{request::Request, response::StatusCode, uri::Uri};
 use serde_json::Value;
 use std::collections::HashMap;
-use std::fs;
 use std::path::Path;
+#[cfg(not(feature="__mock_github_responses"))]
+use std::fs;
+#[cfg(not(feature="__mock_github_responses"))]
+use http_req::{request::Request, response::StatusCode, uri::Uri};
 
 #[derive(Clone, Debug)]
 pub struct ReleaseInfo {
@@ -15,6 +17,7 @@ pub struct ReleaseInfo {
 }
 
 /// Try to load cached release info from disk
+#[cfg(not(feature="__mock_github_responses"))]
 fn load_cached_release(cache_path: &Path) -> Option<ReleaseInfo> {
     if !cache_path.exists() {
         return None;
@@ -68,6 +71,7 @@ fn load_cached_release(cache_path: &Path) -> Option<ReleaseInfo> {
 }
 
 /// Save release info to cache
+#[cfg(not(feature="__mock_github_responses"))]
 fn save_cached_release(cache_path: &Path, data: &str) -> anyhow::Result<()> {
     if let Some(parent) = cache_path.parent() {
         fs::create_dir_all(parent)?;
@@ -76,6 +80,19 @@ fn save_cached_release(cache_path: &Path, data: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "__mock_github_responses")]
+pub fn fetch_release(_repo_id: &str, _tag: &Option<String>, _cache_dir: &Path) -> anyhow::Result<ReleaseInfo> {
+    println!("cargo:warning=-- WARNING --");
+    println!("cargo:warning=Using mock GitHub responses! This is only for testing purposes.");
+    println!("cargo:warning=-- WARNING --");
+    let body = include_str!(
+        "../../scripts/test_assets/mock_github_responses/libobs_builds_releases_latest.json"
+    );
+    let body: Value = serde_json::from_str(&body)?;
+    parse_release_info(&body)
+}
+
+#[cfg(not(feature = "__mock_github_responses"))]
 pub fn fetch_release(
     repo_id: &str,
     tag: &Option<String>,
@@ -132,6 +149,10 @@ pub fn fetch_release(
     let _ = save_cached_release(&cache_path, &body);
 
     let body: Value = serde_json::from_str(&body)?;
+    parse_release_info(&body)
+}
+
+pub fn parse_release_info(body: &Value) -> anyhow::Result<ReleaseInfo> {
     let tag_name = body["tag_name"].as_str();
 
     if tag_name.is_none() {
@@ -178,6 +199,23 @@ pub fn fetch_release(
     })
 }
 
+#[cfg(feature = "__mock_github_responses")]
+pub fn fetch_latest_patch_release(
+    _repo_id: &str,
+    major: u32,
+    minor: u32,
+    _cache_dir: &Path,
+) -> anyhow::Result<Option<String>> {
+    println!("cargo:warning=-- WARNING --");
+    println!("cargo:warning=Using mock GitHub responses! This is only for testing purposes.");
+    println!("cargo:warning=-- WARNING --");
+    let body =
+        include_str!("../../scripts/test_assets/mock_github_responses/obs_studio_release.json");
+    let arr: Vec<Value> = serde_json::from_str(&body)?;
+    parse_releases_for_latest_patch(&arr, major, minor)
+}
+
+#[cfg(not(feature = "__mock_github_responses"))]
 pub fn fetch_latest_patch_release(
     repo_id: &str,
     major: u32,

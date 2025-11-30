@@ -8,9 +8,9 @@ members = [
     "libobs-window-helper",
     "libobs-wrapper",
     "libobs-bootstrapper",
-    "examples/*",
+    "examples/*"
 ]
-exclude = ["scripts/test_assets/test_cargo_obs_build"]
+exclude = ["scripts/test_assets/test_cargo_obs_build", "scripts/test_assets/test_bootstrapping"]
 
 [workspace.dependencies]
 libobs = { path = "./libobs", version = "4.0.2" }
