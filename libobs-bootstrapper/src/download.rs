@@ -46,7 +46,7 @@ pub(crate) async fn download_obs(
         println!("-- WARNING --");
         serde_json::from_str(include_str!(
             "../mock_responses/libobs_builds_releases.json"
-        ))?
+        )).expect("Parsing mock response")
     };
 
     let mut possible_versions = vec![];
