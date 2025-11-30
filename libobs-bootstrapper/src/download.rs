@@ -45,7 +45,7 @@ pub(crate) async fn download_obs(
         println!("Using mock GitHub responses! This is only for testing purposes.");
         println!("-- WARNING --");
         serde_json::from_str(include_str!(
-            "../mock_responses/libobs_builds_releases.json"
+            "../mock_responses/libobs_builds_release.json"
         ))
         .expect("Parsing mock response")
     };

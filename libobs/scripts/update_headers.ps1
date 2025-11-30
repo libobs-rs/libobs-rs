@@ -159,5 +159,9 @@ else
 Write-Host "Cleaning up temporary directory..."
 Remove-Item -Path $tempDir -Recurse -Force
 
+Write-Host "Updating mock files..."
+Invoke-WebRequest "https://api.github.com/repos/libobs-rs/libobs-builds/releases" -OutFile $PSScriptRoot/../../libobs-bootstrapper/mock_responses/libobs_builds_release.json
+Invoke-WebRequest "https://api.github.com/repos/obsproject/obs-studio/releases" -OutFile $PSScriptRoot/../../cargo-obs-build/mock_responses/obs_studio_release.json
+Invoke-WebRequest "https://api.github.com/repos/obsproject/obs-studio/releases/latest" -OutFile $PSScriptRoot/../../cargo-obs-build/mock_responses/obs_studio_release_latest.json
 
 Write-Host "Header files updated successfully!"
