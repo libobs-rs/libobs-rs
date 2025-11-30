@@ -1,4 +1,3 @@
-use anyhow::bail;
 use libobs_simple_macro::obs_object_impl;
 #[cfg(feature = "window-list")]
 use libobs_window_helper::{get_all_windows, WindowInfo, WindowSearchMode};
@@ -9,6 +8,7 @@ use libobs_wrapper::{
 
 use super::{ObsHookRate, ObsWindowPriority};
 use crate::define_object_manager;
+use crate::error::ObsSimpleError;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// Describes the capture mode of the game capture source.
@@ -126,8 +126,10 @@ define_object_manager!(
 #[cfg(feature = "window-list")]
 impl GameCaptureSourceBuilder {
     /// Gets a list of windows that can be captured by this source.
-    pub fn get_windows(mode: WindowSearchMode) -> anyhow::Result<Vec<WindowInfo>> {
-        get_all_windows(mode).map(|e| e.into_iter().filter(|x| x.is_game).collect::<Vec<_>>())
+    pub fn get_windows(mode: WindowSearchMode) -> Result<Vec<WindowInfo>, ObsSimpleError> {
+        get_all_windows(mode)
+            .map(|e| e.into_iter().filter(|x| x.is_game).collect::<Vec<_>>())
+            .map_err(ObsSimpleError::WindowHelperError)
     }
 
     /// Checks if a window with the given process ID can be captured by this source.
@@ -154,11 +156,13 @@ impl GameCaptureSourceBuilder {
 
 #[obs_object_impl]
 impl GameCaptureSource {
-    pub fn set_capture_audio(mut self, capture_audio: bool) -> anyhow::Result<Self> {
+    pub fn set_capture_audio(mut self, capture_audio: bool) -> Result<Self, ObsSimpleError> {
         use crate::sources::windows::audio_capture_available;
 
         if capture_audio && !audio_capture_available() {
-            bail!("Game Audio Capture is not available on this system");
+            return Err(ObsSimpleError::FeatureNotAvailable(
+                "Game Audio Capture is not available on this system",
+            ));
         }
 
         self.get_settings_updater()

@@ -7,6 +7,7 @@ use std::sync::{
 
 use crate::display::ObsWindowHandle;
 use crate::unsafe_send::Sendable;
+use crate::utils::ObsError;
 use lazy_static::lazy_static;
 use libobs::obs_display_t;
 use windows::{
@@ -148,7 +149,7 @@ impl WindowsPreviewChildWindowHandler {
         y: i32,
         width: u32,
         height: u32,
-    ) -> anyhow::Result<Self> {
+    ) -> Result<Self, ObsError> {
         log::trace!("Creating WindowsPreviewChildWindowHandler...");
         let (tx, rx) = oneshot::channel();
 
@@ -160,18 +161,26 @@ impl WindowsPreviewChildWindowHandler {
         let message_thread = std::thread::spawn(move || {
             let parent = parent.lock().unwrap().0;
             // We have to have the whole window creation stuff here as well so the message loop functions
-            let create = move || {
+            let create = move || -> Result<Sendable<HWND>, ObsError> {
                 log::trace!("Registering class...");
-                try_register_class()?;
-                let win8 = is_windows8_or_greater()?;
-                let enabled = unsafe { DwmIsCompositionEnabled()?.as_bool() };
+                try_register_class().map_err(|e| ObsError::DisplayCreationError(e.to_string()))?;
+                let win8 = is_windows8_or_greater()
+                    .map_err(|e| ObsError::DisplayCreationError(e.to_string()))?;
+                let enabled = unsafe {
+                    DwmIsCompositionEnabled()
+                        .map_err(|e| ObsError::DisplayCreationError(e.to_string()))?
+                        .as_bool()
+                };
 
                 let mut window_style = WS_EX_TRANSPARENT;
                 if win8 && enabled {
                     window_style |= WS_EX_COMPOSITED;
                 }
 
-                let instance = unsafe { GetModuleHandleW(PCWSTR::null())? };
+                let instance = unsafe {
+                    GetModuleHandleW(PCWSTR::null())
+                        .map_err(|e| ObsError::DisplayCreationError(e.to_string()))?
+                };
 
                 let class_name = HSTRING::from("Win32DisplayClass");
                 let window_name = HSTRING::from("LibObsChildWindowPreview");
@@ -199,20 +208,23 @@ impl WindowsPreviewChildWindowHandler {
                         None,
                         Some(instance.into()),
                         None,
-                    )?
+                    )
+                    .map_err(|e| ObsError::DisplayCreationError(e.to_string()))?
                 };
 
                 log::trace!("HWND is {:?}", window);
                 if win8 || !enabled {
                     log::trace!("Setting attributes alpha...");
                     unsafe {
-                        SetLayeredWindowAttributes(window, COLORREF(0), 255, LWA_ALPHA)?;
+                        SetLayeredWindowAttributes(window, COLORREF(0), 255, LWA_ALPHA)
+                            .map_err(|e| ObsError::DisplayCreationError(e.to_string()))?;
                     }
                 }
 
                 unsafe {
                     log::trace!("Setting parent...");
-                    SetParent(window, Some(parent))?;
+                    SetParent(window, Some(parent))
+                        .map_err(|e| ObsError::DisplayCreationError(e.to_string()))?;
                     log::trace!("Setting styles...");
                     let mut style = GetWindowLongPtrW(window, GWL_STYLE);
                     //TODO Check casts here
@@ -227,7 +239,7 @@ impl WindowsPreviewChildWindowHandler {
                     SetWindowLongPtrW(window, GWL_EXSTYLE, ex_style);
                 }
 
-                Result::<Sendable<HWND>, anyhow::Error>::Ok(Sendable(window))
+                Ok(Sendable(window))
             };
 
             let r = create();
@@ -254,7 +266,9 @@ impl WindowsPreviewChildWindowHandler {
         });
 
         let window = rx.recv();
-        let window = window??;
+        let window = window.map_err(|_| {
+            ObsError::RuntimeChannelError("Failed to receive window creation result".to_string())
+        })??;
         Ok(Self {
             x,
             y,

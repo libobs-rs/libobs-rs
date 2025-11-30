@@ -8,6 +8,9 @@
 #[cfg(not(target_pointer_width = "64"))]
 compile_error!("compilation is only allowed for 64-bit targets");
 
+mod error;
+pub use error::WindowHelperError;
+
 #[cfg_attr(coverage_nightly, coverage(off))]
 #[cfg(windows)]
 mod game;
@@ -44,9 +47,9 @@ use windows::Win32::{Foundation::HWND, System::Console::GetConsoleWindow};
 ///
 /// # Returns
 ///
-/// A `Result` containing a vector of `WindowInfo` structs representing the retrieved window information, or an `anyhow::Error` if an error occurs.
+/// A `Result` containing a vector of `WindowInfo` structs representing the retrieved window information, or a `WindowHelperError` if an error occurs.
 #[cfg(windows)]
-pub fn get_all_windows(mode: WindowSearchMode) -> anyhow::Result<Vec<WindowInfo>> {
+pub fn get_all_windows(mode: WindowSearchMode) -> Result<Vec<WindowInfo>, WindowHelperError> {
     let mut use_find_window_ex = false;
 
     let mut parent = None as Option<HWND>;

@@ -8,34 +8,46 @@ use futures_core::Stream;
 use futures_util::{StreamExt, pin_mut};
 use sevenz_rust::{Password, SevenZReader, default_entry_extract_fn};
 use tokio::task;
+
+use crate::error::ObsBootstrapError;
+
 pub enum ExtractStatus {
-    Error(anyhow::Error),
+    Error(ObsBootstrapError),
     Progress(f32, String),
 }
 
 pub(crate) async fn extract_obs(
     archive_file: &Path,
-) -> anyhow::Result<impl Stream<Item = ExtractStatus>> {
+) -> Result<impl Stream<Item = ExtractStatus>, ObsBootstrapError> {
     log::info!("Extracting OBS at {}", archive_file.display());
 
     let path = PathBuf::from(archive_file);
 
-    let destination = current_exe()?;
+    let destination =
+        current_exe().map_err(|e| ObsBootstrapError::IoError("Getting current exe", e))?;
     let destination = destination
         .parent()
-        .ok_or_else(|| anyhow::anyhow!("Should be able to get parent of exe"))?
+        .ok_or_else(|| {
+            ObsBootstrapError::ExtractError("Should be able to get parent of exe".to_string())
+        })?
         .join("obs_new");
 
     //TODO delete old obs dlls and plugins
     let dest = destination.clone();
     let stream = stream! {
         yield Ok((0.0, "Reading file...".to_string()));
-        let mut sz = SevenZReader::open(&path, Password::empty())?;
+        let sz = SevenZReader::open(&path, Password::empty());
+        if let Err(e) = sz {
+            yield Err(ObsBootstrapError::ExtractError(e.to_string()));
+            return;
+        }
+        let mut sz = sz.unwrap();
         let (tx, mut rx) = tokio::sync::mpsc::channel(5);
 
         let total = sz.archive().files.len() as f32;
-        if !dest.exists() {
-            std::fs::create_dir_all(&dest)?;
+        if !dest.exists() && let Err(err) = std::fs::create_dir_all(&dest) {
+            yield Err(ObsBootstrapError::IoError("Failed to create destination directory", err));
+            return;
         }
 
         let mut curr = 0;
@@ -47,9 +59,9 @@ pub(crate) async fn extract_obs(
                 let dest_path = dest.join(entry.name());
 
                 default_entry_extract_fn(entry, reader, &dest_path)
-            })?;
+            }).map_err(|e| ObsBootstrapError::ExtractError(e.to_string()))?;
 
-            Result::<_, anyhow::Error>::Ok((1.0, "Extraction done".to_string()))
+            Result::<_, ObsBootstrapError>::Ok((1.0, "Extraction done".to_string()))
         });
 
         loop {
@@ -64,7 +76,7 @@ pub(crate) async fn extract_obs(
                     match res {
                         Ok(e) => yield e,
                         Err(e) => {
-                            yield Err(e.into());
+                            yield Err(ObsBootstrapError::ExtractError(e.to_string()));
                         }
                     }
 

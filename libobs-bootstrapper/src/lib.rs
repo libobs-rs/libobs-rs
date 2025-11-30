@@ -2,7 +2,6 @@
 
 use std::{env, path::PathBuf, process};
 
-use anyhow::Context;
 use async_stream::stream;
 use download::DownloadStatus;
 use extract::ExtractStatus;
@@ -40,7 +39,7 @@ pub enum BootstrapStatus {
 
     /// Extracting status (first is progress from 0.0 to 1.0 and second is message)
     Extracting(f32, String),
-    Error(anyhow::Error),
+    Error(ObsBootstrapError),
     /// The application must be restarted to use the new version of OBS.
     /// This is because the obs.dll file is in use by the application and can not be replaced while running.
     /// Therefore, the "updater" is spawned to watch for the application to exit and rename the "obs_new.dll" file to "obs.dll".
@@ -74,11 +73,17 @@ lazy_static! {
 
 pub const UPDATER_SCRIPT: &str = include_str!("./updater.ps1");
 
-fn get_obs_dll_path() -> anyhow::Result<PathBuf> {
-    let executable = env::current_exe()?;
+fn get_obs_dll_path() -> Result<PathBuf, ObsBootstrapError> {
+    let executable =
+        env::current_exe().map_err(|e| ObsBootstrapError::IoError("Getting current exe", e))?;
     let obs_dll = executable
         .parent()
-        .ok_or_else(|| anyhow::anyhow!("Failed to get parent directory"))?
+        .ok_or_else(|| {
+            ObsBootstrapError::IoError(
+                "Failed to get parent directory",
+                std::io::Error::from(std::io::ErrorKind::InvalidInput),
+            )
+        })?
         .join("obs.dll");
 
     Ok(obs_dll)
@@ -86,7 +91,7 @@ fn get_obs_dll_path() -> anyhow::Result<PathBuf> {
 
 pub(crate) fn bootstrap(
     options: &ObsBootstrapperOptions,
-) -> anyhow::Result<Option<impl Stream<Item = BootstrapStatus>>> {
+) -> Result<Option<impl Stream<Item = BootstrapStatus>>, ObsBootstrapError> {
     let repo = options.repository.to_string();
 
     log::trace!("Checking for update...");
@@ -129,7 +134,7 @@ pub(crate) fn bootstrap(
             }
         }
 
-        let archive_file = file.ok_or_else(|| anyhow::anyhow!("OBS Archive could not be downloaded."));
+        let archive_file = file.ok_or(ObsBootstrapError::InvalidState);
         if let Err(err) = archive_file {
             yield BootstrapStatus::Error(err);
             return;
@@ -168,7 +173,9 @@ pub(crate) fn bootstrap(
     }))
 }
 
-pub(crate) async fn spawn_updater(options: ObsBootstrapperOptions) -> anyhow::Result<()> {
+pub(crate) async fn spawn_updater(
+    options: ObsBootstrapperOptions,
+) -> Result<(), ObsBootstrapError> {
     let pid = process::id();
     let args = env::args().collect::<Vec<_>>();
     // Skip the first argument which is the executable path
@@ -177,12 +184,12 @@ pub(crate) async fn spawn_updater(options: ObsBootstrapperOptions) -> anyhow::Re
     let updater_path = env::temp_dir().join("libobs_updater.ps1");
     let mut updater_file = File::create(&updater_path)
         .await
-        .context("Creating updater script")?;
+        .map_err(|e| ObsBootstrapError::IoError("Creating updater script", e))?;
 
     updater_file
         .write_all(UPDATER_SCRIPT.as_bytes())
         .await
-        .context("Writing updater script")?;
+        .map_err(|e| ObsBootstrapError::IoError("Writing updater script", e))?;
 
     let mut command = Command::new("powershell");
     command
@@ -196,7 +203,12 @@ pub(crate) async fn spawn_updater(options: ObsBootstrapperOptions) -> anyhow::Re
         .arg("-processPid")
         .arg(pid.to_string())
         .arg("-binary")
-        .arg(env::current_exe()?.to_string_lossy().to_string());
+        .arg(
+            env::current_exe()
+                .map_err(|e| ObsBootstrapError::IoError("Getting current exe", e))?
+                .to_string_lossy()
+                .to_string(),
+        );
 
     if options.restart_after_update {
         command.arg("-restart");
@@ -211,7 +223,9 @@ pub(crate) async fn spawn_updater(options: ObsBootstrapperOptions) -> anyhow::Re
         command.arg(hex_str);
     }
 
-    command.spawn().context("Spawning updater process")?;
+    command
+        .spawn()
+        .map_err(|e| ObsBootstrapError::IoError("Spawning updater process", e))?;
 
     Ok(())
 }
@@ -241,9 +255,9 @@ impl ObsBootstrapper {
     ///
     /// # Errors
     ///
-    /// Returns an `Err` (anyhow) if there was an error locating the OBS DLL or
+    /// Returns an `Err(ObsBootstrapError)` if there was an error locating the OBS DLL or
     /// reading the installed version information.
-    pub fn is_valid_installation() -> anyhow::Result<bool> {
+    pub fn is_valid_installation() -> Result<bool, ObsBootstrapError> {
         let installed = version::get_installed_version(&get_obs_dll_path()?)?;
         Ok(installed.is_some())
     }
@@ -262,9 +276,9 @@ impl ObsBootstrapper {
     ///
     /// # Errors
     ///
-    /// Returns an `Err` (anyhow) if there was an error locating the OBS DLL or
+    /// Returns an `Err(ObsBootstrapError)` if there was an error locating the OBS DLL or
     /// determining the currently installed version or update necessity.
-    pub fn is_update_available() -> anyhow::Result<bool> {
+    pub fn is_update_available() -> Result<bool, ObsBootstrapError> {
         let installed = version::get_installed_version(&get_obs_dll_path()?)?;
         if installed.is_none() {
             return Ok(true);
@@ -295,7 +309,11 @@ impl ObsBootstrapper {
     pub async fn bootstrap(
         options: &options::ObsBootstrapperOptions,
     ) -> Result<ObsBootstrapperResult, ObsBootstrapError> {
-        ObsBootstrapper::bootstrap_with_handler(options, Box::new(ObsBootstrapConsoleHandler)).await
+        ObsBootstrapper::bootstrap_with_handler(
+            options,
+            Box::new(ObsBootstrapConsoleHandler::default()),
+        )
+        .await
     }
 
     /// Bootstraps OBS using the provided options and a custom status handler.
@@ -336,12 +354,11 @@ impl ObsBootstrapper {
     /// - the handler returns an error while handling a download or extraction
     ///   update (mapped respectively to `DownloadError` / `ExtractError`),
     /// - or when the bootstrap stream yields a general error.
-    pub async fn bootstrap_with_handler(
+    pub async fn bootstrap_with_handler<E: Send + Sync + 'static + std::error::Error>(
         options: &options::ObsBootstrapperOptions,
-        mut handler: Box<dyn ObsBootstrapStatusHandler>,
+        mut handler: Box<dyn ObsBootstrapStatusHandler<Error = E>>,
     ) -> Result<ObsBootstrapperResult, ObsBootstrapError> {
-        let stream =
-            bootstrap(options).map_err(|e| ObsBootstrapError::GeneralError(e.to_string()))?;
+        let stream = bootstrap(options)?;
 
         if let Some(stream) = stream {
             pin_mut!(stream);
@@ -352,15 +369,15 @@ impl ObsBootstrapper {
                     BootstrapStatus::Downloading(progress, message) => {
                         handler
                             .handle_downloading(progress, message)
-                            .map_err(|e| ObsBootstrapError::DownloadError(e.to_string()))?;
+                            .map_err(|e| ObsBootstrapError::Abort(Box::new(e)))?;
                     }
                     BootstrapStatus::Extracting(progress, message) => {
                         handler
                             .handle_extraction(progress, message)
-                            .map_err(|e| ObsBootstrapError::ExtractError(e.to_string()))?;
+                            .map_err(|e| ObsBootstrapError::Abort(Box::new(e)))?;
                     }
                     BootstrapStatus::Error(err) => {
-                        return Err(ObsBootstrapError::GeneralError(err.to_string()));
+                        return Err(err);
                     }
                     BootstrapStatus::RestartRequired => {
                         return Ok(ObsBootstrapperResult::Restart);

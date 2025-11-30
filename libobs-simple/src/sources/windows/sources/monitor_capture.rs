@@ -3,6 +3,7 @@
 
 use super::ObsDisplayCaptureMethod;
 use crate::define_object_manager;
+use crate::error::ObsSimpleError;
 /// Note: This does not update the capture method directly, instead the capture method gets
 /// stored in the struct. The capture method is being set to WGC at first, then the source is created and then the capture method is updated to the desired method.
 use display_info::DisplayInfo;
@@ -43,8 +44,12 @@ define_object_manager!(
 #[obs_object_impl]
 impl MonitorCaptureSource {
     /// Gets all available monitors
-    pub fn get_monitors() -> anyhow::Result<Vec<Sendable<DisplayInfo>>> {
-        Ok(DisplayInfo::all()?.into_iter().map(Sendable).collect())
+    pub fn get_monitors() -> Result<Vec<Sendable<DisplayInfo>>, ObsSimpleError> {
+        Ok(DisplayInfo::all()
+            .map_err(ObsSimpleError::DisplayInfoError)?
+            .into_iter()
+            .map(Sendable)
+            .collect())
     }
 
     pub fn set_monitor(self, monitor: &Sendable<DisplayInfo>) -> Self {

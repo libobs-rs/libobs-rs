@@ -1,7 +1,7 @@
 use crate::define_object_manager;
 
 use super::{ObsWindowCaptureMethod, ObsWindowPriority};
-use anyhow::bail;
+use crate::error::ObsSimpleError;
 use libobs_simple_macro::obs_object_impl;
 #[cfg(feature = "window-list")]
 use libobs_window_helper::{get_all_windows, WindowInfo, WindowSearchMode};
@@ -72,8 +72,9 @@ impl WindowCaptureSource {
     /// Gets a list of windows that can be captured by this source.
     pub fn get_windows(
         mode: WindowSearchMode,
-    ) -> anyhow::Result<Vec<libobs_wrapper::unsafe_send::Sendable<WindowInfo>>> {
-        Ok(get_all_windows(mode)?
+    ) -> Result<Vec<libobs_wrapper::unsafe_send::Sendable<WindowInfo>>, ObsSimpleError> {
+        Ok(get_all_windows(mode)
+            .map_err(ObsSimpleError::WindowHelperError)?
             .into_iter()
             .map(libobs_wrapper::unsafe_send::Sendable)
             .collect())
@@ -112,11 +113,13 @@ impl WindowCaptureSourceBuilder {
 
 #[obs_object_impl]
 impl WindowCaptureSource {
-    pub fn set_capture_audio(mut self, capture_audio: bool) -> anyhow::Result<Self> {
+    pub fn set_capture_audio(mut self, capture_audio: bool) -> Result<Self, ObsSimpleError> {
         use crate::sources::windows::audio_capture_available;
 
         if capture_audio && !audio_capture_available() {
-            bail!("Game Audio Capture is not available on this system");
+            return Err(ObsSimpleError::FeatureNotAvailable(
+                "Game Audio Capture is not available on this system",
+            ));
         }
 
         self.get_settings_updater()

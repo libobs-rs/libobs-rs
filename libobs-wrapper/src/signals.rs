@@ -37,15 +37,15 @@ macro_rules! __signals_impl_primitive_handler {
             );
 
             if !success {
-                return Err(anyhow::anyhow!(
-                    "Failed to get {} from calldata",
-                    stringify!($field_name)
+                return Err($crate::utils::ObsError::SignalDataError(
+                    format!("Failed to get {} from calldata", stringify!($field_name))
                 ));
             }
 
-            let $field_name = std::ffi::CStr::from_ptr($field_name).to_str()?;
+            let $field_name = std::ffi::CStr::from_ptr($field_name).to_str()
+                .map_err(|_| $crate::utils::ObsError::StringConversionError)?;
 
-            Result::<_, anyhow::Error>::Ok($field_name.to_owned())
+            Result::<_, $crate::utils::ObsError>::Ok($field_name.to_owned())
         }
     };
 
@@ -64,13 +64,12 @@ macro_rules! __signals_impl_primitive_handler {
             );
 
             if !success {
-                return Err(anyhow::anyhow!(
-                    "Failed to get {} from calldata",
-                    stringify!($field_name)
+                return Err($crate::utils::ObsError::SignalDataError(
+                    format!("Failed to get {} from calldata", stringify!($field_name))
                 ));
             }
 
-            Result::<_, anyhow::Error>::Ok($field_name)
+            Result::<_, $crate::utils::ObsError>::Ok($field_name)
         }
     };
     (__ptr, $field_name: ident, $field_type: ty) => {
@@ -85,13 +84,12 @@ macro_rules! __signals_impl_primitive_handler {
             );
 
             if !success {
-                return Err(anyhow::anyhow!(
-                    "Failed to get {} from calldata",
-                    stringify!($field_name)
+                return Err($crate::utils::ObsError::SignalDataError(
+                    format!("Failed to get {} from calldata", stringify!($field_name))
                 ));
             }
 
-            Result::<_, anyhow::Error>::Ok($crate::unsafe_send::Sendable($field_name))
+            Result::<_, $crate::utils::ObsError>::Ok($crate::unsafe_send::Sendable($field_name))
         }
     };
     (__enum $field_name: ident, $enum_type: ty) => {
@@ -99,10 +97,12 @@ macro_rules! __signals_impl_primitive_handler {
             let code = $crate::__signals_impl_primitive_handler!(__inner, $field_name, i64)(__internal_calldata)?;
             let en = <$enum_type>::try_from(code as i32);
             if let Err(e) = en {
-                anyhow::bail!("Failed to convert code to {}: {}", stringify!($field_name), e);
+                return Err($crate::utils::ObsError::EnumConversionError(
+                    format!("Failed to convert code to {}: {}", stringify!($field_name), e)
+                ));
             }
 
-            Result::<_, anyhow::Error>::Ok(en.unwrap())
+            Result::<_, $crate::utils::ObsError>::Ok(en.unwrap())
         }
     }
 }
@@ -117,7 +117,7 @@ macro_rules! __signals_impl_signal {
                 static ref [<$signal_name:snake:upper _SENDERS>]: std::sync::Arc<std::sync::RwLock<std::collections::HashMap<$crate::unsafe_send::SendableComp<$ptr>, tokio::sync::broadcast::Sender<$gen_type>>>> = std::sync::Arc::new(std::sync::RwLock::new(std::collections::HashMap::new()));
             }
 
-            unsafe fn [< $signal_name:snake _handler_inner>](cd: *mut libobs::calldata_t) -> anyhow::Result<$gen_type> {
+            unsafe fn [< $signal_name:snake _handler_inner>](cd: *mut libobs::calldata_t) -> Result<$gen_type, $crate::utils::ObsError> {
                 let e = $crate::__signals_impl_primitive_handler!($field_name, $gen_type)(cd);
 
                 e
@@ -132,7 +132,7 @@ macro_rules! __signals_impl_signal {
                 static ref [<$signal_name:snake:upper _SENDERS>]: std::sync::Arc<std::sync::RwLock<std::collections::HashMap<$crate::unsafe_send::SendableComp<$ptr>, tokio::sync::broadcast::Sender<()>>>> = std::sync::Arc::new(std::sync::RwLock::new(std::collections::HashMap::new()));
             }
 
-            unsafe fn [< $signal_name:snake _handler_inner>](_cd: *mut libobs::calldata_t) -> anyhow::Result<()> {
+            unsafe fn [< $signal_name:snake _handler_inner>](_cd: *mut libobs::calldata_t) -> Result<(), $crate::utils::ObsError> {
                 Ok(())
             }
         }
@@ -171,7 +171,7 @@ macro_rules! __signals_impl_signal {
                 $(pub $ptr_field_name: $crate::unsafe_send::Sendable<$ptr_field_type>,)*
             }
 
-            unsafe fn [< $signal_name:snake _handler_inner>](cd: *mut libobs::calldata_t) -> anyhow::Result<$name> {
+            unsafe fn [< $signal_name:snake _handler_inner>](cd: *mut libobs::calldata_t) -> Result<$name, $crate::utils::ObsError> {
                 $(
                     let $field_name = $crate::__signals_impl_primitive_handler!($field_name, $field_type)(cd)?;
                 )*
