@@ -89,9 +89,7 @@ pub fn fetch_release(
     println!("cargo:warning=-- WARNING --");
     println!("cargo:warning=Using mock GitHub responses! This is only for testing purposes.");
     println!("cargo:warning=-- WARNING --");
-    let body = include_str!(
-        "../mock_responses/obs_studio_release_latest.json"
-    );
+    let body = include_str!("../mock_responses/obs_studio_release_latest.json");
     let body: Value = serde_json::from_str(&body)?;
     parse_release_info(&body)
 }
@@ -213,8 +211,7 @@ pub fn fetch_latest_patch_release(
     println!("cargo:warning=-- WARNING --");
     println!("cargo:warning=Using mock GitHub responses! This is only for testing purposes.");
     println!("cargo:warning=-- WARNING --");
-    let body =
-        include_str!("../mock_responses/obs_studio_release.json");
+    let body = include_str!("../mock_responses/obs_studio_release.json");
     let arr: Vec<Value> = serde_json::from_str(&body)?;
     parse_releases_for_latest_patch(&arr, major, minor)
 }

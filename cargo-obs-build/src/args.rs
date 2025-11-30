@@ -80,5 +80,5 @@ pub struct InstallArgs {
 
     /// If set to true, skips the confirmation prompt
     #[arg(long, default_value_t = false)]
-    pub yes: bool
+    pub yes: bool,
 }

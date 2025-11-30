@@ -30,7 +30,7 @@ pub(crate) async fn download_obs(
     #[cfg(not(feature = "__mock_github_responses"))]
     let releases_url = format!("https://api.github.com/repos/{}/releases", _repo);
     #[cfg(not(feature = "__mock_github_responses"))]
-    let releases: github_types::Root =  client
+    let releases: github_types::Root = client
         .get(&releases_url)
         .send()
         .await
