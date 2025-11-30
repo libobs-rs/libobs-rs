@@ -17,15 +17,16 @@ pub fn get_installed_version(obs_dll: &Path) -> Result<Option<String>, ObsBootst
 
     log::trace!("Getting obs.dll version string");
     unsafe {
-        let lib = Library::new(obs_dll).map_err(|e| ObsBootstrapError::IoError(e.to_string()))?;
+        let lib = Library::new(obs_dll)
+            .map_err(|e| ObsBootstrapError::LibLoadingError("Opening library", e))?;
         let get_version: libloading::Symbol<GetVersionFunc> = lib
             .get(b"obs_get_version_string")
-            .map_err(|e| ObsBootstrapError::IoError(e.to_string()))?;
+            .map_err(|e| ObsBootstrapError::LibLoadingError("Getting version string", e))?;
         let version = get_version();
 
         if version.is_null() {
             lib.close()
-                .map_err(|e| ObsBootstrapError::IoError(e.to_string()))?;
+                .map_err(|e| ObsBootstrapError::LibLoadingError("Closing lib", e))?;
             log::trace!("obs.dll does not have a version string");
             return Ok(None);
         }
@@ -33,7 +34,7 @@ pub fn get_installed_version(obs_dll: &Path) -> Result<Option<String>, ObsBootst
         let version_str = std::ffi::CStr::from_ptr(version).to_str();
         if version_str.is_err() {
             lib.close()
-                .map_err(|e| ObsBootstrapError::IoError(e.to_string()))?;
+                .map_err(|e| ObsBootstrapError::LibLoadingError("Closing lib", e))?;
             log::trace!(
                 "obs.dll version string is not valid UTF-8: {}",
                 version_str.err().unwrap()
@@ -42,7 +43,7 @@ pub fn get_installed_version(obs_dll: &Path) -> Result<Option<String>, ObsBootst
         }
 
         lib.close()
-            .map_err(|e| ObsBootstrapError::IoError(e.to_string()))?;
+            .map_err(|e| ObsBootstrapError::LibLoadingError("Closing lib", e))?;
 
         let version_str = version_str
             .map_err(|e| ObsBootstrapError::VersionError(e.to_string()))?

@@ -23,7 +23,8 @@ pub(crate) async fn extract_obs(
 
     let path = PathBuf::from(archive_file);
 
-    let destination = current_exe().map_err(|e| ObsBootstrapError::IoError(e.to_string()))?;
+    let destination =
+        current_exe().map_err(|e| ObsBootstrapError::IoError("Getting current exe", e))?;
     let destination = destination
         .parent()
         .ok_or_else(|| {
@@ -44,8 +45,8 @@ pub(crate) async fn extract_obs(
         let (tx, mut rx) = tokio::sync::mpsc::channel(5);
 
         let total = sz.archive().files.len() as f32;
-        if !dest.exists() && std::fs::create_dir_all(&dest).is_err() {
-            yield Err(ObsBootstrapError::IoError("Failed to create destination directory".to_string()));
+        if !dest.exists() && let Err(err) = std::fs::create_dir_all(&dest) {
+            yield Err(ObsBootstrapError::IoError("Failed to create destination directory", err));
             return;
         }
 

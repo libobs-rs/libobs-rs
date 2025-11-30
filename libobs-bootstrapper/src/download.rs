@@ -91,7 +91,7 @@ pub(crate) async fn download_obs(
         .join(format!("{}.7z", Uuid::new_v4()));
     let mut tmp_file = File::create_new(&path)
         .await
-        .map_err(|e| ObsBootstrapError::IoError(format!("Creating temporary file: {}", e)))?;
+        .map_err(|e| ObsBootstrapError::IoError("Creating temporary file", e))?;
 
     let mut curr_len = 0;
     let mut hasher = Sha256::new();
@@ -106,7 +106,7 @@ pub(crate) async fn download_obs(
 
             let chunk = chunk.unwrap();
             hasher.update(&chunk);
-            let r = tmp_file.write_all(&chunk).await.map_err(|e| ObsBootstrapError::IoError(format!("Writing to temporary file: {}", e)));
+            let r = tmp_file.write_all(&chunk).await.map_err(|e| ObsBootstrapError::IoError("Writing to temporary file", e));
             if let Err(e) = r {
                 yield DownloadStatus::Error(e);
                 return;

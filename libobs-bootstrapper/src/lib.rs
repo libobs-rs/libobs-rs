@@ -74,10 +74,16 @@ lazy_static! {
 pub const UPDATER_SCRIPT: &str = include_str!("./updater.ps1");
 
 fn get_obs_dll_path() -> Result<PathBuf, ObsBootstrapError> {
-    let executable = env::current_exe().map_err(|e| ObsBootstrapError::IoError(e.to_string()))?;
+    let executable =
+        env::current_exe().map_err(|e| ObsBootstrapError::IoError("Getting current exe", e))?;
     let obs_dll = executable
         .parent()
-        .ok_or_else(|| ObsBootstrapError::IoError("Failed to get parent directory".to_string()))?
+        .ok_or_else(|| {
+            ObsBootstrapError::IoError(
+                "Failed to get parent directory",
+                std::io::Error::from(std::io::ErrorKind::InvalidInput),
+            )
+        })?
         .join("obs.dll");
 
     Ok(obs_dll)
@@ -178,12 +184,12 @@ pub(crate) async fn spawn_updater(
     let updater_path = env::temp_dir().join("libobs_updater.ps1");
     let mut updater_file = File::create(&updater_path)
         .await
-        .map_err(|e| ObsBootstrapError::IoError(format!("Creating updater script: {}", e)))?;
+        .map_err(|e| ObsBootstrapError::IoError("Creating updater script", e))?;
 
     updater_file
         .write_all(UPDATER_SCRIPT.as_bytes())
         .await
-        .map_err(|e| ObsBootstrapError::IoError(format!("Writing updater script: {}", e)))?;
+        .map_err(|e| ObsBootstrapError::IoError("Writing updater script", e))?;
 
     let mut command = Command::new("powershell");
     command
@@ -199,7 +205,7 @@ pub(crate) async fn spawn_updater(
         .arg("-binary")
         .arg(
             env::current_exe()
-                .map_err(|e| ObsBootstrapError::IoError(e.to_string()))?
+                .map_err(|e| ObsBootstrapError::IoError("Getting current exe", e))?
                 .to_string_lossy()
                 .to_string(),
         );
@@ -219,7 +225,7 @@ pub(crate) async fn spawn_updater(
 
     command
         .spawn()
-        .map_err(|e| ObsBootstrapError::IoError(format!("Spawning updater process: {}", e)))?;
+        .map_err(|e| ObsBootstrapError::IoError("Spawning updater process", e))?;
 
     Ok(())
 }

@@ -5,7 +5,9 @@ pub enum ObsBootstrapError {
     /// Contains context and specific reqwest error
     DownloadError(&'static str, reqwest::Error),
     ExtractError(String),
-    IoError(String),
+    /// Contains context and specific io error
+    IoError(&'static str, std::io::Error),
+    LibLoadingError(&'static str, libloading::Error),
     VersionError(String),
     /// This error indicates that the downloaded file's hash did not match the expected hash
     HashMismatchError,
@@ -23,7 +25,7 @@ impl std::fmt::Display for ObsBootstrapError {
                 write!(f, "Bootstrapper download error: {:?} ({:?})", context, e)
             }
             ObsBootstrapError::ExtractError(e) => write!(f, "Bootstrapper extract error: {:?}", e),
-            ObsBootstrapError::IoError(e) => write!(f, "Bootstrapper I/O error: {:?}", e),
+            ObsBootstrapError::IoError(context, error) => write!(f, "{}: {:?}", context, error),
             ObsBootstrapError::VersionError(e) => write!(f, "Version error: {:?}", e),
             ObsBootstrapError::InvalidFormatError(e) => write!(f, "Invalid format error: {:?}", e),
             ObsBootstrapError::HashMismatchError => write!(
@@ -36,6 +38,9 @@ impl std::fmt::Display for ObsBootstrapError {
             ),
             ObsBootstrapError::Abort(e) => {
                 write!(f, "Operation aborted by status handler: {:?}", e)
+            }
+            ObsBootstrapError::LibLoadingError(context, e) => {
+                write!(f, "Library loading error: {}: {:?}", context, e)
             }
         }
     }
