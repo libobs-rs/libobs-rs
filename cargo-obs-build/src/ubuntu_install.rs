@@ -25,6 +25,11 @@ pub fn linux_obs_system_install(opts: InstallArgs) -> anyhow::Result<()> {
         "OBS_GIT_REPO",
         format!("https://github.com/{}.git", opts.repo_id),
     );
+
+    if opts.yes {
+        cmd.env("CARGO_OBS_BUILD_YES", "1");
+    }
+
     if let Some(tag) = &tag {
         cmd.env("OBS_BUILD_TAG", tag);
     }

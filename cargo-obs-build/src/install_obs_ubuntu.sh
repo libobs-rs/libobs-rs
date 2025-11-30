@@ -5,11 +5,15 @@ set -e
 echo "Performing System-wide Installation of OBS Studio on Ubuntu/Linux..."
 echo "Make sure there is no existing OBS Studio installation via apt or other package managers."
 
-echo "Do you want to continue? (y/n)"
-read -r answer
-if [[ "$answer" != "y" ]]; then
-    echo "Aborting installation."
-    exit 1
+if [[ -n "${CARGO_OBS_BUILD_YES:-}" ]]; then
+    echo "CARGO_OBS_BUILD_YES is set; continuing without prompt."
+else
+    echo "Do you want to continue? (y/n)"
+    read -r answer
+    if [[ "$answer" != "y" ]]; then
+        echo "Aborting installation."
+        exit 1
+    fi
 fi
 
 echo "Installing OBS Studio system dependencies for Linux..."

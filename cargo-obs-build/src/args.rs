@@ -77,4 +77,7 @@ pub struct InstallArgs {
     /// Use `latest` for the latest obs release. If a version in the `workspace.metadata` is set, that version will be used.
     #[arg(short, long)]
     pub tag: Option<String>,
+
+    /// If set to true, skips the confirmation prompt
+    pub yes: bool
 }
