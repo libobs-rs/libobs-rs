@@ -114,6 +114,9 @@ jobs:
           
           echo "PKG_CONFIG_PATH=$PKG_CONFIG_PATH" >> $GITHUB_ENV
           echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH" >> $GITHUB_ENV
+          
+          # Set RUSTFLAGS to include library search paths
+          echo "RUSTFLAGS=-L ${{ github.workspace }}/obs-install/lib -L ${{ github.workspace }}/obs-install/lib/x86_64-linux-gnu" >> $GITHUB_ENV
 
           # Verify OBS installation
           echo "=== OBS Installation Verification ==="
