@@ -43,7 +43,7 @@ glib = "0.21.4"
 libloading = "0.9.0"
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.62.0", features = [
+windows = { version = "0.62.2", features = [
     "Win32_Foundation",
     "Win32_Graphics_Dwm",
     "Win32_Graphics_Gdi",

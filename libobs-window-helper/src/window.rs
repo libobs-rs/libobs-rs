@@ -68,7 +68,7 @@ pub fn get_exe(handle: HWND) -> Result<(u32, PathBuf), WindowHelperError> {
         if res > 0 {
             Ok::<String, WindowHelperError>(path.as_ref().to_utf8())
         } else {
-            Err(Error::from_win32().into())
+            Err(Error::from_thread().into())
         }
     }?;
 
@@ -82,7 +82,7 @@ pub fn get_exe(handle: HWND) -> Result<(u32, PathBuf), WindowHelperError> {
 pub fn get_title(handle: HWND) -> Result<String, WindowHelperError> {
     let len = unsafe { GetWindowTextLengthW(handle) };
     if len == 0 {
-        return Err(Error::from_win32().into());
+        return Err(Error::from_thread().into());
     }
 
     let len = TryInto::<usize>::try_into(len)?;
@@ -90,7 +90,7 @@ pub fn get_title(handle: HWND) -> Result<String, WindowHelperError> {
     let mut title = vec![0_u16; len + 1];
     let get_title_res = unsafe { GetWindowTextW(handle, &mut title) };
     if get_title_res == 0 {
-        return Err(Error::from_win32().into());
+        return Err(Error::from_thread().into());
     }
 
     Ok(title.to_utf8())
@@ -101,7 +101,7 @@ pub fn get_window_class(handle: HWND) -> Result<String, WindowHelperError> {
 
     let len = unsafe { GetClassNameW(handle, &mut class) };
     if len == 0 {
-        return Err(Error::from_win32().into());
+        return Err(Error::from_thread().into());
     }
 
     Ok(class.as_ref().to_utf8())
@@ -114,7 +114,7 @@ pub fn get_product_name(full_exe: &Path) -> Result<String, WindowHelperError> {
     let required_buffer_size =
         unsafe { GetFileVersionInfoSizeExW(FILE_VER_GET_NEUTRAL, &exe_wide, &mut dummy) };
     if required_buffer_size == 0 {
-        return Err(Error::from_win32().into());
+        return Err(Error::from_thread().into());
     }
 
     let mut buffer: Vec<u16> = vec![0; required_buffer_size as usize];
@@ -167,7 +167,7 @@ pub fn hwnd_to_monitor(handle: HWND) -> Result<HMONITOR, WindowHelperError> {
     unsafe {
         let res = MonitorFromWindow(handle, MONITOR_DEFAULTTONEAREST);
         if res.is_invalid() {
-            return Err(Error::from_win32().into());
+            return Err(Error::from_thread().into());
         }
 
         Ok(res)
@@ -197,7 +197,7 @@ pub fn get_command_line_args(wnd: HWND) -> Result<String, WindowHelperError> {
     };
 
     if handle.is_invalid() {
-        return Err(Error::from_win32().into());
+        return Err(Error::from_thread().into());
     }
 
     let res = unsafe { get_command_line_args_priv(handle) };
