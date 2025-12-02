@@ -31,13 +31,8 @@ jobs:
         id: obs-cache
         with:
           path: |
-            /usr/lib/libobs*
-            /usr/lib/x86_64-linux-gnu/libobs*
-            /usr/lib/pkgconfig/libobs.pc
-            /usr/lib/x86_64-linux-gnu/pkgconfig/libobs.pc
-            /usr/include/obs
-            /usr/share/obs
-          key: ${{ runner.os }}-obs-studio-${{ hashFiles('.github/workflows/validation.yml') }}-v2
+            ${{ github.workspace }}/obs-install
+          key: ${{ runner.os }}-obs-studio-${{ hashFiles('.github/workflows/validation.yml') }}-v3
           restore-keys: |
             ${{ runner.os }}-obs-studio-
 
@@ -68,16 +63,16 @@ jobs:
           git checkout $LATEST_TAG
           git submodule update --init --recursive
 
-          # Configure build with CMAKE_INSTALL_PREFIX=/usr
+          # Configure build with CMAKE_INSTALL_PREFIX to workspace directory
           cmake --preset ubuntu \
-            -DCMAKE_INSTALL_PREFIX=/usr \
+            -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/obs-install \
             -DENABLE_BROWSER=OFF
 
           # Build OBS Studio
           cmake --build build_ubuntu --parallel $(nproc)
 
-          # Install OBS Studio to /usr
-          sudo cmake --install build_ubuntu
+          # Install OBS Studio to local directory
+          cmake --install build_ubuntu
 
       - name: Install cargo-obs-build from crates.io
         uses: baptiste0928/cargo-install@v3
@@ -113,13 +108,13 @@ jobs:
       - name: Set up OBS environment for Linux
         if: matrix.os == 'ubuntu-latest'
         run: |
-          # Update pkg-config path to include OBS libraries
-          echo "PKG_CONFIG_PATH=/usr/lib/pkgconfig:/usr/lib/x86_64-linux-gnu/pkgconfig:$PKG_CONFIG_PATH" >> $GITHUB_ENV
-          echo "LD_LIBRARY_PATH=/usr/lib:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH" >> $GITHUB_ENV
+          # Update pkg-config path to include OBS libraries from workspace install
+          echo "PKG_CONFIG_PATH=${{ github.workspace }}/obs-install/lib/pkgconfig:${{ github.workspace }}/obs-install/lib/x86_64-linux-gnu/pkgconfig:$PKG_CONFIG_PATH" >> $GITHUB_ENV
+          echo "LD_LIBRARY_PATH=${{ github.workspace }}/obs-install/lib:${{ github.workspace }}/obs-install/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH" >> $GITHUB_ENV
 
           # Verify OBS installation
           echo "=== OBS Installation Verification ==="
-          if [ -f "/usr/lib/pkgconfig/libobs.pc" ] || [ -f "/usr/lib/x86_64-linux-gnu/pkgconfig/libobs.pc" ]; then
+          if [ -f "${{ github.workspace }}/obs-install/lib/pkgconfig/libobs.pc" ] || [ -f "${{ github.workspace }}/obs-install/lib/x86_64-linux-gnu/pkgconfig/libobs.pc" ]; then
             echo "✓ OBS Studio pkg-config file found"
             if pkg-config --exists libobs; then
               echo "✓ libobs pkg-config validation passed"
@@ -133,9 +128,9 @@ jobs:
           else
             echo "✗ libobs.pc not found in expected locations"
             echo "Searching for libobs.pc..."
-            find /usr -name "libobs.pc" 2>/dev/null || echo "libobs.pc not found anywhere in /usr"
+            find ${{ github.workspace }}/obs-install -name "libobs.pc" 2>/dev/null || echo "libobs.pc not found in obs-install"
             echo "Available .pc files:"
-            find /usr -name "*.pc" -path "*/pkgconfig/*" | grep -i obs || echo "No OBS-related .pc files found"
+            find ${{ github.workspace }}/obs-install -name "*.pc" -path "*/pkgconfig/*" | grep -i obs || echo "No OBS-related .pc files found"
             exit 1
           fi
           echo "======================================"
