@@ -111,10 +111,10 @@ jobs:
           # Export environment variables for this session and save for future steps
           export PKG_CONFIG_PATH="${{ github.workspace }}/obs-install/lib/pkgconfig:${{ github.workspace }}/obs-install/lib/x86_64-linux-gnu/pkgconfig:$PKG_CONFIG_PATH"
           export LD_LIBRARY_PATH="${{ github.workspace }}/obs-install/lib:${{ github.workspace }}/obs-install/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH"
-          
+
           echo "PKG_CONFIG_PATH=$PKG_CONFIG_PATH" >> $GITHUB_ENV
           echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH" >> $GITHUB_ENV
-          
+
           # Set RUSTFLAGS to include library search paths
           echo "RUSTFLAGS=-L ${{ github.workspace }}/obs-install/lib -L ${{ github.workspace }}/obs-install/lib/x86_64-linux-gnu" >> $GITHUB_ENV
 
