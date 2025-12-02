@@ -126,7 +126,7 @@ pub fn get_thread_proc_id(wnd: HWND) -> WinResult<ProcessInfo> {
 
     let thread_id = unsafe { GetWindowThreadProcessId(wnd, Some(&mut proc_id)) };
     if thread_id == 0 {
-        return Err(Error::from_win32());
+        return Err(Error::from_thread());
     }
 
     Ok(ProcessInfo {
