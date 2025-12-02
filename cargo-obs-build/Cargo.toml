@@ -23,7 +23,7 @@ anyhow = { version = "1.0.100", features = ["backtrace"] }
 cargo_metadata = { version = "0.23.0" }
 hex = "0.4.3"
 http_req = "0.14.1"
-indicatif = { version = "0.18.2", optional = true}
+indicatif = { version = "0.18.3", optional = true}
 log = "0.4.28"
 process_alive = "0.2.0"
 regex = { version = "1.12.2" }
