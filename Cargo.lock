@@ -1869,7 +1869,6 @@ dependencies = [
 name = "libobs-simple"
 version = "6.0.0+32.0.2"
 dependencies = [
- "anyhow",
  "display-info",
  "env_logger",
  "ffmpeg-sidecar",
