@@ -42,7 +42,7 @@ serde_json = "1"
 libobs-wrapper = { workspace = true, features = ["__test_environment"], default-features = false}
 winit = "0.30.12"
 tokio = { version = "1", features = ["rt", "macros"] }
-ffmpeg-sidecar = "2.2"
+ffmpeg-sidecar = "2.4"
 
 [package.metadata.docs.rs]
 targets = ["x86_64-pc-windows-msvc"]
