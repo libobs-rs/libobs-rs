@@ -27,23 +27,52 @@
             overlays = [(import rust-overlay)];
           };
 
-        packages.default = pkgs.stdenv.mkDerivation {
-          pname = "libobs-rs";
-          version = "3.0.0";
+        # No Nix package output needed; we use devShell for local development.
 
-          src = ./.;
-
-          LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
-          LD_LIBRARY_PATH = "${pkgs.obs-studio}/lib";
-
-          buildInputs = with pkgs; [
+        # Development shell for running examples via `nix develop`
+        devShells.default = pkgs.mkShell {
+          packages = with pkgs; [
             clang
             openssl
             pkg-config
             rust-bin.stable.latest.default
             obs-studio
             simde
+            glib
+            xorg.libX11
+            wayland
+            wayland-protocols
+            egl-wayland
+            libxkbcommon
+            libglvnd
+            mesa
+            libxcb-util
+            cargo-hack
+            cargo-nextest
           ];
+
+          shellHook = ''
+            # Ensure libEGL/libGL can locate vendor and drivers under Nix store
+            export LIBGL_DRIVERS_PATH=${pkgs.mesa}/lib/dri
+            export GBM_DRIVERS_PATH=${pkgs.mesa}/lib/dri
+
+            # Bindgen/libclang path so headers can be parsed properly
+            export LIBCLANG_PATH=${pkgs.llvmPackages.libclang.lib}/lib
+
+            # Make GLVND vendor JSON discoverable for libEGL/libGL
+            if [ -n "$XDG_DATA_DIRS" ]; then
+              export XDG_DATA_DIRS=${pkgs.libglvnd}/share:${pkgs.wayland}/share:$XDG_DATA_DIRS
+            else
+              export XDG_DATA_DIRS=${pkgs.libglvnd}/share:${pkgs.wayland}/share
+            fi
+
+            # Help dynamic linker find core libs in the dev shell
+            if [ -n "$LD_LIBRARY_PATH" ]; then
+              export LD_LIBRARY_PATH=${pkgs.libglvnd}/lib:${pkgs.mesa}/lib:${pkgs.wayland}/lib:${pkgs.libxkbcommon}/lib:${pkgs.obs-studio}/lib:${pkgs.xorg.libX11}/lib:${pkgs.glib}/lib:${pkgs.simde}/lib:${pkgs.stdenv.cc.cc.lib}/lib:$LD_LIBRARY_PATH
+            else
+              export LD_LIBRARY_PATH=${pkgs.libglvnd}/lib:${pkgs.mesa}/lib:${pkgs.wayland}/lib:${pkgs.libxkbcommon}/lib:${pkgs.obs-studio}/lib:${pkgs.xorg.libX11}/lib:${pkgs.glib}/lib:${pkgs.simde}/lib:${pkgs.stdenv.cc.cc.lib}/lib
+            fi
+          '';
         };
       };
 

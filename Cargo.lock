@@ -1875,7 +1875,7 @@ dependencies = [
 
 [[package]]
 name = "libobs-wrapper"
-version = "7.0.3+32.0.2"
+version = "7.0.4+32.0.2"
 dependencies = [
  "arboard",
  "chrono",

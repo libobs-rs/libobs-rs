@@ -16,11 +16,17 @@ use crate::utils::linux::{wl_display_disconnect, XCloseDisplay};
 pub(crate) struct PlatformSpecificGuard {
     display: Sendable<*mut std::os::raw::c_void>,
     platform: PlatformType,
+    /// Whether the guard owns the display connection and should close it on drop
+    owned: bool,
 }
 
 impl Drop for PlatformSpecificGuard {
     fn drop(&mut self) {
         unsafe {
+            if !self.owned {
+                // Display connection was provided by the caller (e.g. winit); do not close it.
+                return;
+            }
             match self.platform {
                 PlatformType::X11 => {
                     let result = XCloseDisplay(self.display.0);
@@ -50,14 +56,17 @@ pub(crate) fn platform_specific_setup(
     display: Option<NixDisplay>,
 ) -> Result<Option<Arc<PlatformSpecificGuard>>, ObsError> {
     let mut display_ptr = None;
+    let mut owned = true;
 
     let platform_type = match display {
         Some(NixDisplay::X11(e)) => {
             display_ptr = Some(e);
+            owned = false;
             PlatformType::X11
         }
         Some(NixDisplay::Wayland(e)) => {
             display_ptr = Some(e);
+            owned = false;
             PlatformType::Wayland
         }
         None => {
@@ -103,6 +112,7 @@ pub(crate) fn platform_specific_setup(
                 Ok(Some(Arc::new(PlatformSpecificGuard {
                     display: Sendable(display),
                     platform: PlatformType::X11,
+                    owned,
                 })))
             }
             PlatformType::Wayland => {
@@ -136,6 +146,7 @@ pub(crate) fn platform_specific_setup(
                 Ok(Some(Arc::new(PlatformSpecificGuard {
                     display: Sendable(display),
                     platform: PlatformType::Wayland,
+                    owned,
                 })))
             }
         }
