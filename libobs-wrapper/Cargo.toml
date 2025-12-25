@@ -38,18 +38,9 @@ duplicate = "2"
 tokio = { workspace = true, default-features = false, features = ["sync"] }
 libc = "0.2"
 
-# Transitive dependency
-cfg-if = "1.0"
-dirs = "2.0.2"
-dirs-sys = "0.3.7"
-
 [target.'cfg(target_os="linux")'.dependencies]
-futures-channel = "0.3.17"  # Minimum version for glib compatibility
 glib = "0.21"
 libloading = { workspace = true }
-
-[target.'cfg(target_os="linux")'.build-dependencies]
-system-deps = "7.0.3"  # Pin minimum version to avoid field name issues
 
 [target.'cfg(windows)'.dependencies]
 windows = { workspace = true, features = [

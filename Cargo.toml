@@ -50,11 +50,6 @@ num-traits = "0.2"
 winit = "0.30"
 windows = "0.62"
 
-# Transitive dependency
-system-deps = "7.0.3"
-cfg-if = "1.0"
-dirs-sys = "0.3.5"
-
 
 [workspace.lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage,coverage_nightly)'] }
