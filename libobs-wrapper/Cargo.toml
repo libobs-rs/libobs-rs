@@ -41,7 +41,7 @@ libc = "0.2"
 # Transitive dependency
 cfg-if = "1.0"
 dirs = "2.0.2"
-dirs-sys = "0.3.7"
+dirs-sys = "0.5.0"
 
 [target.'cfg(target_os="linux")'.dependencies]
 futures-channel = "0.3.17"  # Minimum version for glib compatibility
