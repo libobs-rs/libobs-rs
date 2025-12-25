@@ -43,6 +43,10 @@
             rust-bin.stable.latest.default
             obs-studio
             simde
+            glib
+            x11
+            wayland-client
+            xcb
           ];
         };
       };
