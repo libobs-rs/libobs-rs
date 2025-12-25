@@ -47,6 +47,8 @@
             xorg.libX11
             wayland
             libxcb-util
+            cargo-hack
+            cargo-nextest
           ];
         };
       };

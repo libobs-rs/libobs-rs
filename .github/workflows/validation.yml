@@ -169,3 +169,21 @@ jobs:
         run: cargo nextest r --profile ci --all-features --target-dir target/nextest-all-features
         env:
           TOP_SECRET_NO_DUMMY_DLL: true
+
+  build-test-nix:
+    name: Build and Test (Nix)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+      - name: Check Rust formatting (Nix)
+        run: nix develop --command cargo fmt -- --check
+      - name: Check Rust with Clippy (Nix)
+        run: nix develop --command cargo clippy --features __ci -- -D warnings
+      - name: Check code compilation (Nix)
+        run: nix develop --command cargo hack check --feature-powerset --skip generate_bindings,include_win_bindings,__test_environment --at-least-one-of __ci,__ci
+      - name: Run tests (no default features) (Nix)
+        run: nix develop --command cargo nextest r --profile ci --no-default-features --features __test_environment,__ci
+      - name: Run tests (with default features) (Nix)
+        run: nix develop --command cargo nextest r --profile ci --all-features
