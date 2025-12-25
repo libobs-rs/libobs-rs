@@ -44,9 +44,9 @@
             obs-studio
             simde
             glib
-            x11
-            wayland-client
-            xcb
+            xorg.libX11
+            wayland
+            libxcb-util
           ];
         };
       };
