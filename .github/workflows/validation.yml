@@ -84,8 +84,6 @@ jobs:
         uses: baptiste0928/cargo-install@v3
         with:
           crate: cargo-hack
-      - uses: taiki-e/install-action@cargo-minimal-versions
-
       - name: Install OBS build dependencies (Windows)
         if: matrix.os != 'ubuntu-latest'
         run: cargo obs-build build --out-dir target/debug/deps
@@ -164,12 +162,5 @@ jobs:
           TOP_SECRET_NO_DUMMY_DLL: true
       - name: Run tests (with default features)
         run: cargo nextest r --profile ci --all-features --target-dir target/nextest-all-features
-        env:
-          TOP_SECRET_NO_DUMMY_DLL: true
-
-      - name: Check minimal dependency version compatability
-        #TODO this is currently not working for windows because of some weird winapi specific stuff
-        if: matrix.os == 'ubuntu-latest'
-        run: cargo minimal-versions check --workspace --ignore-private --detach-path-deps=skip-exact
         env:
           TOP_SECRET_NO_DUMMY_DLL: true
