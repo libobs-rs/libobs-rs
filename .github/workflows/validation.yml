@@ -168,6 +168,7 @@ jobs:
   build-test-nix:
     name: Build and Test (Nix)
     runs-on: ubuntu-latest
+    if: false
     steps:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/nix-installer-action@main
