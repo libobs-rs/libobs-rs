@@ -1,7 +1,7 @@
 //! This is derived from the frontend/obs-main.cpp.
 
 use crate::utils::initialization::NixDisplay;
-use std::sync::Arc;
+use std::sync::{Arc, Once};
 
 use windows::{
     core::PCWSTR,
@@ -12,16 +12,34 @@ use windows::{
             SE_PRIVILEGE_ENABLED, TOKEN_ADJUST_PRIVILEGES, TOKEN_PRIVILEGES, TOKEN_QUERY,
         },
         System::Threading::{GetCurrentProcess, OpenProcessToken},
+        UI::HiDpi::{
+            SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE,
+            DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
+        },
     },
 };
 
 use crate::utils::ObsError;
+
+fn become_dpi_aware() {
+    static ENABLE_DPI_AWARENESS: Once = Once::new();
+    ENABLE_DPI_AWARENESS.call_once(|| unsafe {
+        if SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2).is_err() {
+            let res = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE);
+            if res.is_err() {
+                log::error!("Failed to set process DPI awareness: {res:?}");
+            }
+        }
+    });
+}
 
 #[derive(Debug)]
 pub(crate) struct PlatformSpecificGuard {}
 pub fn platform_specific_setup(
     _display: Option<NixDisplay>,
 ) -> Result<Option<Arc<PlatformSpecificGuard>>, ObsError> {
+    become_dpi_aware();
+
     unsafe {
         let flags = TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY;
         let mut tp = TOKEN_PRIVILEGES::default();
@@ -46,8 +64,7 @@ pub fn platform_specific_setup(
                 None,
             );
             if let Err(e) = res {
-                // Use a logging mechanism compatible with your Rust application
-                eprintln!("Could not set privilege to debug process: {e:?}");
+                log::error!("Could not set privilege to debug process: {e:?}");
             }
         }
 
@@ -66,8 +83,7 @@ pub fn platform_specific_setup(
             );
 
             if let Err(e) = res {
-                // Use a logging mechanism compatible with your Rust application
-                eprintln!("Could not set privilege to increase GPU priority {e:?}");
+                log::error!("Could not set privilege to increase GPU priority {e:?}");
             }
         }
 
