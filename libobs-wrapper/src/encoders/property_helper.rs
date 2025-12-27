@@ -5,11 +5,9 @@ use duplicate::duplicate_item;
 use crate::{
     context::ObsContext,
     data::{
-        output::ObsOutputRef,
-        properties::{
-            get_properties_inner, ObsProperty, ObsPropertyObject, ObsPropertyObjectPrivate,
-        },
-        ObsData,
+        ObsData, output::{ObsOutputRef, ObsOutputTrait}, properties::{
+            ObsProperty, ObsPropertyObject, ObsPropertyObjectPrivate, get_properties_inner
+        }
     },
     run_with_obs,
     runtime::ObsRuntime,
@@ -86,7 +84,7 @@ impl StructName {
 impl ObsAudioEncoderBuilder {
     pub fn apply_to_context(
         self,
-        output: &mut ObsOutputRef,
+        output: &mut dyn ObsOutputTrait,
         name: &str,
         settings: Option<ObsData>,
         hotkey_data: Option<ObsData>,

@@ -39,14 +39,14 @@ use crate::{
 ///
 /// The output is associated with video and audio encoders that convert
 /// raw media to the required format before sending/storing.
-pub struct ObsReplayOutputRef {
+pub struct ObsReplayBufferOutputRef {
     /// Disconnect signals first
     pub(crate) replay_signal_manager: Arc<ObsReplayOutputSignals>,
 
     pub(crate) output: ObsOutputRef,
 }
 
-impl ObsOutputTraitSealed for ObsReplayOutputRef {
+impl ObsOutputTraitSealed for ObsReplayBufferOutputRef {
     fn new(mut output: OutputInfo, runtime: ObsRuntime) -> Result<Self, ObsError> {
         output.id = ObsString::new("replay_buffer");
         let output = ObsOutputRef::new(output, runtime.clone())?;
@@ -59,7 +59,21 @@ impl ObsOutputTraitSealed for ObsReplayOutputRef {
     }
 }
 
-impl ObsOutputTrait for ObsReplayOutputRef {
+impl ObsReplayBufferOutputRef {
+    pub fn replay_signals(&self) -> &Arc<ObsReplayOutputSignals> {
+        &self.replay_signal_manager
+    }
+}
+
+impl ObsOutputTrait for ObsReplayBufferOutputRef {
+    fn name(&self) -> ObsString {
+        self.output.name.clone()
+    }
+
+    fn id(&self) -> ObsString {
+        self.output.id.clone()
+    }
+
     fn runtime(&self) -> &ObsRuntime {
         &self.output.runtime
     }
@@ -97,7 +111,7 @@ impl_signal_manager!(|ptr| unsafe { libobs::obs_output_get_signal_handler(ptr) }
 ///
 /// This implementation allows any ObsOutputRef configured as a replay buffer
 /// to save its content to disk via a simple API call.
-impl ReplayBufferOutput for ObsReplayOutputRef {
+impl ReplayBufferOutput for ObsReplayBufferOutputRef {
     /// Saves the current replay buffer content to disk.
     ///
     /// # Implementation Details

@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap, path::Path, ptr, sync::{Arc, RwLock}
+    collections::HashMap, fmt::Debug, path::Path, ptr, sync::{Arc, RwLock}
 };
 
 use libobs::obs_output;
@@ -10,10 +10,30 @@ use crate::{
     run_with_obs,
     runtime::ObsRuntime,
     unsafe_send::Sendable,
-    utils::{AudioEncoderInfo, ObsError, OutputInfo, VideoEncoderInfo},
+    utils::{AudioEncoderInfo, ObsError, ObsString, OutputInfo, VideoEncoderInfo},
 };
 
 use super::{ObsData, ObsOutputSignals};
+
+/// Helper trait to enable cloning boxed outputs.
+pub trait ObsOutputClone {
+    fn clone_box(&self) -> Box<dyn ObsOutputTrait>;
+}
+
+impl<T> ObsOutputClone for T
+where
+    T: ObsOutputTrait + Clone + 'static,
+{
+    fn clone_box(&self) -> Box<dyn ObsOutputTrait> {
+        Box::new(self.clone())
+    }
+}
+
+impl Clone for Box<dyn ObsOutputTrait> {
+    fn clone(&self) -> Self {
+        self.clone_box()
+    }
+}
 
 /// Defines functionality specific to replay buffer outputs.
 ///
@@ -33,7 +53,7 @@ pub trait ReplayBufferOutput {
 }
 
 
-pub(crate) trait ObsOutputTraitSealed {
+pub(crate) trait ObsOutputTraitSealed: Debug + Send + Sync {
     /// Creates a new output reference from the given output info and runtime.
     ///
     /// # Arguments
@@ -47,7 +67,8 @@ pub(crate) trait ObsOutputTraitSealed {
         Self: Sized;
 }
 
-pub trait ObsOutputTrait: ObsOutputTraitSealed {
+#[allow(private_bounds)]
+pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsOutputClone {
     fn runtime(&self) -> &ObsRuntime;
     fn signal_manager(&self) -> &Arc<ObsOutputSignals>;
     fn settings(&self) -> &Arc<RwLock<Option<ObsData>>>;
@@ -55,6 +76,9 @@ pub trait ObsOutputTrait: ObsOutputTraitSealed {
     fn video_encoder(&self) -> &Arc<RwLock<Option<Arc<ObsVideoEncoder>>>>;
     fn audio_encoders(&self) -> &Arc<RwLock<HashMap<usize, Arc<ObsAudioEncoder>>>>;
     fn as_ptr(&self) -> Sendable<*mut obs_output>;
+
+    fn id(&self) -> ObsString;
+    fn name(&self) -> ObsString;
 
     /// Returns the current video encoder attached to this output, if any.
     fn get_current_video_encoder(&self) -> Result<Option<Arc<ObsVideoEncoder>>, ObsError> {

@@ -43,7 +43,10 @@ use std::{
     thread::ThreadId,
 };
 
-use crate::display::{ObsDisplayCreationData, ObsDisplayRef};
+use crate::{
+    data::output::{ObsOutputTrait, ObsOutputTraitSealed, ObsReplayBufferOutputRef},
+    display::{ObsDisplayCreationData, ObsDisplayRef},
+};
 use crate::{
     data::{output::ObsOutputRef, video::ObsVideoInfo, ObsData},
     enums::{ObsLogLevel, ObsResetVideoStatus},
@@ -86,7 +89,7 @@ pub struct ObsContext {
     /// early freeing.
     #[allow(dead_code)]
     #[get_mut]
-    pub(crate) outputs: Arc<RwLock<Vec<ObsOutputRef>>>,
+    pub(crate) outputs: Arc<RwLock<Vec<Box<dyn ObsOutputTrait>>>>,
 
     #[get_mut]
     pub(crate) scenes: Arc<RwLock<Vec<ObsSceneRef>>>,
@@ -314,6 +317,28 @@ impl ObsContext {
         ObsData::new(self.runtime.clone())
     }
 
+    pub fn replay_buffer(
+        &mut self,
+        info: OutputInfo,
+    ) -> Result<ObsReplayBufferOutputRef, ObsError> {
+        let output = ObsReplayBufferOutputRef::new(info, self.runtime.clone());
+
+        match output {
+            Ok(x) => {
+                let tmp = x.clone();
+                self.outputs
+                    .write()
+                    .map_err(|_| {
+                        ObsError::LockError("Failed to acquire write lock on outputs".to_string())
+                    })?
+                    .push(Box::new(x));
+                Ok(tmp)
+            }
+
+            Err(x) => Err(x),
+        }
+    }
+
     pub fn output(&mut self, info: OutputInfo) -> Result<ObsOutputRef, ObsError> {
         let output = ObsOutputRef::new(info, self.runtime.clone());
 
@@ -325,7 +350,7 @@ impl ObsContext {
                     .map_err(|_| {
                         ObsError::LockError("Failed to acquire write lock on outputs".to_string())
                     })?
-                    .push(x);
+                    .push(Box::new(x));
                 Ok(tmp)
             }
 
@@ -492,7 +517,7 @@ impl ObsContext {
         Ok(d)
     }
 
-    pub fn get_output(&mut self, name: &str) -> Result<Option<ObsOutputRef>, ObsError> {
+    pub fn get_output(&mut self, name: &str) -> Result<Option<Box<dyn ObsOutputTrait>>, ObsError> {
         let o = self
             .outputs
             .read()

@@ -133,6 +133,14 @@ impl ObsOutputTraitSealed for ObsOutputRef {
 }
 
 impl ObsOutputTrait for ObsOutputRef {
+    fn name(&self) -> ObsString {
+        self.name.clone()
+    }
+
+    fn id(&self) -> ObsString {
+        self.id.clone()
+    }
+
     fn runtime(&self) -> &ObsRuntime {
         &self.runtime
     }
