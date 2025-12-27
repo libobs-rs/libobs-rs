@@ -21,7 +21,7 @@ use crate::{
     impl_signal_manager, run_with_obs,
     runtime::ObsRuntime,
     unsafe_send::Sendable,
-    utils::{ObsError, ObsString, OutputInfo},
+    utils::{ObsError, ObsString, OutputInfo, calldata_free},
 };
 
 #[derive(Debug, Clone)]
@@ -112,9 +112,8 @@ impl ReplayBufferOutput for ObsOutputRef {
     ///   - Failure to extract the path from calldata
     fn save_buffer(&self) -> Result<Box<Path>, ObsError> {
         let output_ptr = self.as_ptr();
-        let runtime = self.runtime().clone();
 
-        let path = run_with_obs!(runtime, (output_ptr), move || {
+        run_with_obs!(self.runtime, (output_ptr), move || {
             let ph = unsafe { libobs::obs_output_get_proc_handler(output_ptr) };
             if ph.is_null() {
                 return Err(ObsError::OutputSaveBufferFailure(
@@ -123,10 +122,9 @@ impl ReplayBufferOutput for ObsOutputRef {
             }
 
             let name = ObsString::new("save");
-            let call_success = unsafe {
-                let mut calldata = MaybeUninit::<calldata_t>::zeroed();
-                libobs::proc_handler_call(ph, name.as_ptr().0, calldata.as_mut_ptr())
-            };
+            let mut calldata = MaybeUninit::<calldata_t>::zeroed();
+            let call_success =
+                unsafe { libobs::proc_handler_call(ph, name.as_ptr().0, calldata.as_mut_ptr()) };
 
             if !call_success {
                 return Err(ObsError::OutputSaveBufferFailure(
@@ -134,8 +132,31 @@ impl ReplayBufferOutput for ObsOutputRef {
                 ));
             }
 
+            unsafe {
+                calldata_free(calldata.as_mut_ptr());
+            }
+            Ok(())
+        })??;
+
+        self.signal_manager()
+            .on_saved()?
+            .blocking_recv()
+            .map_err(|_e| {
+                ObsError::OutputSaveBufferFailure(
+                    "Failed to receive saved replay buffer path.".to_string(),
+                )
+            })?;
+
+        let path = run_with_obs!(self.runtime, (output_ptr), move || {
+            let ph = unsafe { libobs::obs_output_get_proc_handler(output_ptr) };
+            if ph.is_null() {
+                return Err(ObsError::OutputSaveBufferFailure(
+                    "Failed to get proc handler.".to_string(),
+                ));
+            }
+
             let func_get = ObsString::new("get_last_replay");
-            let last_replay = unsafe {
+            let mut last_replay_calldata = unsafe {
                 let mut calldata = MaybeUninit::<calldata_t>::zeroed();
                 let success =
                     libobs::proc_handler_call(ph, func_get.as_ptr().0, calldata.as_mut_ptr());
@@ -154,18 +175,42 @@ impl ReplayBufferOutput for ObsOutputRef {
             let mut s = MaybeUninit::<*const c_char>::uninit();
 
             let res = unsafe {
-                libobs::calldata_get_string(&last_replay, path_get.as_ptr().0, s.as_mut_ptr())
+                libobs::calldata_get_string(
+                    &last_replay_calldata,
+                    path_get.as_ptr().0,
+                    s.as_mut_ptr(),
+                )
             };
             if !res {
+                unsafe { calldata_free(&mut last_replay_calldata) };
                 return Err(ObsError::OutputSaveBufferFailure(
                     "Failed to get path from last replay.".to_string(),
                 ));
             }
 
             let s: *const c_char = unsafe { s.assume_init() };
-            let path = unsafe { std::ffi::CStr::from_ptr(s) }.to_str().unwrap();
+            if s.is_null() {
+                unsafe { calldata_free(&mut last_replay_calldata) };
+                return Err(ObsError::OutputSaveBufferFailure(
+                    "Failed to get path from last replay.".to_string(),
+                ));
+            }
 
-            Ok(PathBuf::from(path))
+            let path = unsafe { std::ffi::CStr::from_ptr(s) }
+                .to_str()
+                .map_err(|_e| {
+                    ObsError::OutputSaveBufferFailure(
+                        "Failed to convert path CStr to str.".to_string(),
+                    )
+                });
+
+            if let Err(e) = path {
+                unsafe { calldata_free(&mut last_replay_calldata) };
+                return Err(e);
+            }
+
+            unsafe { calldata_free(&mut last_replay_calldata) };
+            Ok(PathBuf::from(path.unwrap()))
         })??;
 
         Ok(path.into_boxed_path())
