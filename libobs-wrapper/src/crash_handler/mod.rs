@@ -9,7 +9,7 @@ pub mod dialog;
 /// This is called whenever OBS encounters a fatal error and crashes.
 /// Implementors can define custom behavior for crash handling,
 /// such as logging the error, showing a dialog, or sending reports.
-/// 
+///
 /// **MAKE SURE** that the `handle_crash` function does the least amount of work possible,
 /// as it is called in a crash context where many resources may be unavailable.
 pub trait ObsCrashHandler: Send {

@@ -350,7 +350,7 @@ impl ObsOutputRef {
         })?;
 
         if err.0.is_null() {
-            return Err(ObsError::OutputStartFailure(None))
+            return Err(ObsError::OutputStartFailure(None));
         }
 
         let c_str = unsafe { CStr::from_ptr(err.0) };
