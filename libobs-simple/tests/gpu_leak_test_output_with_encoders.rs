@@ -36,7 +36,7 @@ pub fn test_output_with_encoders() {
         .set_string("preset", "fast")
         .set_string("rate_control", "cbr")
         .set_int("bitrate", 10000)
-        .update()
+        .apply()
         .unwrap();
 
     let encoders = context.available_video_encoders().unwrap();

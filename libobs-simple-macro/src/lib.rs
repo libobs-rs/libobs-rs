@@ -115,6 +115,7 @@ pub fn obs_object_updater(attr: TokenStream, item: TokenStream) -> TokenStream {
                 } = self;
 
                 log::trace!("Updating settings for {:?}", Self::get_id());
+                #[allow(deprecated)]
                 settings_updater.update()?;
 
                 log::trace!("Updating raw settings for {:?}", Self::get_id());
@@ -294,7 +295,9 @@ pub fn obs_object_builder(attr: TokenStream, item: TokenStream) -> TokenStream {
                     ..
                 } = self;
 
+                #[allow(deprecated)]
                 settings_updater.update()?;
+                #[allow(deprecated)]
                 hotkeys_updater.update()?;
 
                 Ok(libobs_wrapper::utils::ObjectInfo::new(

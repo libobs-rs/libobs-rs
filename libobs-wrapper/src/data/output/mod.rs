@@ -293,6 +293,7 @@ impl ObsOutputRef {
             libobs::obs_output_set_audio_encoder(output_ptr, encoder_ptr, mixer_idx)
         })?;
 
+        //TODO don't drop audio encoders if multiple are set
         self.audio_encoders
             .write()
             .map_err(|e| ObsError::LockError(e.to_string()))?
@@ -347,6 +348,10 @@ impl ObsOutputRef {
         let err = run_with_obs!(self.runtime, (output_ptr), move || unsafe {
             Sendable(libobs::obs_output_get_last_error(output_ptr))
         })?;
+
+        if err.0.is_null() {
+            return Err(ObsError::OutputStartFailure(None))
+        }
 
         let c_str = unsafe { CStr::from_ptr(err.0) };
         let err_str = c_str.to_str().ok().map(|x| x.to_string());
@@ -465,4 +470,6 @@ impl_signal_manager!(|ptr| unsafe { libobs::obs_output_get_signal_handler(ptr) }
     "deactivate": {},
     "reconnect": {},
     "reconnect_success": {},
+    /// Only available for replay buffer outputs
+    "saved": {}
 ]);

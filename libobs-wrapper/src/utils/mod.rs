@@ -25,3 +25,10 @@ pub use path::*;
 
 pub const ENCODER_HIDE_FLAGS: u32 =
     libobs::OBS_ENCODER_CAP_DEPRECATED | libobs::OBS_ENCODER_CAP_INTERNAL;
+
+/// Internal function to free calldata structs, same implementation as libobs
+pub(crate) unsafe fn calldata_free(data: *mut libobs::calldata_t) {
+    if !(*data).fixed {
+        libobs::bfree((*data).stack as *mut _);
+    }
+}
