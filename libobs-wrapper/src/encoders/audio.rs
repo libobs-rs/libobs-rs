@@ -69,6 +69,10 @@ impl ObsAudioEncoder {
         }))
     }
 
+    pub fn as_ptr(&self) -> Sendable<*mut libobs::obs_encoder_t> {
+        self.encoder.clone()
+    }
+
     /// This is only needed once for global audio context
     pub fn set_audio_context(
         &mut self,

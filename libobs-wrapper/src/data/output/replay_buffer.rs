@@ -4,36 +4,90 @@
 //! A replay buffer is a special type of output that continuously records
 //! the last N seconds of content, allowing the user to save this buffer on demand. This must be configured. More documentation soon.
 use std::{
+    collections::HashMap,
     ffi::c_char,
     mem::MaybeUninit,
     path::{Path, PathBuf},
+    sync::{Arc, RwLock},
 };
 
-use libobs::calldata_t;
+use libobs::{calldata_t, obs_output};
 
 use crate::{
-    run_with_obs,
-    utils::{ObsError, ObsString},
+    data::{
+        ObsData, output::{ObsOutputRef, ObsOutputSignals, ObsOutputTrait, ObsOutputTraitSealed, ReplayBufferOutput}
+    },
+    encoders::{audio::ObsAudioEncoder, video::ObsVideoEncoder},
+    impl_signal_manager, run_with_obs,
+    runtime::ObsRuntime,
+    unsafe_send::Sendable,
+    utils::{ObsError, ObsString, OutputInfo},
 };
 
-use super::ObsOutputRef;
-
-/// Defines functionality specific to replay buffer outputs.
+#[derive(Debug, Clone)]
+/// A reference to an OBS output.
 ///
-/// This trait provides methods for working with replay buffers in OBS,
-/// which are special outputs that continuously record content and allow
-/// on-demand saving of recent footage.
-pub trait ReplayBufferOutput {
-    /// Saves the current replay buffer content to disk.
-    ///
-    /// This method triggers the replay buffer to save its content to a file
-    /// and returns the path to the saved file.
-    ///
-    /// # Returns
-    /// * `Result<Box<Path>, ObsError>` - On success, returns the path to the saved
-    ///   replay file. On failure, returns an error describing what went wrong.
-    fn save_buffer(&self) -> Result<Box<Path>, ObsError>;
+/// This struct represents an output in OBS, which is responsible for
+/// outputting encoded audio and video data to a destination such as:
+/// - A file (recording)
+/// - A streaming service (RTMP, etc.)
+/// - A replay buffer
+///
+/// The output is associated with video and audio encoders that convert
+/// raw media to the required format before sending/storing.
+pub struct ObsReplayOutputRef {
+    /// Disconnect signals first
+    pub(crate) replay_signal_manager: Arc<ObsReplayOutputSignals>,
+
+    pub(crate) output: ObsOutputRef,
 }
+
+impl ObsOutputTraitSealed for ObsReplayOutputRef {
+    fn new(mut output: OutputInfo, runtime: ObsRuntime) -> Result<Self, ObsError> {
+        output.id = ObsString::new("replay_buffer");
+        let output = ObsOutputRef::new(output, runtime.clone())?;
+
+        let replay_signal_manager = ObsReplayOutputSignals::new(&output.as_ptr(), runtime)?;
+        Ok(Self {
+            replay_signal_manager: Arc::new(replay_signal_manager),
+            output,
+        })
+    }
+}
+
+impl ObsOutputTrait for ObsReplayOutputRef {
+    fn runtime(&self) -> &ObsRuntime {
+        &self.output.runtime
+    }
+
+    fn signal_manager(&self) -> &Arc<ObsOutputSignals> {
+        &self.output.signal_manager
+    }
+
+    fn settings(&self) -> &Arc<RwLock<Option<ObsData>>> {
+        &self.output.settings
+    }
+
+    fn hotkey_data(&self) -> &Arc<RwLock<Option<ObsData>>> {
+        &self.output.hotkey_data
+    }
+
+    fn video_encoder(&self) -> &Arc<RwLock<Option<Arc<ObsVideoEncoder>>>> {
+        &self.output.curr_video_encoder
+    }
+
+    fn audio_encoders(&self) -> &Arc<RwLock<HashMap<usize, Arc<ObsAudioEncoder>>>> {
+        &self.output.audio_encoders
+    }
+
+    fn as_ptr(&self) -> Sendable<*mut obs_output> {
+        self.output.output.clone()
+    }
+}
+
+impl_signal_manager!(|ptr| unsafe { libobs::obs_output_get_signal_handler(ptr) }, ObsReplayOutputSignals for ObsReplayOutputRef<*mut libobs::obs_output>, [
+    "saved": {}
+]);
 
 /// Implementation of the ReplayBufferOutput trait for ObsOutputRef.
 ///
@@ -57,9 +111,10 @@ impl ReplayBufferOutput for ObsOutputRef {
     ///   - Failure to call "get_last_replay" procedure
     ///   - Failure to extract the path from calldata
     fn save_buffer(&self) -> Result<Box<Path>, ObsError> {
-        let output_ptr = self.output.clone();
+        let output_ptr = self.as_ptr();
+        let runtime = self.runtime().clone();
 
-        let path = run_with_obs!(self.runtime, (output_ptr), move || {
+        let path = run_with_obs!(runtime, (output_ptr), move || {
             let ph = unsafe { libobs::obs_output_get_proc_handler(output_ptr) };
             if ph.is_null() {
                 return Err(ObsError::OutputSaveBufferFailure(
