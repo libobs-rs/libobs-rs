@@ -15,13 +15,17 @@ use libobs::{calldata_t, obs_output};
 
 use crate::{
     data::{
-        ObsData, output::{ObsOutputRef, ObsOutputSignals, ObsOutputTrait, ObsOutputTraitSealed, ReplayBufferOutput}
+        output::{
+            ObsOutputRef, ObsOutputSignals, ObsOutputTrait, ObsOutputTraitSealed,
+            ReplayBufferOutput,
+        },
+        ObsData,
     },
     encoders::{audio::ObsAudioEncoder, video::ObsVideoEncoder},
     impl_signal_manager, run_with_obs,
     runtime::ObsRuntime,
     unsafe_send::Sendable,
-    utils::{ObsError, ObsString, OutputInfo, calldata_free},
+    utils::{calldata_free, ObsError, ObsString, OutputInfo},
 };
 
 #[derive(Debug, Clone)]
@@ -93,7 +97,7 @@ impl_signal_manager!(|ptr| unsafe { libobs::obs_output_get_signal_handler(ptr) }
 ///
 /// This implementation allows any ObsOutputRef configured as a replay buffer
 /// to save its content to disk via a simple API call.
-impl ReplayBufferOutput for ObsOutputRef {
+impl ReplayBufferOutput for ObsReplayOutputRef {
     /// Saves the current replay buffer content to disk.
     ///
     /// # Implementation Details
@@ -113,7 +117,7 @@ impl ReplayBufferOutput for ObsOutputRef {
     fn save_buffer(&self) -> Result<Box<Path>, ObsError> {
         let output_ptr = self.as_ptr();
 
-        run_with_obs!(self.runtime, (output_ptr), move || {
+        run_with_obs!(self.runtime().clone(), (output_ptr), move || {
             let ph = unsafe { libobs::obs_output_get_proc_handler(output_ptr) };
             if ph.is_null() {
                 return Err(ObsError::OutputSaveBufferFailure(
@@ -147,7 +151,7 @@ impl ReplayBufferOutput for ObsOutputRef {
                 )
             })?;
 
-        let path = run_with_obs!(self.runtime, (output_ptr), move || {
+        let path = run_with_obs!(self.runtime().clone(), (output_ptr), move || {
             let ph = unsafe { libobs::obs_output_get_proc_handler(output_ptr) };
             if ph.is_null() {
                 return Err(ObsError::OutputSaveBufferFailure(
