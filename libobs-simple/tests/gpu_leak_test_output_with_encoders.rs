@@ -1,7 +1,7 @@
 use env_logger::Env;
 use libobs_wrapper::{
     context::ObsContext,
-    data::{ObsDataSetters, output::ObsOutputTrait},
+    data::{output::ObsOutputTrait, ObsDataSetters},
     encoders::{ObsContextEncoders, ObsVideoEncoderType},
     utils::{AudioEncoderInfo, OutputInfo, StartupInfo},
 };

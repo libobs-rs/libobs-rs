@@ -9,9 +9,6 @@ use libobs_simple::sources::linux::LinuxGeneralScreenCapture;
 use libobs_wrapper::utils::NixDisplay;
 
 #[cfg(windows)]
-use libobs_wrapper::utils::traits::ObsSourceUpdateTrait;
-
-#[cfg(windows)]
 use libobs_simple::sources::windows::{
     GameCaptureSourceBuilder, MonitorCaptureSourceBuilder, MonitorCaptureSourceUpdater,
     ObsGameCaptureMode, WindowSearchMode,
@@ -284,6 +281,8 @@ impl ApplicationHandler for App {
                         let mut inner = self.obs.write().unwrap();
                         let inner = inner.as_mut();
                         if let Some(inner) = inner {
+                            use libobs_wrapper::data::object::ObsObjectTrait;
+
                             let monitor_index = self.monitor_index.clone();
 
                             let source = &mut inner.source;

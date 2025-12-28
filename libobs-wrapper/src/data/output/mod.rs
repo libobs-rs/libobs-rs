@@ -4,7 +4,7 @@ use std::ptr;
 use std::sync::{Arc, RwLock};
 
 use crate::data::immutable::ImmutableObsData;
-use crate::data::object::{ObsObjectTrait, ObsObjectTraitSealed, inner_fn_update_settings};
+use crate::data::object::{inner_fn_update_settings, ObsObjectTrait, ObsObjectTraitSealed};
 use crate::data::ObsDataPointers;
 use crate::runtime::ObsRuntime;
 use crate::unsafe_send::Sendable;

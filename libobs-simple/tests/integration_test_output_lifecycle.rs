@@ -1,7 +1,9 @@
 mod common;
 
 use libobs_wrapper::{
-    context::ObsContext, data::ObsDataSetters, utils::{ObsString, OutputInfo, StartupInfo}
+    context::ObsContext,
+    data::ObsDataSetters,
+    utils::{ObsString, OutputInfo, StartupInfo},
 };
 
 /// Integration test: Test output creation

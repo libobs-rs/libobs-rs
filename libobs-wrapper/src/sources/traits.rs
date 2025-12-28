@@ -1,6 +1,10 @@
 use std::{fmt::Debug, hash::Hash};
 
-use crate::{data::object::ObsObjectTrait, unsafe_send::{Sendable, SendableComp}, utils::ObsError};
+use crate::{
+    data::object::ObsObjectTrait,
+    unsafe_send::{Sendable, SendableComp},
+    utils::ObsError,
+};
 
 pub(crate) trait ObsSourceTraitSealed: Debug + Send + Sync {
     fn add_scene_item_ptr(

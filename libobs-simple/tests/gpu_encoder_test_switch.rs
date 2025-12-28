@@ -9,9 +9,11 @@ use std::{collections::HashMap, sync::Arc, thread, time::Duration};
 use libobs_simple::sources::{windows::MonitorCaptureSourceBuilder, ObsSourceBuilder};
 use libobs_wrapper::{
     context::ObsContext,
-    data::{ObsDataSetters, object::ObsObjectTrait, output::ObsOutputTrait, video::ObsVideoInfoBuilder},
+    data::{
+        object::ObsObjectTrait, output::ObsOutputTrait, video::ObsVideoInfoBuilder, ObsDataSetters,
+    },
     encoders::{
-        ObsContextEncoders, ObsVideoEncoderType, audio::ObsAudioEncoder, video::ObsVideoEncoder
+        audio::ObsAudioEncoder, video::ObsVideoEncoder, ObsContextEncoders, ObsVideoEncoderType,
     },
     enums::ObsScaleType,
     utils::{AudioEncoderInfo, ObsPath, OutputInfo, VideoEncoderInfo},

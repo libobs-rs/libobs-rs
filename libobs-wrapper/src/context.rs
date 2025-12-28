@@ -48,7 +48,7 @@ use crate::{
         object::ObsObjectTrait,
         output::{ObsOutputTrait, ObsOutputTraitSealed, ObsReplayBufferOutputRef},
     },
-    display::{ObsDisplayCreationData, ObsDisplayRef}
+    display::{ObsDisplayCreationData, ObsDisplayRef},
 };
 use crate::{
     data::{output::ObsOutputRef, video::ObsVideoInfo, ObsData},

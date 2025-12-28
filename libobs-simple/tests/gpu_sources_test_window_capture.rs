@@ -15,11 +15,8 @@ use libobs_simple::sources::windows::{
     ObsWindowCaptureMethod, WindowCaptureSourceBuilder, WindowCaptureSourceUpdater,
 };
 use libobs_window_helper::WindowSearchMode;
-use libobs_wrapper::data::{ObsObjectUpdater, object::ObsObjectTrait, output::ObsOutputTrait};
-use libobs_wrapper::{
-    sources::ObsSourceBuilder,
-    utils::ObsPath,
-};
+use libobs_wrapper::data::{object::ObsObjectTrait, output::ObsOutputTrait, ObsObjectUpdater};
+use libobs_wrapper::{sources::ObsSourceBuilder, utils::ObsPath};
 
 #[test]
 // For this test to work, notepad must be open

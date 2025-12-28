@@ -12,7 +12,9 @@ use libobs_simple::{
 use libobs_wrapper::{
     context::ObsContext,
     data::{
-        output::{ObsOutputTrait, ReplayBufferOutput},
+        ObsDataSetters,
+        object::ObsObjectTrait,
+        output::ObsOutputTrait,
         properties::{ObsProperty, ObsPropertyObject, types::ObsListItemValue},
     },
     sources::ObsSourceRef,

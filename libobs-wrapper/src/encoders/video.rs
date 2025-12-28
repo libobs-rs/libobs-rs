@@ -6,7 +6,9 @@ use std::{
 
 use crate::{
     data::{
-        ObsData, ObsDataPointers, immutable::ImmutableObsData, object::{ObsObjectTrait, ObsObjectTraitSealed, inner_fn_update_settings}
+        immutable::ImmutableObsData,
+        object::{inner_fn_update_settings, ObsObjectTrait, ObsObjectTraitSealed},
+        ObsData, ObsDataPointers,
     },
     encoders::ObsEncoderTrait,
     impl_obs_drop, run_with_obs,
