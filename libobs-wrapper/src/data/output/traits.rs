@@ -1,5 +1,9 @@
 use std::{
-    collections::HashMap, fmt::Debug, path::Path, ptr, sync::{Arc, RwLock}
+    collections::HashMap,
+    fmt::Debug,
+    path::Path,
+    ptr,
+    sync::{Arc, RwLock},
 };
 
 use libobs::obs_output;
@@ -51,7 +55,6 @@ pub trait ReplayBufferOutput {
     ///   replay file. On failure, returns an error describing what went wrong.
     fn save_buffer(&self) -> Result<Box<Path>, ObsError>;
 }
-
 
 pub(crate) trait ObsOutputTraitSealed: Debug + Send + Sync {
     /// Creates a new output reference from the given output info and runtime.
@@ -257,8 +260,7 @@ pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsOutputClone {
         Err(ObsError::OutputStartFailure(err_str))
     }
 
-    /// Pauses or resumes the output and waits for the pause/unpause signal.
-    fn pause(&self, pause: bool) -> Result<(), ObsError> {
+    fn set_paused(&self, should_pause: bool) -> Result<(), ObsError> {
         if !self.is_active()? {
             return Err(ObsError::OutputPauseFailure(Some(
                 "Output is not active.".to_string(),
@@ -268,14 +270,14 @@ pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsOutputClone {
         let output_ptr = self.as_ptr();
         let runtime = self.runtime().clone();
 
-        let mut rx = if pause {
+        let mut rx = if should_pause {
             self.signal_manager().on_pause()?
         } else {
             self.signal_manager().on_unpause()?
         };
 
         let res = run_with_obs!(runtime, (output_ptr), move || unsafe {
-            libobs::obs_output_pause(output_ptr, pause)
+            libobs::obs_output_pause(output_ptr, should_pause)
         })?;
 
         if res {
@@ -293,6 +295,15 @@ pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsOutputClone {
 
             Err(ObsError::OutputPauseFailure(err_str))
         }
+    }
+
+    /// Pauses or resumes the output and waits for the pause/unpause signal.
+    fn pause(&self) -> Result<(), ObsError> {
+        self.set_paused(true)
+    }
+
+    fn unpause(&self) -> Result<(), ObsError> {
+        self.set_paused(false)
     }
 
     /// Stops the output and waits for stop and deactivate signals.

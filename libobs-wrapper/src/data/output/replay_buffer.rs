@@ -5,13 +5,11 @@
 //! the last N seconds of content, allowing the user to save this buffer on demand. This must be configured. More documentation soon.
 use std::{
     collections::HashMap,
-    ffi::c_char,
-    mem::MaybeUninit,
     path::{Path, PathBuf},
     sync::{Arc, RwLock},
 };
 
-use libobs::{calldata_t, obs_output};
+use libobs::obs_output;
 
 use crate::{
     data::{
@@ -25,7 +23,7 @@ use crate::{
     impl_signal_manager, run_with_obs,
     runtime::ObsRuntime,
     unsafe_send::Sendable,
-    utils::{calldata_free, ObsError, ObsString, OutputInfo},
+    utils::{ObsCalldataExt, ObsError, ObsString, OutputInfo},
 };
 
 #[derive(Debug, Clone)]
@@ -129,34 +127,25 @@ impl ReplayBufferOutput for ObsReplayBufferOutputRef {
     ///   - Failure to call "get_last_replay" procedure
     ///   - Failure to extract the path from calldata
     fn save_buffer(&self) -> Result<Box<Path>, ObsError> {
+        log::trace!("Saving replay buffer...");
         let output_ptr = self.as_ptr();
 
-        run_with_obs!(self.runtime().clone(), (output_ptr), move || {
+        log::trace!("Getting procedure handler for replay buffer output...");
+        let proc_handler = run_with_obs!(self.runtime().clone(), (output_ptr), move || {
             let ph = unsafe { libobs::obs_output_get_proc_handler(output_ptr) };
             if ph.is_null() {
                 return Err(ObsError::OutputSaveBufferFailure(
                     "Failed to get proc handler.".to_string(),
                 ));
             }
-
-            let name = ObsString::new("save");
-            let mut calldata = MaybeUninit::<calldata_t>::zeroed();
-            let call_success =
-                unsafe { libobs::proc_handler_call(ph, name.as_ptr().0, calldata.as_mut_ptr()) };
-
-            if !call_success {
-                return Err(ObsError::OutputSaveBufferFailure(
-                    "Failed to call proc handler.".to_string(),
-                ));
-            }
-
-            unsafe {
-                calldata_free(calldata.as_mut_ptr());
-            }
-            Ok(())
+            Ok(Sendable(ph))
         })??;
 
-        self.signal_manager()
+        log::trace!("Calling 'save' procedure on replay buffer output...");
+        self.runtime().call_proc_handler(&proc_handler, "save")?;
+
+        log::trace!("Waiting for 'saved' signal from replay buffer output...");
+        self.replay_signals()
             .on_saved()?
             .blocking_recv()
             .map_err(|_e| {
@@ -165,71 +154,14 @@ impl ReplayBufferOutput for ObsReplayBufferOutputRef {
                 )
             })?;
 
-        let path = run_with_obs!(self.runtime().clone(), (output_ptr), move || {
-            let ph = unsafe { libobs::obs_output_get_proc_handler(output_ptr) };
-            if ph.is_null() {
-                return Err(ObsError::OutputSaveBufferFailure(
-                    "Failed to get proc handler.".to_string(),
-                ));
-            }
+        log::trace!("Retrieving last replay path from replay buffer output...");
+        let mut calldata = self
+            .runtime()
+            .call_proc_handler(&proc_handler, "get_last_replay")?;
 
-            let func_get = ObsString::new("get_last_replay");
-            let mut last_replay_calldata = unsafe {
-                let mut calldata = MaybeUninit::<calldata_t>::zeroed();
-                let success =
-                    libobs::proc_handler_call(ph, func_get.as_ptr().0, calldata.as_mut_ptr());
-
-                if !success {
-                    return Err(ObsError::OutputSaveBufferFailure(
-                        "Failed to call get_last_replay.".to_string(),
-                    ));
-                }
-
-                calldata.assume_init()
-            };
-
-            let path_get = ObsString::new("path");
-
-            let mut s = MaybeUninit::<*const c_char>::uninit();
-
-            let res = unsafe {
-                libobs::calldata_get_string(
-                    &last_replay_calldata,
-                    path_get.as_ptr().0,
-                    s.as_mut_ptr(),
-                )
-            };
-            if !res {
-                unsafe { calldata_free(&mut last_replay_calldata) };
-                return Err(ObsError::OutputSaveBufferFailure(
-                    "Failed to get path from last replay.".to_string(),
-                ));
-            }
-
-            let s: *const c_char = unsafe { s.assume_init() };
-            if s.is_null() {
-                unsafe { calldata_free(&mut last_replay_calldata) };
-                return Err(ObsError::OutputSaveBufferFailure(
-                    "Failed to get path from last replay.".to_string(),
-                ));
-            }
-
-            let path = unsafe { std::ffi::CStr::from_ptr(s) }
-                .to_str()
-                .map_err(|_e| {
-                    ObsError::OutputSaveBufferFailure(
-                        "Failed to convert path CStr to str.".to_string(),
-                    )
-                });
-
-            if let Err(e) = path {
-                unsafe { calldata_free(&mut last_replay_calldata) };
-                return Err(e);
-            }
-
-            unsafe { calldata_free(&mut last_replay_calldata) };
-            Ok(PathBuf::from(path.unwrap()))
-        })??;
+        log::trace!("Extracting path from calldata...");
+        let path = calldata.get_string("path")?;
+        let path = PathBuf::from(path);
 
         Ok(path.into_boxed_path())
     }

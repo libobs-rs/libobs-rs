@@ -180,7 +180,5 @@ impl_signal_manager!(|ptr| unsafe { libobs::obs_output_get_signal_handler(ptr) }
     "activate": {},
     "deactivate": {},
     "reconnect": {},
-    "reconnect_success": {},
-    /// Only available for replay buffer outputs
-    "saved": {}
+    "reconnect_success": {}
 ]);

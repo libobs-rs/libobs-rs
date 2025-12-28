@@ -16,6 +16,9 @@ mod path_tests;
 
 mod modules;
 
+mod calldata;
+
+pub use calldata::*;
 pub use error::*;
 pub use info::*;
 pub use initialization::NixDisplay;
