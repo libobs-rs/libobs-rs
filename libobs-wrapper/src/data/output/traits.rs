@@ -1,7 +1,6 @@
 use std::{
     collections::HashMap,
     fmt::Debug,
-    path::Path,
     ptr,
     sync::{Arc, RwLock},
 };
@@ -9,52 +8,16 @@ use std::{
 use libobs::obs_output;
 
 use crate::{
+    data::{ObsDataPointers, object::ObsObjectTrait},
     encoders::{audio::ObsAudioEncoder, video::ObsVideoEncoder},
     enums::ObsOutputStopSignal,
     run_with_obs,
     runtime::ObsRuntime,
     unsafe_send::Sendable,
-    utils::{AudioEncoderInfo, ObsError, ObsString, OutputInfo, VideoEncoderInfo},
+    utils::{AudioEncoderInfo, ObsError, OutputInfo, VideoEncoderInfo},
 };
 
 use super::{ObsData, ObsOutputSignals};
-
-/// Helper trait to enable cloning boxed outputs.
-pub trait ObsOutputClone {
-    fn clone_box(&self) -> Box<dyn ObsOutputTrait>;
-}
-
-impl<T> ObsOutputClone for T
-where
-    T: ObsOutputTrait + Clone + 'static,
-{
-    fn clone_box(&self) -> Box<dyn ObsOutputTrait> {
-        Box::new(self.clone())
-    }
-}
-
-impl Clone for Box<dyn ObsOutputTrait> {
-    fn clone(&self) -> Self {
-        self.clone_box()
-    }
-}
-
-/// Defines functionality specific to replay buffer outputs.
-///
-/// This trait provides methods for working with replay buffers in OBS,
-/// which are special outputs that continuously record content and allow
-/// on-demand saving of recent footage.
-pub trait ReplayBufferOutput {
-    /// Saves the current replay buffer content to disk.
-    ///
-    /// This method triggers the replay buffer to save its content to a file
-    /// and returns the path to the saved file.
-    ///
-    /// # Returns
-    /// * `Result<Box<Path>, ObsError>` - On success, returns the path to the saved
-    ///   replay file. On failure, returns an error describing what went wrong.
-    fn save_buffer(&self) -> Result<Box<Path>, ObsError>;
-}
 
 pub(crate) trait ObsOutputTraitSealed: Debug + Send + Sync {
     /// Creates a new output reference from the given output info and runtime.
@@ -71,17 +34,12 @@ pub(crate) trait ObsOutputTraitSealed: Debug + Send + Sync {
 }
 
 #[allow(private_bounds)]
-pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsOutputClone {
-    fn runtime(&self) -> &ObsRuntime;
+pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsObjectTrait {
     fn signal_manager(&self) -> &Arc<ObsOutputSignals>;
-    fn settings(&self) -> &Arc<RwLock<Option<ObsData>>>;
-    fn hotkey_data(&self) -> &Arc<RwLock<Option<ObsData>>>;
-    fn video_encoder(&self) -> &Arc<RwLock<Option<Arc<ObsVideoEncoder>>>>;
-    fn audio_encoders(&self) -> &Arc<RwLock<HashMap<usize, Arc<ObsAudioEncoder>>>>;
     fn as_ptr(&self) -> Sendable<*mut obs_output>;
 
-    fn id(&self) -> ObsString;
-    fn name(&self) -> ObsString;
+    fn video_encoder(&self) -> &Arc<RwLock<Option<Arc<ObsVideoEncoder>>>>;
+    fn audio_encoders(&self) -> &Arc<RwLock<HashMap<usize, Arc<ObsAudioEncoder>>>>;
 
     /// Returns the current video encoder attached to this output, if any.
     fn get_current_video_encoder(&self) -> Result<Option<Arc<ObsVideoEncoder>>, ObsError> {
@@ -139,11 +97,12 @@ pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsOutputClone {
     }
 
     /// Updates the settings of this output. Fails if active.
-    fn update_settings(&mut self, settings: ObsData) -> Result<(), ObsError> {
+    fn update_settings(&self, settings: ObsData) -> Result<(), ObsError> {
         if self.is_active()? {
             return Err(ObsError::OutputAlreadyActive);
         }
 
+        let settings = settings.into_immutable();
         let settings_ptr = settings.as_ptr();
         let output_ptr = self.as_ptr();
         let runtime = self.runtime().clone();
@@ -152,7 +111,7 @@ pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsOutputClone {
             libobs::obs_output_update(output_ptr, settings_ptr)
         })?;
 
-        self.settings()
+        self.settings
             .write()
             .map_err(|e| ObsError::LockError(e.to_string()))?
             .replace(settings);

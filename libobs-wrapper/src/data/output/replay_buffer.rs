@@ -13,11 +13,9 @@ use libobs::obs_output;
 
 use crate::{
     data::{
-        output::{
-            ObsOutputRef, ObsOutputSignals, ObsOutputTrait, ObsOutputTraitSealed,
-            ReplayBufferOutput,
-        },
-        ObsData,
+        immutable::ImmutableObsData,
+        object::ObsObjectTrait,
+        output::{ObsOutputRef, ObsOutputSignals, ObsOutputTrait, ObsOutputTraitSealed},
     },
     encoders::{audio::ObsAudioEncoder, video::ObsVideoEncoder},
     impl_signal_manager, run_with_obs,
@@ -57,13 +55,7 @@ impl ObsOutputTraitSealed for ObsReplayBufferOutputRef {
     }
 }
 
-impl ObsReplayBufferOutputRef {
-    pub fn replay_signals(&self) -> &Arc<ObsReplayOutputSignals> {
-        &self.replay_signal_manager
-    }
-}
-
-impl ObsOutputTrait for ObsReplayBufferOutputRef {
+impl ObsObjectTrait for ObsReplayBufferOutputRef {
     fn name(&self) -> ObsString {
         self.output.name.clone()
     }
@@ -76,16 +68,18 @@ impl ObsOutputTrait for ObsReplayBufferOutputRef {
         &self.output.runtime
     }
 
+    fn settings(&self) -> &ImmutableObsData {
+        &self.output.settings()
+    }
+
+    fn hotkey_data(&self) -> &ImmutableObsData {
+        &self.output.hotkey_data()
+    }
+}
+
+impl ObsOutputTrait for ObsReplayBufferOutputRef {
     fn signal_manager(&self) -> &Arc<ObsOutputSignals> {
         &self.output.signal_manager
-    }
-
-    fn settings(&self) -> &Arc<RwLock<Option<ObsData>>> {
-        &self.output.settings
-    }
-
-    fn hotkey_data(&self) -> &Arc<RwLock<Option<ObsData>>> {
-        &self.output.hotkey_data
     }
 
     fn video_encoder(&self) -> &Arc<RwLock<Option<Arc<ObsVideoEncoder>>>> {
@@ -105,11 +99,10 @@ impl_signal_manager!(|ptr| unsafe { libobs::obs_output_get_signal_handler(ptr) }
     "saved": {}
 ]);
 
-/// Implementation of the ReplayBufferOutput trait for ObsOutputRef.
-///
-/// This implementation allows any ObsOutputRef configured as a replay buffer
-/// to save its content to disk via a simple API call.
-impl ReplayBufferOutput for ObsReplayBufferOutputRef {
+impl ObsReplayBufferOutputRef {
+    pub fn replay_signals(&self) -> &Arc<ObsReplayOutputSignals> {
+        &self.replay_signal_manager
+    }
     /// Saves the current replay buffer content to disk.
     ///
     /// # Implementation Details
@@ -126,7 +119,7 @@ impl ReplayBufferOutput for ObsReplayBufferOutputRef {
     ///   - Failure to call "save" procedure
     ///   - Failure to call "get_last_replay" procedure
     ///   - Failure to extract the path from calldata
-    fn save_buffer(&self) -> Result<Box<Path>, ObsError> {
+    pub fn save_buffer(&self) -> Result<Box<Path>, ObsError> {
         log::trace!("Saving replay buffer...");
         let output_ptr = self.as_ptr();
 

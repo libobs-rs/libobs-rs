@@ -3,6 +3,9 @@ use std::collections::HashMap;
 use std::ptr;
 use std::sync::{Arc, RwLock};
 
+use crate::data::immutable::ImmutableObsData;
+use crate::data::object::{ObsObjectTrait, ObsObjectTraitSealed};
+use crate::data::ObsDataPointers;
 use crate::runtime::ObsRuntime;
 use crate::unsafe_send::Sendable;
 use crate::utils::OutputInfo;
@@ -47,10 +50,10 @@ pub struct ObsOutputRef {
     pub(crate) signal_manager: Arc<ObsOutputSignals>,
 
     /// Settings for the output
-    pub(crate) settings: Arc<RwLock<Option<ObsData>>>,
+    pub(crate) settings: Arc<RwLock<Option<ImmutableObsData>>>,
 
     /// Hotkey configuration data for the output
-    pub(crate) hotkey_data: Arc<RwLock<Option<ObsData>>>,
+    pub(crate) hotkey_data: Arc<RwLock<Option<ImmutableObsData>>>,
 
     /// Video encoders attached to this output
     pub(crate) curr_video_encoder: Arc<RwLock<Option<Arc<ObsVideoEncoder>>>>,
@@ -132,7 +135,26 @@ impl ObsOutputTraitSealed for ObsOutputRef {
     }
 }
 
-impl ObsOutputTrait for ObsOutputRef {
+impl ObsObjectTraitSealed for ObsOutputRef {
+    fn replace_settings(&self, settings: ImmutableObsData) -> Result<(), ObsError> {
+        self.settings
+            .write()
+            .map_err(|_| ObsError::LockError("Failed to acquire write lock on settings".into()))?
+            .replace(settings);
+        Ok(())
+    }
+
+    fn replace_hotkey_data(&self, hotkey_data: ImmutableObsData) -> Result<(), ObsError> {
+        self.hotkey_data
+            .write()
+            .map_err(|_| ObsError::LockError("Failed to acquire write lock on hotkey data".into()))?
+            .replace(hotkey_data);
+
+        Ok(())
+    }
+}
+
+impl ObsObjectTrait for ObsOutputRef {
     fn name(&self) -> ObsString {
         self.name.clone()
     }
@@ -145,16 +167,18 @@ impl ObsOutputTrait for ObsOutputRef {
         &self.runtime
     }
 
-    fn signal_manager(&self) -> &Arc<ObsOutputSignals> {
-        &self.signal_manager
-    }
-
-    fn settings(&self) -> &Arc<RwLock<Option<ObsData>>> {
+    fn settings(&self) -> &ImmutableObsData {
         &self.settings
     }
 
-    fn hotkey_data(&self) -> &Arc<RwLock<Option<ObsData>>> {
+    fn hotkey_data(&self) -> &ImmutableObsData {
         &self.hotkey_data
+    }
+}
+
+impl ObsOutputTrait for ObsOutputRef {
+    fn signal_manager(&self) -> &Arc<ObsOutputSignals> {
+        &self.signal_manager
     }
 
     fn video_encoder(&self) -> &Arc<RwLock<Option<Arc<ObsVideoEncoder>>>> {

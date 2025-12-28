@@ -45,7 +45,7 @@ use std::{
 
 use crate::{
     data::output::{ObsOutputTrait, ObsOutputTraitSealed, ObsReplayBufferOutputRef},
-    display::{ObsDisplayCreationData, ObsDisplayRef},
+    display::{ObsDisplayCreationData, ObsDisplayRef}, sources::ObsSourceTrait,
 };
 use crate::{
     data::{output::ObsOutputRef, video::ObsVideoInfo, ObsData},
@@ -64,6 +64,8 @@ use libobs::{audio_output, video_output};
 lazy_static::lazy_static! {
     pub(crate) static ref OBS_THREAD_ID: Mutex<Option<ThreadId>> = Mutex::new(None);
 }
+
+type GeneralStorage<T> = Arc<RwLock<Vec<Arc<T>>>>;
 
 /// Interface to the OBS context. Only one context
 /// can exist across all threads and any attempt to
@@ -89,10 +91,10 @@ pub struct ObsContext {
     /// early freeing.
     #[allow(dead_code)]
     #[get_mut]
-    pub(crate) outputs: Arc<RwLock<Vec<Box<dyn ObsOutputTrait>>>>,
+    pub(crate) outputs: GeneralStorage<dyn ObsOutputTrait>,
 
     #[get_mut]
-    pub(crate) scenes: Arc<RwLock<Vec<ObsSceneRef>>>,
+    pub(crate) scenes: GeneralStorage<dyn ObsSourceTrait>,
 
     // Filters are on the level of the context because they are not scene-specific
     #[get_mut]
@@ -331,7 +333,7 @@ impl ObsContext {
                     .map_err(|_| {
                         ObsError::LockError("Failed to acquire write lock on outputs".to_string())
                     })?
-                    .push(Box::new(x));
+                    .push(Arc::new(Box::new(x)));
                 Ok(tmp)
             }
 
@@ -350,7 +352,7 @@ impl ObsContext {
                     .map_err(|_| {
                         ObsError::LockError("Failed to acquire write lock on outputs".to_string())
                     })?
-                    .push(Box::new(x));
+                    .push(Arc::new(Box::new(x)));
                 Ok(tmp)
             }
 
@@ -517,7 +519,10 @@ impl ObsContext {
         Ok(d)
     }
 
-    pub fn get_output(&mut self, name: &str) -> Result<Option<Box<dyn ObsOutputTrait>>, ObsError> {
+    pub fn get_output(
+        &mut self,
+        name: &str,
+    ) -> Result<Option<Arc<Box<dyn ObsOutputTrait>>>, ObsError> {
         let o = self
             .outputs
             .read()
@@ -532,11 +537,9 @@ impl ObsContext {
     pub fn update_output(&mut self, name: &str, settings: ObsData) -> Result<(), ObsError> {
         match self
             .outputs
-            .write()
-            .map_err(|_| {
-                ObsError::LockError("Failed to acquire write lock on outputs".to_string())
-            })?
-            .iter_mut()
+            .read()
+            .map_err(|_| ObsError::LockError("Failed to acquire read lock on outputs".to_string()))?
+            .iter()
             .find(|x| x.name().to_string().as_str() == name)
         {
             Some(output) => output.update_settings(settings),

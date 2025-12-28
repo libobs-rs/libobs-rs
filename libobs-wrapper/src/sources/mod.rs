@@ -1,10 +1,13 @@
 mod builder;
 pub use builder::*;
 
+mod traits;
+pub use traits::*;
+
 use libobs::{obs_scene_item, obs_scene_t, obs_source_t};
 
 use crate::{
-    data::{immutable::ImmutableObsData, ObsData},
+    data::{immutable::ImmutableObsData, object::ObsObjectTrait, ObsData},
     impl_obs_drop, impl_signal_manager,
     macros::impl_eq_of_ptr,
     run_with_obs,
@@ -100,28 +103,34 @@ impl ObsSourceRef {
         })
     }
 
-    pub fn settings(&self) -> &ImmutableObsData {
-        &self.settings
-    }
-
-    pub fn hotkey_data(&self) -> &ImmutableObsData {
-        &self.hotkey_data
-    }
-
-    pub fn name(&self) -> String {
-        self.name.to_string()
-    }
-
-    pub fn id(&self) -> String {
-        self.id.to_string()
-    }
-
     pub fn signal_manager(&self) -> Arc<ObsSourceSignals> {
         self.signal_manager.clone()
     }
 
     pub fn as_ptr(&self) -> *mut obs_source_t {
         self.source.0
+    }
+}
+
+impl ObsObjectTrait for ObsSourceRef {
+    fn runtime(&self) -> &ObsRuntime {
+        &self.runtime
+    }
+
+    fn settings(&self) -> &ImmutableObsData {
+        &self.settings
+    }
+
+    fn hotkey_data(&self) -> &ImmutableObsData {
+        &self.hotkey_data
+    }
+
+    fn name(&self) -> String {
+        self.name.to_string()
+    }
+
+    fn id(&self) -> String {
+        self.id.to_string()
     }
 }
 
