@@ -13,7 +13,7 @@ use crate::sources::macro_helper::define_object_manager;
 pub enum ObsPipeWireSourceType {
     /// Screen capture via desktop portal
     DesktopCapture,
-    /// Camera capture via camera portal  
+    /// Camera capture via camera portal
     CameraCapture,
 }
 /*
