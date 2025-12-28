@@ -2,6 +2,7 @@ use libobs_simple::output::simple::ObsContextSimpleExt;
 use libobs_simple::sources::linux::{PipeWireScreenCaptureSourceBuilder, PipeWireSourceExtTrait};
 use libobs_simple::wrapper::{
     context::ObsContext,
+    data::output::ObsOutputTrait,
     enums::ObsLogLevel,
     logger::ObsLogger,
     sources::ObsSourceBuilder,

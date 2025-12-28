@@ -2,9 +2,8 @@ use libobs_simple_macro::{obs_object_builder, obs_object_updater};
 use libobs_wrapper::{
     data::{object::ObsObjectTrait, ObsDataGetters},
     run_with_obs,
-    sources::{ObsSourceBuilder, ObsSourceRef},
-    unsafe_send::Sendable,
-    utils::{traits::ObsUpdatable, ObsError},
+    sources::{ObsSourceBuilder, ObsSourceRef, ObsSourceTrait},
+    utils::ObsError,
 };
 
 use crate::sources::macro_helper::define_object_manager;
@@ -137,12 +136,12 @@ impl PipeWireSourceExtTrait for ObsSourceRef {
             return Err(ObsError::InvalidOperation(format!("Can't call 'get_restore_token' on a source of id {}. Expected 'pipewire-desktop-capture-source', 'pipewire-window-capture-source' or 'pipewire-screen-capture-source'", self.id())));
         }
 
-        let source_ptr = Sendable(self.as_ptr());
+        let source_ptr = self.as_ptr();
         run_with_obs!(self.runtime(), (source_ptr), move || unsafe {
             libobs::obs_source_save(source_ptr);
         })?;
 
-        let settings = self.get_settings()?;
+        let settings = self.settings()?;
         let token = settings.get_string("RestoreToken")?;
         Ok(token)
     }
