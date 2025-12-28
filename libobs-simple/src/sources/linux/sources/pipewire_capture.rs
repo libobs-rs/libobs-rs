@@ -1,6 +1,6 @@
 use libobs_simple_macro::{obs_object_builder, obs_object_updater};
 use libobs_wrapper::{
-    data::ObsDataGetters,
+    data::{object::ObsObjectTrait, ObsDataGetters},
     run_with_obs,
     sources::{ObsSourceBuilder, ObsSourceRef},
     unsafe_send::Sendable,
