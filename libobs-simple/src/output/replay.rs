@@ -39,8 +39,7 @@
 use libobs_wrapper::{
     context::ObsContext,
     data::{
-        output::{ObsOutputTrait, ObsReplayBufferOutputRef},
-        ObsData, ObsDataGetters,
+        ObsData, ObsDataGetters, ObsDataSetters, output::{ObsOutputTrait, ObsReplayBufferOutputRef}
     },
     encoders::{ObsAudioEncoderType, ObsContextEncoders, ObsVideoEncoderType},
     utils::{AudioEncoderInfo, ObsError, ObsPath, ObsString, OutputInfo, VideoEncoderInfo},

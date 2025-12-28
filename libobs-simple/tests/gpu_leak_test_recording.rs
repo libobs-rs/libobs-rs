@@ -8,11 +8,7 @@ use libobs_simple::{
     output::replay::ObsContextReplayExt,
     sources::windows::{ObsWindowCaptureMethod, WindowCaptureSourceBuilder},
 };
-use libobs_wrapper::{
-    data::output::{ObsOutputTrait, ReplayBufferOutput},
-    sources::ObsSourceBuilder,
-    utils::ObsPath,
-};
+use libobs_wrapper::{data::output::ObsOutputTrait, sources::ObsSourceBuilder, utils::ObsPath};
 
 use common::{assert_not_black, find_notepad, initialize_obs};
 

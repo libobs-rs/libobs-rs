@@ -106,7 +106,7 @@ pub fn obs_object_updater(attr: TokenStream, item: TokenStream) -> TokenStream {
             }
 
             fn update(self) -> Result<(), libobs_wrapper::utils::ObsError> {
-                use libobs_wrapper::utils::traits::ObsUpdatable;
+                use libobs_wrapper::data::object::ObsObjectTrait;
                 let #updater_name {
                     settings_updater,
                     updatable,

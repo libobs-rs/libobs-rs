@@ -5,7 +5,7 @@ mod common;
 use std::{path::PathBuf, time::Duration};
 
 use libobs_simple::sources::windows::{GameCaptureSourceBuilder, ObsGameCaptureMode};
-use libobs_wrapper::{data::output::ObsOutputTrait, sources::ObsSourceBuilder, utils::ObsPath};
+use libobs_wrapper::{data::{object::ObsObjectTrait, output::ObsOutputTrait}, sources::ObsSourceBuilder, utils::ObsPath};
 
 use crate::common::{assert_not_black, initialize_obs};
 

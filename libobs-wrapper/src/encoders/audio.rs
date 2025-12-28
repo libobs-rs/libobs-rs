@@ -112,7 +112,7 @@ impl ObsObjectTraitSealed for ObsAudioEncoder {
             .write()
             .map_err(|_| {
                 ObsError::LockError(
-                    "Failed to aquire lock for replacing settings in the audio encoder".into(),
+                    "Failed to acquire lock for replacing settings in the audio encoder".into(),
                 )
             })
             .map(|mut guard| {
@@ -125,7 +125,7 @@ impl ObsObjectTraitSealed for ObsAudioEncoder {
             .write()
             .map_err(|_| {
                 ObsError::LockError(
-                    "Failed to aquire lock for replacing hotkey data in the audio encoder".into(),
+                    "Failed to acquire lock for replacing hotkey data in the audio encoder".into(),
                 )
             })
             .map(|mut guard| {

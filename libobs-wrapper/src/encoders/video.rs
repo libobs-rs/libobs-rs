@@ -106,7 +106,7 @@ impl ObsObjectTraitSealed for ObsVideoEncoder {
             .write()
             .map_err(|_| {
                 ObsError::LockError(
-                    "Failed to aquire lock for replacing settings in the video encoder".into(),
+                    "Failed to acquire lock for replacing settings in the video encoder".into(),
                 )
             })
             .map(|mut guard| {
@@ -119,7 +119,7 @@ impl ObsObjectTraitSealed for ObsVideoEncoder {
             .write()
             .map_err(|_| {
                 ObsError::LockError(
-                    "Failed to aquire lock for replacing hotkey data in the video encoder".into(),
+                    "Failed to acquire lock for replacing hotkey data in the video encoder".into(),
                 )
             })
             .map(|mut guard| {
@@ -138,7 +138,7 @@ impl ObsObjectTrait for ObsVideoEncoder {
             .read()
             .map_err(|_| {
                 ObsError::LockError(
-                    "Failed to aquire lock for reading settings in the video encoder".into(),
+                    "Failed to acquire lock for reading settings in the video encoder".into(),
                 )
             })
             .map(|s| s.clone())
@@ -149,7 +149,7 @@ impl ObsObjectTrait for ObsVideoEncoder {
             .read()
             .map_err(|_| {
                 ObsError::LockError(
-                    "Failed to aquire lock for reading hotkey data in the video encoder".into(),
+                    "Failed to acquire lock for reading hotkey data in the video encoder".into(),
                 )
             })
             .map(|h| h.clone())

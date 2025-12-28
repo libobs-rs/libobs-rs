@@ -1,7 +1,6 @@
 use env_logger::Env;
 use libobs_wrapper::{
-    context::ObsContext,
-    utils::{OutputInfo, StartupInfo},
+    context::ObsContext, data::ObsDataSetters, utils::{OutputInfo, StartupInfo}
 };
 
 /// Stage 2: Initialize OBS and create basic output without encoders
