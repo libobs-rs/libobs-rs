@@ -191,7 +191,7 @@ impl ObsSceneRef {
             .read()
             .map_err(|e| ObsError::LockError(format!("{:?}", e)))?
             .iter()
-            .find(|s| s.name().to_string() == name)
+            .find(|s| s.name() == name)
             .cloned();
 
         Ok(r)
