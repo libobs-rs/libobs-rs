@@ -1,8 +1,6 @@
 use env_logger::Env;
 use libobs_wrapper::{
-    context::ObsContext,
-    encoders::{ObsContextEncoders, ObsVideoEncoderType},
-    utils::{AudioEncoderInfo, OutputInfo, StartupInfo},
+    context::ObsContext, data::output::ObsOutputTrait, encoders::{ObsContextEncoders, ObsVideoEncoderType}, utils::{AudioEncoderInfo, OutputInfo, StartupInfo}
 };
 
 /// Stage 4: Initialize OBS with output, encoders, and create a scene
