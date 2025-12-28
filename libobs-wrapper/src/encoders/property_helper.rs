@@ -5,9 +5,11 @@ use duplicate::duplicate_item;
 use crate::{
     context::ObsContext,
     data::{
-        ObsData, output::{ObsOutputRef, ObsOutputTrait}, properties::{
-            ObsProperty, ObsPropertyObject, ObsPropertyObjectPrivate, get_properties_inner
-        }
+        output::{ObsOutputRef, ObsOutputTrait},
+        properties::{
+            get_properties_inner, ObsProperty, ObsPropertyObject, ObsPropertyObjectPrivate,
+        },
+        ObsData,
     },
     run_with_obs,
     runtime::ObsRuntime,

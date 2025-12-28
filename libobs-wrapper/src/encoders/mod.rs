@@ -9,6 +9,8 @@ use std::{ffi::CStr, os::raw::c_char};
 
 pub mod audio;
 mod enums;
+mod traits;
+pub use traits::*;
 mod property_helper;
 pub use property_helper::*;
 pub mod video;

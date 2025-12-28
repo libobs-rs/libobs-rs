@@ -11,6 +11,7 @@ use libobs::{obs_scene_item, obs_scene_t, obs_source_t, obs_transform_info, obs_
 
 use crate::enums::ObsBoundsType;
 use crate::macros::impl_eq_of_ptr;
+use crate::sources::{ObsSourceTrait, ObsSourceTraitSealed};
 use crate::unsafe_send::SendableComp;
 use crate::{
     graphics::Vec2,
@@ -34,6 +35,8 @@ impl_obs_drop!(_SceneDropGuard, (scene), move || unsafe {
     libobs::obs_scene_release(scene);
 });
 
+type GeneralSetStorage<T> = Arc<RwLock<HashSet<Arc<Box<T>>>>>;
+
 #[derive(Debug, Clone, Getters)]
 #[skip_new]
 pub struct ObsSceneRef {
@@ -41,7 +44,7 @@ pub struct ObsSceneRef {
     pub(crate) scene: Arc<Sendable<*mut obs_scene_t>>,
     name: ObsString,
     #[get_mut]
-    pub(crate) sources: Arc<RwLock<HashSet<ObsSourceRef>>>,
+    pub(crate) sources: GeneralSetStorage<dyn ObsSourceTrait>,
     #[skip_getter]
     /// Maps the currently current active scenes by their channel (this is a shared reference between all scenes)
     pub(crate) active_scenes: Arc<RwLock<HashMap<u32, ObsSceneRef>>>,
@@ -168,45 +171,39 @@ impl ObsSceneRef {
         }
 
         //TODO We should clear one reference because with this obs doesn't clean up properly
-        source
-            .scene_items
-            .write()
-            .map_err(|e| ObsError::LockError(format!("{:?}", e)))?
-            .insert(SendableComp(self.scene.0), ptr.clone());
+        source.add_scene_item_ptr(SendableComp(self.scene.0), ptr.clone())?;
 
+        //REVIEW If this fails, the source isn't added but there's still a pointer in the source
         self.sources
             .write()
             .map_err(|e| ObsError::LockError(format!("{:?}", e)))?
-            .insert(source.clone());
+            .insert(Arc::new(Box::new(source.clone())));
         Ok(source)
     }
 
     /// Gets a source by name from this scene. Returns None if no source with the given name exists in this scene.
-    pub fn get_source_mut(&self, name: &str) -> Result<Option<ObsSourceRef>, ObsError> {
+    pub fn get_source_mut(
+        &self,
+        name: &str,
+    ) -> Result<Option<Arc<Box<dyn ObsSourceTrait>>>, ObsError> {
         let r = self
             .sources
             .read()
             .map_err(|e| ObsError::LockError(format!("{:?}", e)))?
             .iter()
-            .find(|s| s.name() == name)
+            .find(|s| s.name().to_string() == name)
             .cloned();
 
         Ok(r)
     }
 
     /// Removes the given source from this scene. Removes the corresponding scene item as well. It may be possible that this source is still added to another scene.
-    pub fn remove_source(&mut self, source: &ObsSourceRef) -> Result<(), ObsError> {
+    pub fn remove_source(&mut self, source: &Arc<Box<dyn ObsSourceTrait>>) -> Result<(), ObsError> {
         let sendable_comp = SendableComp(self.scene.0);
         {
-            let scene_items = source
-                .scene_items
-                .read()
-                .map_err(|e| ObsError::LockError(format!("{:?}", e)))?;
-
-            let scene_item_ptr = scene_items
-                .get(&sendable_comp)
-                .ok_or(ObsError::SourceNotFound)?
-                .clone();
+            let scene_item_ptr = source
+                .get_scene_item_ptr(&sendable_comp)?
+                .ok_or(ObsError::SourceNotFound)?;
 
             run_with_obs!(self.runtime, (scene_item_ptr), move || unsafe {
                 // Remove the scene item
@@ -222,11 +219,7 @@ impl ObsSceneRef {
             .map_err(|e| ObsError::LockError(format!("{:?}", e)))?
             .remove(source);
 
-        source
-            .scene_items
-            .write()
-            .map_err(|e| ObsError::LockError(format!("{:?}", e)))?
-            .remove(&sendable_comp);
+        source.remove_scene_item_ptr(sendable_comp)?;
 
         Ok(())
     }

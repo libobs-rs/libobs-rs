@@ -8,8 +8,8 @@ use std::{
 use libobs::obs_output;
 
 use crate::{
-    data::{ObsDataPointers, object::ObsObjectTrait},
-    encoders::{audio::ObsAudioEncoder, video::ObsVideoEncoder},
+    data::object::ObsObjectTrait,
+    encoders::{audio::ObsAudioEncoder, video::ObsVideoEncoder, ObsEncoderTrait},
     enums::ObsOutputStopSignal,
     run_with_obs,
     runtime::ObsRuntime,
@@ -17,7 +17,7 @@ use crate::{
     utils::{AudioEncoderInfo, ObsError, OutputInfo, VideoEncoderInfo},
 };
 
-use super::{ObsData, ObsOutputSignals};
+use super::ObsOutputSignals;
 
 pub(crate) trait ObsOutputTraitSealed: Debug + Send + Sync {
     /// Creates a new output reference from the given output info and runtime.
@@ -93,28 +93,6 @@ pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsObjectTrait {
             .map_err(|e| ObsError::LockError(e.to_string()))?
             .replace(encoder);
 
-        Ok(())
-    }
-
-    /// Updates the settings of this output. Fails if active.
-    fn update_settings(&self, settings: ObsData) -> Result<(), ObsError> {
-        if self.is_active()? {
-            return Err(ObsError::OutputAlreadyActive);
-        }
-
-        let settings = settings.into_immutable();
-        let settings_ptr = settings.as_ptr();
-        let output_ptr = self.as_ptr();
-        let runtime = self.runtime().clone();
-
-        run_with_obs!(runtime, (output_ptr, settings_ptr), move || unsafe {
-            libobs::obs_output_update(output_ptr, settings_ptr)
-        })?;
-
-        self.settings
-            .write()
-            .map_err(|e| ObsError::LockError(e.to_string()))?
-            .replace(settings);
         Ok(())
     }
 

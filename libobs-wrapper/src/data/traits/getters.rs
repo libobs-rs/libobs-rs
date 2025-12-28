@@ -1,7 +1,10 @@
 use std::ffi::CStr;
 
 use crate::{
-    data::ObsDataPointers, run_with_obs, unsafe_send::Sendable, utils::{ObsError, ObsString}
+    data::ObsDataPointers,
+    run_with_obs,
+    unsafe_send::Sendable,
+    utils::{ObsError, ObsString},
 };
 
 pub trait ObsDataGetters: ObsDataPointers {

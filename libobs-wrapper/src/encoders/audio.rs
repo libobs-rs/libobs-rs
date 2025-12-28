@@ -1,22 +1,29 @@
-use libobs::audio_output;
-use std::{borrow::Borrow, ptr, sync::Arc};
+use libobs::{audio_output, obs_encoder};
+use std::{
+    borrow::Borrow,
+    ptr,
+    sync::{Arc, RwLock},
+};
 
 use crate::{
-    data::ObsData,
+    data::{
+        ObsDataPointers, immutable::ImmutableObsData, object::{ObsObjectTrait, ObsObjectTraitSealed, inner_fn_update_settings}
+    },
+    encoders::ObsEncoderTrait,
     impl_obs_drop, run_with_obs,
     runtime::ObsRuntime,
     unsafe_send::Sendable,
     utils::{AudioEncoderInfo, ObsError, ObsString},
 };
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 #[allow(dead_code)]
 pub struct ObsAudioEncoder {
     pub(crate) encoder: Sendable<*mut libobs::obs_encoder_t>,
     pub(crate) id: ObsString,
     pub(crate) name: ObsString,
-    pub(crate) settings: Option<ObsData>,
-    pub(crate) hotkey_data: Option<ObsData>,
+    pub(crate) settings: Arc<RwLock<ImmutableObsData>>,
+    pub(crate) hotkey_data: Arc<RwLock<ImmutableObsData>>,
     pub(crate) runtime: ObsRuntime,
 }
 
@@ -59,18 +66,27 @@ impl ObsAudioEncoder {
             return Err(ObsError::NullPointer);
         }
 
+        let settings = {
+            let settings_ptr = run_with_obs!(runtime, (encoder), move || unsafe {
+                Sendable(libobs::obs_encoder_get_settings(encoder))
+            })?;
+
+            ImmutableObsData::from_raw(settings_ptr, runtime.clone())
+        };
+
+        let hotkey_data = match info.hotkey_data.borrow() {
+            Some(h) => h.clone(),
+            None => ImmutableObsData::new(&runtime)?,
+        };
+
         Ok(Arc::new(Self {
             encoder,
             id: info.id,
             name: info.name,
-            settings: info.settings,
-            hotkey_data: info.hotkey_data,
+            settings: Arc::new(RwLock::new(settings)),
+            hotkey_data: Arc::new(RwLock::new(hotkey_data)),
             runtime,
         }))
-    }
-
-    pub fn as_ptr(&self) -> Sendable<*mut libobs::obs_encoder_t> {
-        self.encoder.clone()
     }
 
     /// This is only needed once for global audio context
@@ -89,3 +105,79 @@ impl ObsAudioEncoder {
 impl_obs_drop!(ObsAudioEncoder, (encoder), move || unsafe {
     libobs::obs_encoder_release(encoder)
 });
+
+impl ObsObjectTraitSealed for ObsAudioEncoder {
+    fn replace_settings(&self, settings: ImmutableObsData) -> Result<(), ObsError> {
+        self.settings
+            .write()
+            .map_err(|_| {
+                ObsError::LockError(
+                    "Failed to aquire lock for replacing settings in the audio encoder".into(),
+                )
+            })
+            .map(|mut guard| {
+                *guard = settings;
+            })
+    }
+
+    fn replace_hotkey_data(&self, hotkey_data: ImmutableObsData) -> Result<(), ObsError> {
+        self.hotkey_data
+            .write()
+            .map_err(|_| {
+                ObsError::LockError(
+                    "Failed to aquire lock for replacing hotkey data in the audio encoder".into(),
+                )
+            })
+            .map(|mut guard| {
+                *guard = hotkey_data;
+            })
+    }
+}
+
+impl ObsObjectTrait for ObsAudioEncoder {
+    fn runtime(&self) -> &ObsRuntime {
+        &self.runtime
+    }
+
+    fn settings(&self) -> Result<ImmutableObsData, ObsError> {
+        self.settings
+            .read()
+            .map_err(|_| {
+                ObsError::LockError("Failed to acquire read lock on audio encoder settings".into())
+            })
+            .map(|s| s.clone())
+    }
+
+    fn hotkey_data(&self) -> Result<ImmutableObsData, ObsError> {
+        self.hotkey_data
+            .read()
+            .map_err(|_| {
+                ObsError::LockError(
+                    "Failed to acquire read lock on audio encoder hotkey data".into(),
+                )
+            })
+            .map(|h| h.clone())
+    }
+
+    fn id(&self) -> ObsString {
+        self.id.clone()
+    }
+
+    fn name(&self) -> ObsString {
+        self.name.clone()
+    }
+
+    fn update_settings(&self, settings: crate::data::ObsData) -> Result<(), ObsError> {
+        if self.is_active()? {
+            return Err(ObsError::EncoderActive);
+        }
+
+        inner_fn_update_settings!(self, libobs::obs_encoder_update, settings)
+    }
+}
+
+impl ObsEncoderTrait for ObsAudioEncoder {
+    fn as_ptr(&self) -> Sendable<*mut obs_encoder> {
+        self.encoder.clone()
+    }
+}

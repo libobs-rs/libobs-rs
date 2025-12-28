@@ -39,7 +39,8 @@
 use libobs_wrapper::{
     context::ObsContext,
     data::{
-        ObsData, ObsDataGetters, output::{ObsOutputTrait, ObsReplayBufferOutputRef}
+        output::{ObsOutputTrait, ObsReplayBufferOutputRef},
+        ObsData, ObsDataGetters,
     },
     encoders::{ObsAudioEncoderType, ObsContextEncoders, ObsVideoEncoderType},
     utils::{AudioEncoderInfo, ObsError, ObsPath, ObsString, OutputInfo, VideoEncoderInfo},
@@ -278,7 +279,10 @@ impl ReplayBufferBuilder {
         output_settings.set_string("directory", self.settings.directory.clone().build())?;
         output_settings.set_bool("allow_spaces", self.settings.allow_spaces)?;
 
-        log::trace!("Replay buffer output settings: {:?}", output_settings.get_json());
+        log::trace!(
+            "Replay buffer output settings: {:?}",
+            output_settings.get_json()
+        );
 
         // Create the replay buffer output
         let output_info = OutputInfo::new(

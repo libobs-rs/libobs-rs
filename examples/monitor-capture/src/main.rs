@@ -12,7 +12,7 @@ use libobs_wrapper::data::ObsObjectUpdater;
 #[cfg(windows)]
 use libobs_wrapper::sources::ObsSourceBuilder;
 #[cfg(windows)]
-use libobs_wrapper::utils::traits::ObsUpdatable;
+use libobs_wrapper::utils::traits::ObsSourceUpdateTrait;
 
 #[cfg(target_os = "linux")]
 use libobs_simple::sources::linux::LinuxGeneralScreenCapture;

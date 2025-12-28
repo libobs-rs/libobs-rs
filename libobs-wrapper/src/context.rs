@@ -44,8 +44,11 @@ use std::{
 };
 
 use crate::{
-    data::output::{ObsOutputTrait, ObsOutputTraitSealed, ObsReplayBufferOutputRef},
-    display::{ObsDisplayCreationData, ObsDisplayRef}, sources::ObsSourceTrait,
+    data::{
+        object::ObsObjectTrait,
+        output::{ObsOutputTrait, ObsOutputTraitSealed, ObsReplayBufferOutputRef},
+    },
+    display::{ObsDisplayCreationData, ObsDisplayRef}
 };
 use crate::{
     data::{output::ObsOutputRef, video::ObsVideoInfo, ObsData},
@@ -65,7 +68,7 @@ lazy_static::lazy_static! {
     pub(crate) static ref OBS_THREAD_ID: Mutex<Option<ThreadId>> = Mutex::new(None);
 }
 
-type GeneralStorage<T> = Arc<RwLock<Vec<Arc<T>>>>;
+pub(crate) type GeneralStorage<T> = Arc<RwLock<Vec<Arc<Box<T>>>>>;
 
 /// Interface to the OBS context. Only one context
 /// can exist across all threads and any attempt to
@@ -94,7 +97,7 @@ pub struct ObsContext {
     pub(crate) outputs: GeneralStorage<dyn ObsOutputTrait>,
 
     #[get_mut]
-    pub(crate) scenes: GeneralStorage<dyn ObsSourceTrait>,
+    pub(crate) scenes: Arc<RwLock<Vec<ObsSceneRef>>>,
 
     // Filters are on the level of the context because they are not scene-specific
     #[get_mut]
@@ -586,6 +589,7 @@ impl ObsContext {
             .iter()
             .find(|x| x.name().to_string().as_str() == name)
             .cloned();
+
         Ok(r)
     }
 

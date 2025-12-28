@@ -4,12 +4,12 @@ use std::ptr;
 use std::sync::{Arc, RwLock};
 
 use crate::data::immutable::ImmutableObsData;
-use crate::data::object::{ObsObjectTrait, ObsObjectTraitSealed};
+use crate::data::object::{ObsObjectTrait, ObsObjectTraitSealed, inner_fn_update_settings};
 use crate::data::ObsDataPointers;
 use crate::runtime::ObsRuntime;
 use crate::unsafe_send::Sendable;
 use crate::utils::OutputInfo;
-use crate::{impl_obs_drop, impl_signal_manager};
+use crate::{impl_obs_drop, impl_signal_manager, run_with_obs};
 
 use crate::{
     encoders::{audio::ObsAudioEncoder, video::ObsVideoEncoder},
@@ -18,6 +18,7 @@ use crate::{
 
 use super::ObsData;
 
+pub(crate) mod macros;
 mod traits;
 pub use traits::*;
 
@@ -50,10 +51,10 @@ pub struct ObsOutputRef {
     pub(crate) signal_manager: Arc<ObsOutputSignals>,
 
     /// Settings for the output
-    pub(crate) settings: Arc<RwLock<Option<ImmutableObsData>>>,
+    pub(crate) settings: Arc<RwLock<ImmutableObsData>>,
 
     /// Hotkey configuration data for the output
-    pub(crate) hotkey_data: Arc<RwLock<Option<ImmutableObsData>>>,
+    pub(crate) hotkey_data: Arc<RwLock<ImmutableObsData>>,
 
     /// Video encoders attached to this output
     pub(crate) curr_video_encoder: Arc<RwLock<Option<Arc<ObsVideoEncoder>>>>,
@@ -78,7 +79,7 @@ pub struct ObsOutputRef {
 
 impl ObsOutputTraitSealed for ObsOutputRef {
     fn new(output: OutputInfo, runtime: ObsRuntime) -> Result<Self, ObsError> {
-        let (output, id, name, settings, hotkey_data) = runtime.run_with_obs_result(|| {
+        let (output, id, name, hotkey_data) = runtime.run_with_obs_result(|| {
             let OutputInfo {
                 id,
                 name,
@@ -105,12 +106,26 @@ impl ObsOutputTraitSealed for ObsOutputRef {
                 )
             };
 
-            (Sendable(output), id, name, settings, hotkey_data)
+            (Sendable(output), id, name, hotkey_data)
         })?;
 
         if output.0.is_null() {
             return Err(ObsError::NullPointer);
         }
+
+        // We are getting the settings from OBS because OBS will have updated it with default values.
+        let new_settings_ptr = run_with_obs!(runtime, (output), move || unsafe {
+            Sendable(libobs::obs_output_get_settings(output))
+        })?;
+
+        let settings = ImmutableObsData::from_raw(new_settings_ptr, runtime.clone());
+
+        // We are creating the hotkey data here because even it is null, OBS would create it nonetheless.
+        // https://github.com/obsproject/obs-studio/blob/d97e5ad820abcccf826faf897df4c7f511857cd4/libobs/obs.c#L2629
+        let hotkey_data = match hotkey_data {
+            Some(h) => h,
+            None => ImmutableObsData::new(&runtime)?,
+        };
 
         let signal_manager = ObsOutputSignals::new(&output, runtime.clone())?;
         Ok(Self {
@@ -139,18 +154,19 @@ impl ObsObjectTraitSealed for ObsOutputRef {
     fn replace_settings(&self, settings: ImmutableObsData) -> Result<(), ObsError> {
         self.settings
             .write()
-            .map_err(|_| ObsError::LockError("Failed to acquire write lock on settings".into()))?
-            .replace(settings);
-        Ok(())
+            .map_err(|_| ObsError::LockError("Failed to acquire write lock on settings".into()))
+            .map(|mut settings_lock| {
+                *settings_lock = settings;
+            })
     }
 
     fn replace_hotkey_data(&self, hotkey_data: ImmutableObsData) -> Result<(), ObsError> {
         self.hotkey_data
             .write()
-            .map_err(|_| ObsError::LockError("Failed to acquire write lock on hotkey data".into()))?
-            .replace(hotkey_data);
-
-        Ok(())
+            .map_err(|_| ObsError::LockError("Failed to acquire write lock on hotkey data".into()))
+            .map(|mut hotkey_lock| {
+                *hotkey_lock = hotkey_data;
+            })
     }
 }
 
@@ -167,12 +183,29 @@ impl ObsObjectTrait for ObsOutputRef {
         &self.runtime
     }
 
-    fn settings(&self) -> &ImmutableObsData {
-        &self.settings
+    fn settings(&self) -> Result<ImmutableObsData, ObsError> {
+        let r = self
+            .settings
+            .read()
+            .map_err(|_| ObsError::LockError("Failed to acquire read lock on settings".into()))?;
+
+        Ok(r.clone())
     }
 
-    fn hotkey_data(&self) -> &ImmutableObsData {
-        &self.hotkey_data
+    fn hotkey_data(&self) -> Result<ImmutableObsData, ObsError> {
+        let r = self.hotkey_data.read().map_err(|_| {
+            ObsError::LockError("Failed to acquire read lock on hotkey data".into())
+        })?;
+
+        Ok(r.clone())
+    }
+
+    fn update_settings(&self, settings: ObsData) -> Result<(), ObsError> {
+        if self.is_active()? {
+            return Err(ObsError::OutputAlreadyActive);
+        }
+
+        inner_fn_update_settings!(self, libobs::obs_output_update, settings)
     }
 }
 

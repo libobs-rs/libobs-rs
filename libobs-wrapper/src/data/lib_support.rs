@@ -1,9 +1,9 @@
 //! Use the `libobs-source` crate to create sources like `window_capture` for obs
 
 use crate::{
-    data::ObsData,
+    data::{object::ObsObjectTrait, ObsData},
     runtime::ObsRuntime,
-    utils::{traits::ObsUpdatable, ObjectInfo, ObsError, ObsString},
+    utils::{ObjectInfo, ObsError, ObsString},
 };
 
 use super::updater::ObsDataUpdater;
@@ -40,7 +40,7 @@ pub trait ObsObjectBuilder {
 }
 
 pub trait ObsObjectUpdater<'a> {
-    type ToUpdate: ObsUpdatable;
+    type ToUpdate: ObsObjectTrait;
     fn create_update(
         runtime: ObsRuntime,
         updatable: &'a mut Self::ToUpdate,

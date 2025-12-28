@@ -9,7 +9,7 @@ use libobs_simple::sources::linux::LinuxGeneralScreenCapture;
 use libobs_wrapper::utils::NixDisplay;
 
 #[cfg(windows)]
-use libobs_wrapper::utils::traits::ObsUpdatable;
+use libobs_wrapper::utils::traits::ObsSourceUpdateTrait;
 
 #[cfg(windows)]
 use libobs_simple::sources::windows::{

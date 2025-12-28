@@ -15,10 +15,10 @@ use libobs_simple::sources::windows::{
     ObsWindowCaptureMethod, WindowCaptureSourceBuilder, WindowCaptureSourceUpdater,
 };
 use libobs_window_helper::WindowSearchMode;
-use libobs_wrapper::data::{ObsObjectUpdater, output::ObsOutputTrait};
+use libobs_wrapper::data::{output::ObsOutputTrait, ObsObjectUpdater};
 use libobs_wrapper::{
     sources::ObsSourceBuilder,
-    utils::{traits::ObsUpdatable, ObsPath},
+    utils::{traits::ObsSourceUpdateTrait, ObsPath},
 };
 
 #[test]

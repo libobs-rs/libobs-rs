@@ -8,9 +8,9 @@ use libobs_simple::sources::windows::{
     MonitorCaptureSourceBuilder, MonitorCaptureSourceUpdater, ObsDisplayCaptureMethod,
 };
 use libobs_wrapper::{
-    data::{ObsObjectUpdater, output::ObsOutputTrait},
+    data::{output::ObsOutputTrait, ObsObjectUpdater},
     sources::ObsSourceBuilder,
-    utils::{ObsPath, traits::ObsUpdatable},
+    utils::{traits::ObsSourceUpdateTrait, ObsPath},
 };
 
 use crate::common::{assert_not_black, initialize_obs};

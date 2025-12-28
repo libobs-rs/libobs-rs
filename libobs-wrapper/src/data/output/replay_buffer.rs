@@ -9,13 +9,14 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use libobs::obs_output;
-
 use crate::{
     data::{
         immutable::ImmutableObsData,
-        object::ObsObjectTrait,
-        output::{ObsOutputRef, ObsOutputSignals, ObsOutputTrait, ObsOutputTraitSealed},
+        object::{forward_obs_object_impl, ObsObjectTrait, ObsObjectTraitSealed},
+        output::{
+            macros::forward_obs_output_impl, ObsOutputRef, ObsOutputSignals, ObsOutputTrait,
+            ObsOutputTraitSealed,
+        },
     },
     encoders::{audio::ObsAudioEncoder, video::ObsVideoEncoder},
     impl_signal_manager, run_with_obs,
@@ -55,45 +56,8 @@ impl ObsOutputTraitSealed for ObsReplayBufferOutputRef {
     }
 }
 
-impl ObsObjectTrait for ObsReplayBufferOutputRef {
-    fn name(&self) -> ObsString {
-        self.output.name.clone()
-    }
-
-    fn id(&self) -> ObsString {
-        self.output.id.clone()
-    }
-
-    fn runtime(&self) -> &ObsRuntime {
-        &self.output.runtime
-    }
-
-    fn settings(&self) -> &ImmutableObsData {
-        &self.output.settings()
-    }
-
-    fn hotkey_data(&self) -> &ImmutableObsData {
-        &self.output.hotkey_data()
-    }
-}
-
-impl ObsOutputTrait for ObsReplayBufferOutputRef {
-    fn signal_manager(&self) -> &Arc<ObsOutputSignals> {
-        &self.output.signal_manager
-    }
-
-    fn video_encoder(&self) -> &Arc<RwLock<Option<Arc<ObsVideoEncoder>>>> {
-        &self.output.curr_video_encoder
-    }
-
-    fn audio_encoders(&self) -> &Arc<RwLock<HashMap<usize, Arc<ObsAudioEncoder>>>> {
-        &self.output.audio_encoders
-    }
-
-    fn as_ptr(&self) -> Sendable<*mut obs_output> {
-        self.output.output.clone()
-    }
-}
+forward_obs_object_impl!(ObsReplayBufferOutputRef, output);
+forward_obs_output_impl!(ObsReplayBufferOutputRef, output);
 
 impl_signal_manager!(|ptr| unsafe { libobs::obs_output_get_signal_handler(ptr) }, ObsReplayOutputSignals for ObsReplayOutputRef<*mut libobs::obs_output>, [
     "saved": {}

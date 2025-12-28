@@ -118,7 +118,7 @@ pub fn obs_object_updater(attr: TokenStream, item: TokenStream) -> TokenStream {
                 settings_updater.update()?;
 
                 log::trace!("Updating raw settings for {:?}", Self::get_id());
-                let e = updatable.update_raw(settings);
+                let e = updatable.update_settings(settings);
                 log::trace!("Update done for {:?}", Self::get_id());
 
                 e
