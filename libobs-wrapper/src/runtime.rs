@@ -309,11 +309,14 @@ impl ObsRuntime {
         F: FnOnce() -> T + Send + 'static,
         T: Send + 'static,
     {
-        let is_within_runtime = std::thread::current().id() == self.thread_id;
-        if is_within_runtime {
-            log::warn!("run_with_obs called from within the OBS runtime thread. This is bad practice and can lead to deadlocks. Consider restructuring your code to avoid this scenario.");
-            let result = operation();
-            return Ok(result);
+        #[cfg(feature = "enable_runtime")]
+        {
+            let is_within_runtime = std::thread::current().id() == self.thread_id;
+            if is_within_runtime {
+                log::warn!("run_with_obs called from within the OBS runtime thread. This is bad practice and can lead to deadlocks. Consider restructuring your code to avoid this scenario.");
+                let result = operation();
+                return Ok(result);
+            }
         }
 
         #[cfg(not(feature = "enable_runtime"))]
