@@ -119,7 +119,7 @@ define_object_manager!(
         rgb10a2_space: ObsGameCaptureRgbaSpace,
 
         /// Whether to capture audio from window source (BETA) <br>
-        /// When enabled, creates an "Application Audio Capture" source that automatically for to the currently captured window/application. <br>
+        /// When enabled, creates an "Application Audio Capture" source that automatically updates to the currently captured window/application. <br>
         /// Note that if Desktop Audio is configured, this could result in doubled audio.
         capture_audio: bool,
     }
