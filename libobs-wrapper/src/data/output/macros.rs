@@ -17,6 +17,20 @@ macro_rules! forward_obs_output_impl {
                 self.$var_name.as_ptr()
             }
         }
+
+        impl $struct_name {
+            pub fn inner_output(&self) -> &ObsOutputRef {
+                &self.$var_name
+            }
+
+            pub fn inner_output_mut(&mut self) -> &mut ObsOutputRef {
+                &mut self.$var_name
+            }
+
+            pub fn into_inner_output(self) -> ObsOutputRef {
+                self.$var_name
+            }
+        }
     };
 }
 
