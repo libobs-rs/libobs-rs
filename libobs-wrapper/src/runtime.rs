@@ -273,23 +273,24 @@ impl ObsRuntime {
     where
         F: FnOnce() + Send + 'static,
     {
+        let is_within_runtime = std::thread::current().id() == self.thread_id;
+
         #[cfg(not(feature = "enable_runtime"))]
         {
+            if !is_within_runtime {
+                return Err(ObsError::RuntimeOutsideThread);
+            }
+
             operation();
             return Ok(());
         }
-        #[allow(unreachable_code)]
+        #[cfg(feature = "enable_runtime")]
         {
-            let is_within_runtime = std::thread::current().id() == self.thread_id;
             if is_within_runtime {
                 log::warn!("run_with_obs_no_block called from within the OBS runtime thread. This is bad practice and can lead to deadlocks. Consider restructuring your code to avoid this scenario.");
                 operation();
 
                 return Ok(());
-            }
-
-            if !is_within_runtime && cfg!(not(feature = "enable_runtime")) {
-                return Err(ObsError::RuntimeOutsideThread);
             }
 
             #[cfg(feature = "enable_runtime")]
