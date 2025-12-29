@@ -30,7 +30,7 @@ pub fn main() -> anyhow::Result<()> {
         .set_logger(Box::new(NoLogger {}));
     let mut context = ObsContext::new(startup_info)?;
 
-    let mut scene = context.scene("main")?;
+    let mut scene = context.scene("main", Some(0))?;
 
     let mut window_capture_builder = context
         .source_builder::<PipeWireScreenCaptureSourceBuilder, _>("PipeWire Screen Capture")?;
