@@ -288,7 +288,7 @@ impl ApplicationHandler for App {
                         if let Some(inner) = inner {
                             let monitor_index = self.monitor_index.clone();
 
-                            let source = &mut inner.source;
+                            let source = &mut inner._source;
                             let monitors = MonitorCaptureSourceBuilder::get_monitors().unwrap();
 
                             let monitor_index = monitor_index
