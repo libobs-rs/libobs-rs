@@ -201,7 +201,7 @@ impl ObsSceneRef {
     }
 
     /// Removes the given source from this scene. Removes the corresponding scene item as well. It may be possible that this source is still added to another scene.
-    pub fn remove_source(&mut self, source: &Arc<Box<dyn ObsSourceTrait>>) -> Result<(), ObsError> {
+    pub fn remove_source<T: ObsSourceTrait>(&mut self, source: T) -> Result<(), ObsError> {
         let sendable_comp = SendableComp(self.scene.0);
         {
             let scene_item_ptr = source
@@ -220,7 +220,7 @@ impl ObsSceneRef {
         self.sources
             .write()
             .map_err(|e| ObsError::LockError(format!("{:?}", e)))?
-            .remove(source);
+            .retain(|s| s.as_ptr().0 != source.as_ptr().0);
 
         source.remove_scene_item_ptr(sendable_comp)?;
 
