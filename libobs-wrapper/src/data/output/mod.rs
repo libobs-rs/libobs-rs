@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use std::ptr;
 use std::sync::{Arc, RwLock};
 
-use crate::data::ImmutableObsData;
 use crate::data::object::{inner_fn_update_settings, ObsObjectTrait, ObsObjectTraitSealed};
+use crate::data::ImmutableObsData;
 use crate::data::ObsDataPointers;
 use crate::runtime::ObsRuntime;
 use crate::unsafe_send::Sendable;
@@ -162,7 +162,10 @@ impl ObsObjectTraitSealed for ObsOutputRef {
             })
     }
 
-    fn __internal_replace_hotkey_data(&self, hotkey_data: ImmutableObsData) -> Result<(), ObsError> {
+    fn __internal_replace_hotkey_data(
+        &self,
+        hotkey_data: ImmutableObsData,
+    ) -> Result<(), ObsError> {
         self.hotkey_data
             .write()
             .map_err(|_| ObsError::LockError("Failed to acquire write lock on hotkey data".into()))

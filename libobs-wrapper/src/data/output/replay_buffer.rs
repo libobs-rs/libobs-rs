@@ -5,17 +5,18 @@
 //! the last N seconds of content, allowing the user to save this buffer on demand. This must be configured. More documentation soon.
 use std::{
     path::{Path, PathBuf},
-    sync::{Arc},
+    sync::Arc,
 };
 
 use crate::{
     data::{
         object::ObsObjectTrait,
-        output::{
-            ObsOutputRef, ObsOutputTrait,
-            ObsOutputTraitSealed,
-        },
-    }, forward_obs_object_impl, forward_obs_output_impl, impl_signal_manager, run_with_obs, runtime::ObsRuntime, unsafe_send::Sendable, utils::{ObsCalldataExt, ObsError, ObsString, OutputInfo}
+        output::{ObsOutputRef, ObsOutputTrait, ObsOutputTraitSealed},
+    },
+    forward_obs_object_impl, forward_obs_output_impl, impl_signal_manager, run_with_obs,
+    runtime::ObsRuntime,
+    unsafe_send::Sendable,
+    utils::{ObsCalldataExt, ObsError, ObsString, OutputInfo},
 };
 
 #[derive(Debug, Clone)]

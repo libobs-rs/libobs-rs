@@ -272,7 +272,10 @@ impl ObsSceneRef {
     }
 
     /// Gets the transform info of the given source in this scene.
-    pub fn get_transform_info<T: ObsSourceTrait>(&self, source: &T) -> Result<ObsTransformInfo, ObsError> {
+    pub fn get_transform_info<T: ObsSourceTrait>(
+        &self,
+        source: &T,
+    ) -> Result<ObsTransformInfo, ObsError> {
         let scene_item_ptr = self.get_scene_item_ptr(source)?;
 
         let item_info = run_with_obs!(self.runtime, (scene_item_ptr), move || unsafe {
@@ -326,7 +329,11 @@ impl ObsSceneRef {
     }
 
     /// Sets the scale of the given source in this scene.
-    pub fn set_source_scale<T: ObsSourceTrait>(&self, source: &T, scale: Vec2) -> Result<(), ObsError> {
+    pub fn set_source_scale<T: ObsSourceTrait>(
+        &self,
+        source: &T,
+        scale: Vec2,
+    ) -> Result<(), ObsError> {
         let scene_item_ptr = self.get_scene_item_ptr(source)?;
 
         run_with_obs!(self.runtime, (scene_item_ptr), move || unsafe {

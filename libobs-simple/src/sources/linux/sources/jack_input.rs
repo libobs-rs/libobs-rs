@@ -1,5 +1,5 @@
-use libobs_wrapper::sources::ObsSourceRef;
 use crate::sources::macro_helper::{define_object_manager, impl_default_builder};
+use libobs_wrapper::sources::ObsSourceRef;
 
 define_object_manager!(
     #[derive(Debug)]

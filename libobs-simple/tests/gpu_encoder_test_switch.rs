@@ -6,13 +6,18 @@
 /// It's not very consistent, if it doesn't crash, just run it again until it does :)
 use std::{collections::HashMap, sync::Arc, thread, time::Duration};
 
-use libobs_simple::sources::{ObsSourceBuilder, windows::MonitorCaptureSourceBuilder};
+use libobs_simple::sources::{windows::MonitorCaptureSourceBuilder, ObsSourceBuilder};
 use libobs_wrapper::{
-    context::ObsContext, data::{
-        ObsDataSetters, object::ObsObjectTrait, output::ObsOutputTrait, video::ObsVideoInfoBuilder
-    }, encoders::{
-        ObsContextEncoders, ObsVideoEncoderType, audio::ObsAudioEncoder, video::ObsVideoEncoder
-    }, enums::ObsScaleType, sources::ObsSourceRef, utils::{AudioEncoderInfo, ObsPath, OutputInfo, VideoEncoderInfo}
+    context::ObsContext,
+    data::{
+        object::ObsObjectTrait, output::ObsOutputTrait, video::ObsVideoInfoBuilder, ObsDataSetters,
+    },
+    encoders::{
+        audio::ObsAudioEncoder, video::ObsVideoEncoder, ObsContextEncoders, ObsVideoEncoderType,
+    },
+    enums::ObsScaleType,
+    sources::ObsSourceRef,
+    utils::{AudioEncoderInfo, ObsPath, OutputInfo, VideoEncoderInfo},
 };
 
 const ROUNDS: usize = 6;

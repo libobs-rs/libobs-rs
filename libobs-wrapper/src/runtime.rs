@@ -286,7 +286,7 @@ impl ObsRuntime {
             return Ok(());
         }
 
-        if !is_within_runtime && cfg!(not(feature="enable_runtime")) {
+        if !is_within_runtime && cfg!(not(feature = "enable_runtime")) {
             return Err(ObsError::RuntimeOutsideThread);
         }
 

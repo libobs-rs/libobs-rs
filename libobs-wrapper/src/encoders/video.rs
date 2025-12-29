@@ -6,9 +6,8 @@ use std::{
 
 use crate::{
     data::{
-        ImmutableObsData,
         object::{inner_fn_update_settings, ObsObjectTrait, ObsObjectTraitSealed},
-        ObsData, ObsDataPointers,
+        ImmutableObsData, ObsData, ObsDataPointers,
     },
     encoders::ObsEncoderTrait,
     impl_obs_drop, run_with_obs,
@@ -116,7 +115,10 @@ impl ObsObjectTraitSealed for ObsVideoEncoder {
             })
     }
 
-    fn __internal_replace_hotkey_data(&self, hotkey_data: ImmutableObsData) -> Result<(), ObsError> {
+    fn __internal_replace_hotkey_data(
+        &self,
+        hotkey_data: ImmutableObsData,
+    ) -> Result<(), ObsError> {
         self.hotkey_data
             .write()
             .map_err(|_| {

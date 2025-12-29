@@ -10,9 +10,8 @@ use libobs::{obs_scene_item, obs_scene_t, obs_source_t};
 
 use crate::{
     data::{
-        ImmutableObsData,
         object::{inner_fn_update_settings, ObsObjectTrait, ObsObjectTraitSealed},
-        ObsDataPointers,
+        ImmutableObsData, ObsDataPointers,
     },
     impl_obs_drop, impl_signal_manager,
     macros::impl_eq_of_ptr,
@@ -131,7 +130,10 @@ impl ObsObjectTraitSealed for ObsSourceRef {
         Ok(())
     }
 
-    fn __internal_replace_hotkey_data(&self, hotkey_data: ImmutableObsData) -> Result<(), ObsError> {
+    fn __internal_replace_hotkey_data(
+        &self,
+        hotkey_data: ImmutableObsData,
+    ) -> Result<(), ObsError> {
         let mut guard = self.hotkey_data.write().map_err(|_| {
             ObsError::LockError("Failed to acquire write lock on hotkey data".into())
         })?;

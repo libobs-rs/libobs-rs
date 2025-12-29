@@ -1,4 +1,3 @@
-
 #[macro_export]
 #[doc(hidden)]
 macro_rules! __signals_impl_primitive_handler {

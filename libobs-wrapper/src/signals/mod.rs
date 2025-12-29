@@ -1,5 +1,5 @@
-mod traits;
 mod handler;
+mod traits;
 
 pub use traits::*;
 
