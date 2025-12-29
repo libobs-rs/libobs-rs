@@ -10,7 +10,7 @@ use libobs_wrapper::utils::NixDisplay;
 
 #[cfg(windows)]
 use libobs_simple::sources::windows::{
-    GameCaptureSourceBuilder, MonitorCaptureSourceBuilder, ObsGameCaptureMode, WindowSearchMode,
+    GameCaptureSourceBuilder, MonitorCaptureSourceBuilder, WindowSearchMode,
 };
 use libobs_wrapper::data::video::ObsVideoInfoBuilder;
 use libobs_wrapper::display::{
@@ -111,6 +111,8 @@ impl ObsInner {
         let mut _apex_source = None;
         #[cfg(windows)]
         if let Some(apex) = apex {
+            use libobs_simple::sources::windows::game_capture::ObsGameCaptureMode;
+
             println!(
                 "Is used by other instance: {}",
                 GameCaptureSourceBuilder::is_window_in_use_by_other_instance(apex.pid)?

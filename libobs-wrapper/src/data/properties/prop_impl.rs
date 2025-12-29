@@ -3,24 +3,24 @@ use std::collections::HashMap;
 use crate::{
     data::output::ObsOutputRef,
     runtime::ObsRuntime,
-    sources::ObsSourceRef,
+    sources::ObsSourceTrait,
     unsafe_send::Sendable,
     utils::{ObsError, ObsString},
 };
 
 use super::{get_properties_inner, ObsProperty, ObsPropertyObject, ObsPropertyObjectPrivate};
 
-impl ObsPropertyObject for ObsSourceRef {
+impl<K: ObsSourceTrait> ObsPropertyObject for K {
     fn get_properties(&self) -> Result<HashMap<String, ObsProperty>, ObsError> {
         let properties_raw = self.get_properties_raw()?;
-        get_properties_inner(properties_raw, self.runtime.clone())
+        get_properties_inner(properties_raw, self.runtime().clone())
     }
 }
 
-impl ObsPropertyObjectPrivate for ObsSourceRef {
+impl<K: ObsSourceTrait> ObsPropertyObjectPrivate for K {
     fn get_properties_raw(&self) -> Result<Sendable<*mut libobs::obs_properties_t>, ObsError> {
-        let source_ptr = self.source.clone();
-        self.runtime
+        let source_ptr = self.as_ptr();
+        self.runtime()
             .run_with_obs_result(move || unsafe {
                 let source_ptr = source_ptr;
 

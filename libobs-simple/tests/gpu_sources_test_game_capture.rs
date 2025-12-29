@@ -4,7 +4,7 @@ mod common;
 
 use std::{path::PathBuf, time::Duration};
 
-use libobs_simple::sources::windows::{GameCaptureSourceBuilder, ObsGameCaptureMode};
+use libobs_simple::sources::windows::{GameCaptureSourceBuilder, game_capture::ObsGameCaptureMode};
 use libobs_wrapper::{
     data::{object::ObsObjectTrait, output::ObsOutputTrait},
     sources::ObsSourceBuilder,

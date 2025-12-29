@@ -6,17 +6,13 @@
 /// It's not very consistent, if it doesn't crash, just run it again until it does :)
 use std::{collections::HashMap, sync::Arc, thread, time::Duration};
 
-use libobs_simple::sources::{ObsSourceBuilder, windows::{MonitorCaptureSourceBuilder, monitor_capture::GeneralSourceRef}};
+use libobs_simple::sources::{ObsSourceBuilder, windows::MonitorCaptureSourceBuilder};
 use libobs_wrapper::{
-    context::ObsContext,
-    data::{
-        object::ObsObjectTrait, output::ObsOutputTrait, video::ObsVideoInfoBuilder, ObsDataSetters,
-    },
-    encoders::{
-        audio::ObsAudioEncoder, video::ObsVideoEncoder, ObsContextEncoders, ObsVideoEncoderType,
-    },
-    enums::ObsScaleType,
-    utils::{AudioEncoderInfo, ObsPath, OutputInfo, VideoEncoderInfo},
+    context::ObsContext, data::{
+        ObsDataSetters, object::ObsObjectTrait, output::ObsOutputTrait, video::ObsVideoInfoBuilder
+    }, encoders::{
+        ObsContextEncoders, ObsVideoEncoderType, audio::ObsAudioEncoder, video::ObsVideoEncoder
+    }, enums::ObsScaleType, sources::ObsSourceRef, utils::{AudioEncoderInfo, ObsPath, OutputInfo, VideoEncoderInfo}
 };
 
 const ROUNDS: usize = 6;
@@ -58,7 +54,7 @@ struct ReproState {
     // Key point: storing encoders by type to reuse them (like production code)
     video_encoders: HashMap<EncoderType, Arc<ObsVideoEncoder>>,
     _scene: libobs_wrapper::scenes::ObsSceneRef,
-    _monitor_capture: GeneralSourceRef,
+    _monitor_capture: ObsSourceRef,
 }
 
 impl ReproState {

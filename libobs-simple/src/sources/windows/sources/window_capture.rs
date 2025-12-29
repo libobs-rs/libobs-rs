@@ -18,7 +18,7 @@ use num_traits::ToPrimitive;
 define_object_manager!(
     /// Provides an easy-to-use builder for the window capture source.
     #[derive(Debug)]
-    struct WindowCaptureSource("window_capture") for ObsSourceRef {
+    struct WindowCaptureSource("window_capture") updates WindowCaptureSource {
 
     /// Sets the priority of the window capture source.
     /// Used to determine in which order windows are searched for.
@@ -148,10 +148,9 @@ add_source_specific_signals!(WindowCaptureSource, [
 ]);
 
 impl ObsSourceBuilder for WindowCaptureSourceBuilder {
-    fn add_to_scene(
-        mut self,
-        scene: &mut ObsSceneRef,
-    ) -> Result<Arc<Box<dyn ObsSourceTrait>>, ObsError>
+    type T = WindowCaptureSource;
+
+    fn add_to_scene(mut self, scene: &mut ObsSceneRef) -> Result<Self::T, ObsError>
     where
         Self: Sized,
     {
@@ -174,6 +173,6 @@ impl ObsSourceBuilder for WindowCaptureSourceBuilder {
                 .update()?;
         }
 
-        Ok(Arc::new(Box::new(res)))
+        Ok(res)
     }
 }

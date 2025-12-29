@@ -1,7 +1,7 @@
 #[allow(unused)]
 #[macro_export]
 macro_rules! define_object_manager {
-    ($(#[$parent_meta:meta])* struct $struct_name:ident($obs_id:literal) for $updatable_name:ident {
+    ($(#[$parent_meta:meta])* struct $struct_name:ident($obs_id:literal) updates $updatable_name:ident {
         $(
             $(#[$meta:meta])*
             $field:ident: $ty:ty,
@@ -62,13 +62,9 @@ macro_rules! add_source_specific_signals {
         }
     }
 
-        impl std::ops::Deref for $new_source_struct {
-            type Target = ObsSourceRef;
+    libobs_wrapper::forward_obs_object_impl!($new_source_struct, source);
+    libobs_wrapper::forward_obs_source_impl!($new_source_struct, source);
 
-            fn deref(&self) -> &Self::Target {
-                &self.source
-            }
-        }
         }
     };
 }

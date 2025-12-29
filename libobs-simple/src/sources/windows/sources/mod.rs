@@ -1,4 +1,4 @@
-use std::{ffi::CStr, ops::Deref};
+use std::ffi::CStr;
 
 pub mod window_capture;
 pub use window_capture::{
@@ -9,7 +9,10 @@ mod capture;
 pub use capture::*;
 
 pub mod game_capture;
-pub use game_capture::{GameCaptureSource, GameCaptureSourceBuilder, GameCaptureSourceUpdater};
+pub use game_capture::{
+    GameCaptureSource, GameCaptureSourceBuilder, GameCaptureSourceUpdater, ObsGameCaptureMode,
+    ObsGameCaptureRgbaSpace,
+};
 
 pub mod monitor_capture;
 pub use monitor_capture::{MonitorCaptureSourceBuilder, MonitorCaptureSourceUpdater};

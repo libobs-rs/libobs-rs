@@ -63,7 +63,7 @@ define_object_manager!(
     /// ## Important Notice
     /// This source fails to capture if another instance (OBS studio, another instance of your program, etc.) has a game capture source for the same game/application active.
     /// If the window can be captured can be checked using `GameCaptureSourceBuilder::is_window_in_use_by_other_instance` (feature `window-list` needs to be enabled).
-    struct GameCaptureSource("game_capture") for ObsSourceRef {
+    struct GameCaptureSource("game_capture") updates GameCaptureSource {
         /// Sets the capture mode for the game capture source. Look at doc for `ObsGameCaptureMode`
         #[obs_property(type_t = "enum_string")]
         capture_mode: ObsGameCaptureMode,
@@ -177,7 +177,6 @@ impl GameCaptureSource {
 }
 
 add_source_specific_signals!(GameCaptureSource, [
-    /// This is just for sources that are of the `game-capture`, `window-capture` or `win-wasapi` type. Other sources will never emit this signal.
     //TODO Add support for the `linux-capture` type as it does not contain the `title` field (its 'name' instead)
     "hooked": {struct HookedSignal {
         title: String,
@@ -187,7 +186,6 @@ add_source_specific_signals!(GameCaptureSource, [
             source: *mut libobs::obs_source_t,
         }
     }},
-    /// This is just for sources that are of the `game-capture`, `window-capture` or `win-wasapi` type. Other sources will never emit this signal.
     //TODO Add support for the `linux-capture` type as it does not contain the `title` field (its 'name' instead)
     "unhooked": {struct UnhookedSignal {
         POINTERS {
@@ -199,7 +197,9 @@ add_source_specific_signals!(GameCaptureSource, [
 // Custom made signals for the game capture and implementation
 
 impl ObsSourceBuilder for GameCaptureSourceBuilder {
-    fn add_to_scene(self, scene: &mut ObsSceneRef) -> Result<Arc<Box<dyn ObsSourceTrait>>, ObsError>
+    type T = GameCaptureSource;
+
+    fn add_to_scene(self, scene: &mut ObsSceneRef) -> Result<Self::T, ObsError>
     where
         Self: Sized,
     {
@@ -208,6 +208,6 @@ impl ObsSourceBuilder for GameCaptureSourceBuilder {
         let source = scene.add_source(s)?;
         let source = GameCaptureSource::new(source)?;
 
-        Ok(Arc::new(Box::new(source)))
+        Ok(source)
     }
 }
