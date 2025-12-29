@@ -4,7 +4,7 @@ use libobs::obs_data_t;
 
 use crate::{
     data::{ObsDataGetters, ObsDataPointers},
-    impl_obs_drop, run_with_obs,
+    run_with_obs,
     runtime::ObsRuntime,
     unsafe_send::Sendable,
     utils::ObsError,
@@ -88,7 +88,3 @@ impl From<ObsData> for ImmutableObsData {
         }
     }
 }
-
-impl_obs_drop!(ImmutableObsData, (ptr), move || unsafe {
-    libobs::obs_data_release(ptr)
-});
