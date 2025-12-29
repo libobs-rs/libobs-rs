@@ -79,35 +79,37 @@ pub struct ObsOutputRef {
 
 impl ObsOutputTraitSealed for ObsOutputRef {
     fn new(output: OutputInfo, runtime: ObsRuntime) -> Result<Self, ObsError> {
-        let (output, id, name, hotkey_data) = runtime.run_with_obs_result(|| {
-            let OutputInfo {
-                id,
-                name,
-                settings,
-                hotkey_data,
-            } = output;
+        let OutputInfo {
+            id,
+            name,
+            settings,
+            hotkey_data,
+        } = output;
 
-            let settings_ptr = match settings.as_ref() {
-                Some(x) => x.as_ptr(),
-                None => Sendable(ptr::null_mut()),
-            };
+        let settings_ptr = match settings.as_ref() {
+            Some(x) => x.as_ptr(),
+            None => Sendable(ptr::null_mut()),
+        };
 
-            let hotkey_data_ptr = match hotkey_data.as_ref() {
-                Some(x) => x.as_ptr(),
-                None => Sendable(ptr::null_mut()),
-            };
+        let hotkey_data_ptr = match hotkey_data.as_ref() {
+            Some(x) => x.as_ptr(),
+            None => Sendable(ptr::null_mut()),
+        };
 
-            let output = unsafe {
-                libobs::obs_output_create(
-                    id.as_ptr().0,
-                    name.as_ptr().0,
-                    settings_ptr.0,
-                    hotkey_data_ptr.0,
-                )
-            };
+        let id_ptr = id.as_ptr();
+        let name_ptr = name.as_ptr();
 
-            (Sendable(output), id, name, hotkey_data)
-        })?;
+        let output = run_with_obs!(
+            runtime,
+            (id_ptr, name_ptr, settings_ptr, hotkey_data_ptr),
+            move || {
+                let output = unsafe {
+                    libobs::obs_output_create(id_ptr, name_ptr, settings_ptr, hotkey_data_ptr)
+                };
+
+                Sendable(output)
+            }
+        )?;
 
         if output.0.is_null() {
             return Err(ObsError::NullPointer);

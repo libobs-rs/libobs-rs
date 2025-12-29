@@ -777,7 +777,7 @@ dependencies = [
 
 [[package]]
 name = "libobs"
-version = "4.0.2+32.0.2"
+version = "4.0.4+32.0.2"
 dependencies = [
  "bindgen",
  "pkg-config",
@@ -785,7 +785,7 @@ dependencies = [
 
 [[package]]
 name = "libobs-bootstrapper"
-version = "0.2.2"
+version = "0.2.7"
 dependencies = [
  "async-stream",
  "futures-core",
