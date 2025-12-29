@@ -44,7 +44,7 @@ macro_rules! impl_custom_source {
             ]);
 
     #[derive(Debug, Clone)]
-    /// This struct is essentially a wrapper around an OBS source with 
+    /// This struct is essentially a wrapper around an OBS source with
     /// additional functionality specific to the custom source.
     ///
     /// It provides methods to create an updater and access source-specific signals.
