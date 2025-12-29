@@ -4,7 +4,7 @@ use libobs_window_helper::{get_all_windows, WindowInfo, WindowSearchMode};
 use libobs_wrapper::{
     data::{ObsObjectBuilder, ObsObjectUpdater, StringEnum},
     scenes::ObsSceneRef,
-    sources::{ObsSourceBuilder, ObsSourceRef, ObsSourceTrait},
+    sources::{ObsSourceBuilder, ObsSourceRef},
     utils::ObsError,
 };
 
