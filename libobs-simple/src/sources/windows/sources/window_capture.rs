@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use crate::{define_object_manager, sources::macro_helper::add_source_specific_signals};
 
 use super::{ObsWindowCaptureMethod, ObsWindowPriority};

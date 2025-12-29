@@ -71,6 +71,7 @@ macro_rules! add_source_specific_signals {
     };
 }
 
+#[allow(unused)]
 macro_rules! impl_default_builder {
     ($name: ident) => {
         impl libobs_wrapper::sources::ObsSourceBuilder for $name {
