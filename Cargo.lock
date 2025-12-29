@@ -2937,6 +2937,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a2d987857b319362043e95f5353c0535c1f58eec5336fdfcf626430af7def58"
 
 [[package]]
+name = "replay-buffer"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "env_logger",
+ "libobs",
+ "libobs-simple",
+ "libobs-wrapper",
+]
+
+[[package]]
 name = "reqwest"
 version = "0.12.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"

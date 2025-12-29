@@ -27,7 +27,7 @@ pub fn record() {
     let path_out: PathBuf = rec_file.clone().into();
 
     let (mut context, mut output) = initialize_obs(rec_file);
-    let mut scene = context.scene("main").unwrap();
+    let mut scene = context.scene("main", Some(0)).unwrap();
 
     let monitor = MonitorCaptureSourceBuilder::get_monitors().unwrap()[0].clone();
     println!("Using monitor {:?}", monitor);
@@ -39,7 +39,6 @@ pub fn record() {
         .add_to_scene(&mut scene)
         .unwrap();
 
-    scene.set_to_channel(0).unwrap();
     output.start().unwrap();
 
     println!("Recording started");

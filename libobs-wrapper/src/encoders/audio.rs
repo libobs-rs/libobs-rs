@@ -104,7 +104,7 @@ impl ObsAudioEncoder {
 }
 
 impl_obs_drop!(ObsAudioEncoder, (encoder), move || unsafe {
-    libobs::obs_encoder_release(encoder)
+    libobs::obs_encoder_release(encoder);
 });
 
 impl ObsObjectTraitSealed for ObsAudioEncoder {

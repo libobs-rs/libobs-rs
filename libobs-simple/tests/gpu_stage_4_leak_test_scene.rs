@@ -62,8 +62,7 @@ pub fn test_scene() {
     output.create_and_set_audio_encoder(audio_info, 0).unwrap();
 
     // Create a scene
-    let scene = context.scene("main").unwrap();
-    scene.set_to_channel(0).unwrap();
+    let _scene = context.scene("main", Some(0)).unwrap();
 
     // Scene, output, and context will be dropped here, testing for memory leaks
 }

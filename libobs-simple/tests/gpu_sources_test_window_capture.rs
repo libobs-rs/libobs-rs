@@ -36,8 +36,7 @@ pub fn record() {
     println!("Recording {:?}", window.0.obs_id);
 
     let (mut context, mut output) = initialize_obs(rec_file);
-    let mut scene = context.scene("main").unwrap();
-    scene.set_to_channel(0).unwrap();
+    let mut scene = context.scene("main", Some(0)).unwrap();
 
     let source_name = "test_capture";
     let mut source = context

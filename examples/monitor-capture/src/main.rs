@@ -34,7 +34,7 @@ fn main() -> anyhow::Result<()> {
 
     let mut context = ObsContext::new(startup_info)?;
 
-    let mut scene = context.scene("main")?;
+    let mut scene = context.scene("main", Some(0))?;
 
     // Platform-specific screen/monitor capture setup
     #[cfg(windows)]
@@ -64,9 +64,6 @@ fn main() -> anyhow::Result<()> {
 
         screen_capture.add_to_scene(&mut scene)?;
     }
-
-    // Common output and encoder setup
-    scene.set_to_channel(0)?;
 
     // Set up output to ./recording.mp4
     let mut output = context

@@ -69,7 +69,7 @@ impl ObsInner {
         }
 
         let mut context = info.start()?;
-        let mut scene = context.scene("Main Scene")?;
+        let mut scene = context.scene("Main Scene", Some(0))?;
 
         #[cfg(windows)]
         let apex = GameCaptureSourceBuilder::get_windows(WindowSearchMode::ExcludeMinimized)?;
@@ -135,8 +135,6 @@ impl ObsInner {
         } else {
             println!("No Apex window found for game capture");
         }
-
-        scene.set_to_channel(0)?;
 
         let hwnd = window.window_handle().unwrap().as_raw();
 

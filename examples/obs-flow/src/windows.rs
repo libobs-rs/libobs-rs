@@ -28,9 +28,7 @@ pub fn main() -> anyhow::Result<()> {
     let mut context = ObsContext::new(startup_info)?;
 
     // Create a new main scene
-    let mut scene = context.scene("MAIN")?;
-    // Set the scene as main channel for video
-    scene.set_to_channel(0)?;
+    let mut scene = context.scene("MAIN", Some(0))?;
 
     // Add a output
     let mut output = context

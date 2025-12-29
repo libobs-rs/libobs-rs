@@ -4,6 +4,7 @@ pub use transform_info::*;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::hash::Hash;
+use std::ptr;
 use std::sync::{Arc, RwLock};
 
 use getters0::Getters;
@@ -30,6 +31,15 @@ struct _SceneDropGuard {
 
 impl_obs_drop!(_SceneDropGuard, (scene), move || unsafe {
     let scene_source = libobs::obs_scene_get_source(scene);
+
+    for i in 0..libobs::MAX_CHANNELS {
+        let current_source = libobs::obs_get_output_source(i);
+        if current_source == scene_source {
+            libobs::obs_set_output_source(i, ptr::null_mut());
+        }
+
+        libobs::obs_source_release(current_source);
+    }
 
     libobs::obs_source_release(scene_source);
     libobs::obs_scene_release(scene);
@@ -223,6 +233,37 @@ impl ObsSceneRef {
             .retain(|s| s.as_ptr().0 != source.as_ptr().0);
 
         source.remove_scene_item_ptr(sendable_comp)?;
+
+        Ok(())
+    }
+
+    pub fn remove_all_sources(&mut self) -> Result<(), ObsError> {
+        let sendable_comp = SendableComp(self.scene.0);
+        let sources = {
+            let mut sources_guard = self
+                .sources
+                .write()
+                .map_err(|e| ObsError::LockError(format!("{:?}", e)))?;
+
+            let sources: Vec<Arc<Box<dyn ObsSourceTrait>>> = sources_guard.drain().collect();
+
+            sources
+        };
+
+        for source in sources {
+            let scene_item_ptr = source
+                .get_scene_item_ptr(&sendable_comp)?
+                .ok_or(ObsError::SourceNotFound)?;
+
+            run_with_obs!(self.runtime, (scene_item_ptr), move || unsafe {
+                // Remove the scene item
+                libobs::obs_sceneitem_remove(scene_item_ptr);
+                // Release the scene item reference
+                libobs::obs_sceneitem_release(scene_item_ptr);
+            })?;
+
+            source.remove_scene_item_ptr(sendable_comp.clone())?;
+        }
 
         Ok(())
     }

@@ -38,8 +38,7 @@ pub fn test_recording() {
         .build()
         .unwrap();
 
-    let mut scene = context.scene("main").unwrap();
-    scene.set_to_channel(0).unwrap();
+    let mut scene = context.scene("main", Some(0)).unwrap();
 
     let source_name = "test_capture";
     context

@@ -562,9 +562,24 @@ impl ObsContext {
         Ok(f)
     }
 
+    /// Creates a new scene
+    ///
+    /// If the channel is provided, the scene will be set to that output channel.
+    ///
+    /// There are 64 channels that you can assign scenes to,
+    /// which will draw on top of each other in ascending index order
+    /// when a output is rendered.
+    ///
+    /// # Arguments
+    /// * `name` - The name of the scene. This must be unique.
+    /// * `channel` - Optional channel to bind the scene to. If provided, the scene will be set as active for that channel.
+    ///
+    /// # Returns
+    /// A Result containing the new ObsSceneRef or an error
     pub fn scene<T: Into<ObsString> + Send + Sync>(
         &mut self,
         name: T,
+        channel: Option<u32>,
     ) -> Result<ObsSceneRef, ObsError> {
         let scene = ObsSceneRef::new(
             name.into(),
@@ -578,6 +593,9 @@ impl ObsContext {
             .map_err(|_| ObsError::LockError("Failed to acquire write lock on scenes".to_string()))?
             .push(scene);
 
+        if let Some(channel) = channel {
+            tmp.set_to_channel(channel)?;
+        }
         Ok(tmp)
     }
 

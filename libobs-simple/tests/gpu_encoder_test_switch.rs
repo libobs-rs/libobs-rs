@@ -95,7 +95,7 @@ impl ReproState {
         let audio_encoder =
             ObsAudioEncoder::new_from_info(audio_info, 0, obs_context.runtime().clone()).unwrap();
 
-        let mut scene = obs_context.scene("main").unwrap();
+        let mut scene = obs_context.scene("main", Some(0)).unwrap();
         let monitors = MonitorCaptureSourceBuilder::get_monitors().unwrap();
 
         let monitor_capture = obs_context
@@ -104,9 +104,6 @@ impl ReproState {
             .set_monitor(&monitors[0])
             .add_to_scene(&mut scene)
             .unwrap();
-
-        // Register the source
-        scene.set_to_channel(0).unwrap();
 
         Self {
             obs_context,
