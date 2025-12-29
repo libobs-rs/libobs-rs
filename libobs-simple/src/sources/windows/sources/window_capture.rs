@@ -16,7 +16,7 @@ use num_traits::ToPrimitive;
 define_object_manager!(
     /// Provides an easy-to-use builder for the window capture source.
     #[derive(Debug)]
-    struct WindowCaptureSource("window_capture") updates WindowCaptureSource {
+    struct WindowCaptureSource("window_capture") for ObsSourceRef {
 
     /// Sets the priority of the window capture source.
     /// Used to determine in which order windows are searched for.
@@ -166,7 +166,7 @@ impl ObsSourceBuilder for WindowCaptureSourceBuilder {
         let mut res = WindowCaptureSource::new(res)?;
 
         if let Some(method) = method_to_set {
-            WindowCaptureSourceUpdater::create_update(runtime, &mut res)?
+            WindowCaptureSourceUpdater::create_update(runtime, res.inner_source_mut())?
                 .set_capture_method(method)
                 .update()?;
         }

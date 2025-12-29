@@ -1,7 +1,7 @@
 #[allow(unused)]
 #[macro_export]
 macro_rules! define_object_manager {
-    ($(#[$parent_meta:meta])* struct $struct_name:ident($obs_id:literal) updates $updatable_name:ident {
+    ($(#[$parent_meta:meta])* struct $struct_name:ident($obs_id:literal) for $updatable_name:ident {
         $(
             $(#[$meta:meta])*
             $field:ident: $ty:ty,
@@ -44,6 +44,10 @@ macro_rules! impl_custom_source {
             ]);
 
     #[derive(Debug, Clone)]
+    /// This struct is essentially a wrapper around an OBS source with 
+    /// additional functionality specific to the custom source.
+    ///
+    /// It provides methods to create an updater and access source-specific signals.
     pub struct $new_source_struct {
         source: ObsSourceRef,
         source_specific_signals: std::sync::Arc<[<$new_source_struct Signals>]>,
@@ -71,7 +75,7 @@ macro_rules! impl_custom_source {
             use libobs_wrapper::data::object::ObsObjectTrait;
             [<$new_source_struct Updater>]::create_update(
                 self.runtime().clone(),
-                self
+                self.inner_source_mut()
             )
         }
     }

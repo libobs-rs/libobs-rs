@@ -23,7 +23,7 @@ use num_traits::ToPrimitive;
 define_object_manager!(
     /// Provides an easy-to-use builder for the monitor capture source.
     #[derive(Debug)]
-    struct MonitorCaptureSource("monitor_capture") updates MonitorCaptureSource {
+    struct MonitorCaptureSource("monitor_capture") for ObsSourceRef {
         #[obs_property(type_t = "string", settings_key = "monitor_id")]
         monitor_id_raw: String,
 
@@ -100,7 +100,7 @@ impl ObsSourceBuilder for MonitorCaptureSourceBuilder {
         let mut res = MonitorCaptureSource::new(res)?;
 
         if let Some(method) = method_to_set {
-            MonitorCaptureSourceUpdater::create_update(runtime, &mut res)?
+            MonitorCaptureSourceUpdater::create_update(runtime, res.inner_source_mut())?
                 .set_capture_method(method)
                 .update()?;
         }

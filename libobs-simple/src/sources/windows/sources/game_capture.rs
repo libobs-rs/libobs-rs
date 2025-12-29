@@ -61,7 +61,7 @@ define_object_manager!(
     /// ## Important Notice
     /// This source fails to capture if another instance (OBS studio, another instance of your program, etc.) has a game capture source for the same game/application active.
     /// If the window can be captured can be checked using `GameCaptureSourceBuilder::is_window_in_use_by_other_instance` (feature `window-list` needs to be enabled).
-    struct GameCaptureSource("game_capture") updates GameCaptureSource {
+    struct GameCaptureSource("game_capture") for ObsSourceRef {
         /// Sets the capture mode for the game capture source. Look at doc for `ObsGameCaptureMode`
         #[obs_property(type_t = "enum_string")]
         capture_mode: ObsGameCaptureMode,
