@@ -5,7 +5,10 @@ use std::time::Duration;
 
 #[cfg(target_os = "linux")]
 use libobs_simple::sources::linux::LinuxGeneralScreenCapture;
+#[cfg(windows)]
 use libobs_simple::sources::windows::monitor_capture::MonitorCaptureSource;
+#[cfg(target_os = "linux")]
+use libobs_wrapper::sources::ObsSourceRef;
 #[cfg(target_os = "linux")]
 use libobs_wrapper::utils::NixDisplay;
 
@@ -50,8 +53,10 @@ impl Drop for SignalThreadGuard {
 struct ObsInner {
     context: ObsContext,
     display: ObsDisplayRef,
-    #[cfg_attr(not(windows), allow(dead_code))]
-    source: MonitorCaptureSource,
+    #[cfg(windows)]
+    _source: MonitorCaptureSource,
+    #[cfg(target_os = "linux")]
+    _source: ObsSourceRef,
     _guard: SignalThreadGuard,
 }
 
@@ -188,7 +193,7 @@ impl ObsInner {
             context,
             #[cfg_attr(not(target_os = "linux"), allow(unused_unsafe))]
             display,
-            source: monitor_src,
+            _source: monitor_src,
             _guard: SignalThreadGuard {
                 should_exit,
                 handle: Some(handle),

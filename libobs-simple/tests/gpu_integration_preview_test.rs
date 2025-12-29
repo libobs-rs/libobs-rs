@@ -4,8 +4,11 @@ use std::sync::{Arc, RwLock};
 use libobs_simple::sources::linux::LinuxGeneralScreenCapture;
 #[cfg(target_os = "linux")]
 use libobs_simple::sources::linux::PipeWireSourceExtTrait;
+#[cfg(windows)]
 use libobs_simple::sources::windows::monitor_capture::MonitorCaptureSource;
 use libobs_wrapper::graphics::Vec2;
+#[cfg(target_os = "linux")]
+use libobs_wrapper::sources::ObsSourceRef;
 #[cfg(target_os = "linux")]
 use libobs_wrapper::utils::NixDisplay;
 
@@ -38,7 +41,10 @@ use winit::window::{Window, WindowId};
 struct ObsInner {
     context: ObsContext,
     display: ObsDisplayRef,
+    #[cfg(windows)]
     _source: MonitorCaptureSource,
+    #[cfg(target_os = "linux")]
+    _source: ObsSourceRef,
 }
 
 impl ObsInner {

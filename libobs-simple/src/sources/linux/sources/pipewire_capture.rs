@@ -98,7 +98,7 @@ define_object_manager!(
     ///
     /// This source captures video from camera devices through PipeWire's camera portal,
     /// providing secure access to camera devices in sandboxed environments.
-    struct PipeWireCameraSource("pipewire-camera-source") updates ObsSourceRef {
+    struct PipeWireCameraSource("pipewire-camera-source") for ObsSourceRef {
         /// Camera device node (e.g., "/dev/video0")
         #[obs_property(type_t = "string")]
         camera_id: String,

@@ -35,7 +35,10 @@
             clang
             openssl
             pkg-config
-            rust-bin.stable.latest.default
+            # include rust-src in the toolchain
+            (rust-bin.stable.latest.default.override {
+              extensions = [ "rust-src" ];
+            })
             obs-studio
             simde
             glib

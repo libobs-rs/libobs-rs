@@ -3,7 +3,7 @@ use libobs_wrapper::{
     sources::{ObsSourceBuilder, ObsSourceRef},
 };
 
-use crate::sources::macro_helper::{add_source_specific_signals, define_object_manager};
+use crate::sources::macro_helper::{define_object_manager, impl_custom_source};
 
 define_object_manager!(
     #[derive(Debug)]
@@ -12,7 +12,7 @@ define_object_manager!(
     /// This source provides window capture functionality on Linux systems running X11
     /// using the XComposite extension. It can capture individual windows with their
     /// transparency and effects intact.
-    struct XCompositeInputSource("xcomposite_input") updates ObsSourceRef {
+    struct XCompositeInputSource("xcomposite_input") for ObsSourceRef {
         /// Window to capture (window ID as string)
         #[obs_property(type_t = "string")]
         capture_window: String,
@@ -47,7 +47,7 @@ define_object_manager!(
     }
 );
 
-add_source_specific_signals!(XCompositeInputSource, [
+impl_custom_source!(XCompositeInputSource, [
     //TODO Add support for the `linux-capture` type as it does not contain the `title` field (its 'name' instead)
     "hooked": {struct HookedSignal {
         name: String,
