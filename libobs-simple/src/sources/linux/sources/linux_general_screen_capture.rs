@@ -82,7 +82,7 @@ impl DisplayServerType {
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// # let startup_info = StartupInfo::default();
 /// # let mut context = ObsContext::new(startup_info)?;
-/// # let mut scene = context.scene("Main Scene")?;
+/// # let mut scene = context.scene("Main Scene", Some(0))?;
 ///
 /// // Automatically selects PipeWire or X11 based on display server
 /// let capture = LinuxGeneralScreenCapture::auto_detect(
