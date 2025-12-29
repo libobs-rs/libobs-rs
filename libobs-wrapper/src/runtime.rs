@@ -93,6 +93,8 @@ pub struct ObsRuntime {
     command_sender: Arc<Sender<ObsCommand>>,
     #[cfg(feature = "enable_runtime")]
     queued_commands: Arc<AtomicUsize>,
+    #[cfg(feature = "enable_runtime")]
+    thread_id: std::thread::ThreadId,
     _guard: Arc<_ObsRuntimeGuard>,
 
     #[cfg(not(feature = "enable_runtime"))]
@@ -223,10 +225,12 @@ impl ObsRuntime {
             ObsError::RuntimeChannelError("Failed to receive initialization result".to_string())
         })??;
 
+        let thread_id = handle.thread().id();
         let handle = Arc::new(Mutex::new(Some(handle)));
         let command_sender = Arc::new(command_sender);
         let runtime = Self {
             command_sender: command_sender.clone(),
+            thread_id,
             queued_commands,
             _guard: Arc::new(_ObsRuntimeGuard {
                 handle,
@@ -305,13 +309,7 @@ impl ObsRuntime {
         F: FnOnce() -> T + Send + 'static,
         T: Send + 'static,
     {
-        let is_within_runtime = {
-            std::thread::current()
-                .name()
-                .map(|name| name == RUNTIME_THREAD_NAME)
-                .unwrap_or(false)
-        };
-
+        let is_within_runtime = std::thread::current().id() == self.thread_id;
         if is_within_runtime {
             let result = operation();
             return Ok(result);
