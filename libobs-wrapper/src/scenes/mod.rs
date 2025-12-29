@@ -171,13 +171,16 @@ impl ObsSceneRef {
         }
 
         //TODO We should clear one reference because with this obs doesn't clean up properly
-        source.add_scene_item_ptr(SendableComp(self.scene.0), ptr.clone())?;
+        {
+            // Keep this as is, we want to make sure that IF the lock is poisoned, we don't add the source
+            let mut sources = self
+                .sources
+                .write()
+                .map_err(|e| ObsError::LockError(format!("{:?}", e)))?;
 
-        //REVIEW If this fails, the source isn't added but there's still a pointer in the source
-        self.sources
-            .write()
-            .map_err(|e| ObsError::LockError(format!("{:?}", e)))?
-            .insert(Arc::new(Box::new(source.clone())));
+            source.add_scene_item_ptr(SendableComp(self.scene.0), ptr.clone())?;
+            sources.insert(Arc::new(Box::new(source.clone())));
+        }
         Ok(source)
     }
 

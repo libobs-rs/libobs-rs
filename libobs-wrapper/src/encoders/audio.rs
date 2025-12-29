@@ -7,7 +7,7 @@ use std::{
 
 use crate::{
     data::{
-        immutable::ImmutableObsData,
+        ImmutableObsData,
         object::{inner_fn_update_settings, ObsObjectTrait, ObsObjectTraitSealed},
         ObsDataPointers,
     },
@@ -109,7 +109,7 @@ impl_obs_drop!(ObsAudioEncoder, (encoder), move || unsafe {
 });
 
 impl ObsObjectTraitSealed for ObsAudioEncoder {
-    fn replace_settings(&self, settings: ImmutableObsData) -> Result<(), ObsError> {
+    fn __internal_replace_settings(&self, settings: ImmutableObsData) -> Result<(), ObsError> {
         self.settings
             .write()
             .map_err(|_| {
@@ -122,7 +122,7 @@ impl ObsObjectTraitSealed for ObsAudioEncoder {
             })
     }
 
-    fn replace_hotkey_data(&self, hotkey_data: ImmutableObsData) -> Result<(), ObsError> {
+    fn __internal_replace_hotkey_data(&self, hotkey_data: ImmutableObsData) -> Result<(), ObsError> {
         self.hotkey_data
             .write()
             .map_err(|_| {

@@ -1,13 +1,13 @@
 use std::{ffi::CString, sync::Arc};
 
 use crate::{
-    data::immutable::ImmutableObsData, impl_obs_drop, run_with_obs, runtime::ObsRuntime,
-    unsafe_send::Sendable, utils::ObsError,
+    impl_obs_drop, run_with_obs, runtime::ObsRuntime, unsafe_send::Sendable, utils::ObsError,
 };
+pub use immutable::ImmutableObsData;
 use libobs::obs_data;
 
 pub mod audio;
-pub mod immutable;
+mod immutable;
 mod lib_support;
 pub mod object;
 pub mod output;

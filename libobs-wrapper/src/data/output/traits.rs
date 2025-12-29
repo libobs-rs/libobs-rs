@@ -35,7 +35,7 @@ pub(crate) trait ObsOutputTraitSealed: Debug + Send + Sync {
 
 #[allow(private_bounds)]
 pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsObjectTrait {
-    fn signal_manager(&self) -> &Arc<ObsOutputSignals>;
+    fn signals(&self) -> &Arc<ObsOutputSignals>;
     fn as_ptr(&self) -> Sendable<*mut obs_output>;
 
     fn video_encoder(&self) -> &Arc<RwLock<Option<Arc<ObsVideoEncoder>>>>;
@@ -208,9 +208,9 @@ pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsObjectTrait {
         let runtime = self.runtime().clone();
 
         let mut rx = if should_pause {
-            self.signal_manager().on_pause()?
+            self.signals().on_pause()?
         } else {
-            self.signal_manager().on_unpause()?
+            self.signals().on_unpause()?
         };
 
         let res = run_with_obs!(runtime, (output_ptr), move || unsafe {
@@ -257,8 +257,8 @@ pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsObjectTrait {
             )));
         }
 
-        let mut rx = self.signal_manager().on_stop()?;
-        let mut rx_deactivate = self.signal_manager().on_deactivate()?;
+        let mut rx = self.signals().on_stop()?;
+        let mut rx_deactivate = self.signals().on_deactivate()?;
 
         let runtime = self.runtime().clone();
         run_with_obs!(runtime, (output_ptr), move || unsafe {

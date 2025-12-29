@@ -1,12 +1,14 @@
-use std::{fmt::Debug, hash::Hash};
+use std::{fmt::Debug, hash::Hash, sync::Arc};
 
 use crate::{
     data::object::ObsObjectTrait,
+    sources::ObsSourceSignals,
     unsafe_send::{Sendable, SendableComp},
     utils::ObsError,
 };
 
-pub(crate) trait ObsSourceTraitSealed: Debug + Send + Sync {
+#[doc(hidden)]
+pub trait ObsSourceTraitSealed: Debug + Send + Sync {
     fn add_scene_item_ptr(
         &self,
         scene_ptr: SendableComp<*mut libobs::obs_scene_t>,
@@ -41,4 +43,5 @@ impl Hash for dyn ObsSourceTrait {
 #[allow(private_bounds)]
 pub trait ObsSourceTrait: ObsObjectTrait + ObsSourceTraitSealed {
     fn as_ptr(&self) -> Sendable<*mut libobs::obs_source_t>;
+    fn signals(&self) -> &Arc<ObsSourceSignals>;
 }

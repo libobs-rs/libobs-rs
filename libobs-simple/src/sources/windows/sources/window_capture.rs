@@ -1,4 +1,6 @@
-use crate::define_object_manager;
+use std::sync::Arc;
+
+use crate::{define_object_manager, sources::macro_helper::add_source_specific_signals};
 
 use super::{ObsWindowCaptureMethod, ObsWindowPriority};
 use crate::error::ObsSimpleError;
@@ -8,7 +10,7 @@ use libobs_window_helper::{get_all_windows, WindowInfo, WindowSearchMode};
 use libobs_wrapper::{
     data::{ObsObjectBuilder, ObsObjectUpdater},
     scenes::ObsSceneRef,
-    sources::{ObsSourceBuilder, ObsSourceRef},
+    sources::{ObsSourceBuilder, ObsSourceRef, ObsSourceTrait},
     utils::ObsError,
 };
 use num_traits::ToPrimitive;
@@ -129,8 +131,27 @@ impl WindowCaptureSource {
     }
 }
 
+add_source_specific_signals!(WindowCaptureSource, [
+    "hooked": {struct HookedSignal {
+        title: String,
+        class: String,
+        executable: String;
+        POINTERS {
+            source: *mut libobs::obs_source_t,
+        }
+    }},
+    "unhooked": {struct UnhookedSignal {
+        POINTERS {
+            source: *mut libobs::obs_source_t,
+        }
+    }},
+]);
+
 impl ObsSourceBuilder for WindowCaptureSourceBuilder {
-    fn add_to_scene(mut self, scene: &mut ObsSceneRef) -> Result<ObsSourceRef, ObsError>
+    fn add_to_scene(
+        mut self,
+        scene: &mut ObsSceneRef,
+    ) -> Result<Arc<Box<dyn ObsSourceTrait>>, ObsError>
     where
         Self: Sized,
     {
@@ -144,7 +165,8 @@ impl ObsSourceBuilder for WindowCaptureSourceBuilder {
         let runtime = self.runtime.clone();
 
         let b = self.build()?;
-        let mut res = scene.add_source(b)?;
+        let res = scene.add_source(b)?;
+        let mut res = WindowCaptureSource::new(res)?;
 
         if let Some(method) = method_to_set {
             WindowCaptureSourceUpdater::create_update(runtime, &mut res)?
@@ -152,6 +174,6 @@ impl ObsSourceBuilder for WindowCaptureSourceBuilder {
                 .update()?;
         }
 
-        Ok(res)
+        Ok(Arc::new(Box::new(res)))
     }
 }

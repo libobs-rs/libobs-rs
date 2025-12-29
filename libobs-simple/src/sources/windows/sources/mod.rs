@@ -1,16 +1,18 @@
-mod window_capture;
-use std::ffi::CStr;
+use std::{ffi::CStr, ops::Deref};
 
-pub use window_capture::*;
+pub mod window_capture;
+pub use window_capture::{
+    WindowCaptureSource, WindowCaptureSourceBuilder, WindowCaptureSourceUpdater,
+};
 
 mod capture;
 pub use capture::*;
 
-mod game_capture;
-pub use game_capture::*;
+pub mod game_capture;
+pub use game_capture::{GameCaptureSource, GameCaptureSourceBuilder, GameCaptureSourceUpdater};
 
-mod monitor_capture;
-pub use monitor_capture::*;
+pub mod monitor_capture;
+pub use monitor_capture::{MonitorCaptureSourceBuilder, MonitorCaptureSourceUpdater};
 
 #[cfg(feature = "window-list")]
 pub use libobs_window_helper::{WindowInfo, WindowSearchMode};

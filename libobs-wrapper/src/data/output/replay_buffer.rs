@@ -4,25 +4,18 @@
 //! A replay buffer is a special type of output that continuously records
 //! the last N seconds of content, allowing the user to save this buffer on demand. This must be configured. More documentation soon.
 use std::{
-    collections::HashMap,
     path::{Path, PathBuf},
-    sync::{Arc, RwLock},
+    sync::{Arc},
 };
 
 use crate::{
     data::{
-        immutable::ImmutableObsData,
-        object::{forward_obs_object_impl, ObsObjectTrait, ObsObjectTraitSealed},
+        object::ObsObjectTrait,
         output::{
-            macros::forward_obs_output_impl, ObsOutputRef, ObsOutputSignals, ObsOutputTrait,
+            ObsOutputRef, ObsOutputTrait,
             ObsOutputTraitSealed,
         },
-    },
-    encoders::{audio::ObsAudioEncoder, video::ObsVideoEncoder},
-    impl_signal_manager, run_with_obs,
-    runtime::ObsRuntime,
-    unsafe_send::Sendable,
-    utils::{ObsCalldataExt, ObsError, ObsString, OutputInfo},
+    }, forward_obs_object_impl, forward_obs_output_impl, impl_signal_manager, run_with_obs, runtime::ObsRuntime, unsafe_send::Sendable, utils::{ObsCalldataExt, ObsError, ObsString, OutputInfo}
 };
 
 #[derive(Debug, Clone)]

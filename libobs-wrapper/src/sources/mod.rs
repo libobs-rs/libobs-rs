@@ -4,11 +4,13 @@ pub use builder::*;
 mod traits;
 pub use traits::*;
 
+mod macros;
+
 use libobs::{obs_scene_item, obs_scene_t, obs_source_t};
 
 use crate::{
     data::{
-        immutable::ImmutableObsData,
+        ImmutableObsData,
         object::{inner_fn_update_settings, ObsObjectTrait, ObsObjectTraitSealed},
         ObsDataPointers,
     },
@@ -116,14 +118,10 @@ impl ObsSourceRef {
             signal_manager: Arc::new(signals),
         })
     }
-
-    pub fn signal_manager(&self) -> Arc<ObsSourceSignals> {
-        self.signal_manager.clone()
-    }
 }
 
 impl ObsObjectTraitSealed for ObsSourceRef {
-    fn replace_settings(&self, settings: ImmutableObsData) -> Result<(), ObsError> {
+    fn __internal_replace_settings(&self, settings: ImmutableObsData) -> Result<(), ObsError> {
         let mut guard = self
             .settings
             .write()
@@ -133,7 +131,7 @@ impl ObsObjectTraitSealed for ObsSourceRef {
         Ok(())
     }
 
-    fn replace_hotkey_data(&self, hotkey_data: ImmutableObsData) -> Result<(), ObsError> {
+    fn __internal_replace_hotkey_data(&self, hotkey_data: ImmutableObsData) -> Result<(), ObsError> {
         let mut guard = self.hotkey_data.write().map_err(|_| {
             ObsError::LockError("Failed to acquire write lock on hotkey data".into())
         })?;
@@ -227,6 +225,10 @@ impl ObsSourceTrait for ObsSourceRef {
     fn as_ptr(&self) -> Sendable<*mut libobs::obs_source_t> {
         self.source.clone()
     }
+
+    fn signals(&self) -> &Arc<ObsSourceSignals> {
+        &self.signal_manager
+    }
 }
 
 impl_signal_manager!(|ptr| unsafe { libobs::obs_source_get_signal_handler(ptr) }, ObsSourceSignals for ObsSourceRef<*mut libobs::obs_source_t>, [
@@ -298,23 +300,6 @@ impl_signal_manager!(|ptr| unsafe { libobs::obs_source_get_signal_handler(ptr) }
     "media_stopped": {},
     "media_next": {},
     "media_previous": {},
-    /// This is just for sources that are of the `game-capture`, `window-capture` or `win-wasapi` type. Other sources will never emit this signal.
-    //TODO Add support for the `linux-capture` type as it does not contain the `title` field (its 'name' instead)
-    "hooked": {struct HookedSignal {
-        title: String,
-        class: String,
-        executable: String;
-        POINTERS {
-            source: *mut libobs::obs_source_t,
-        }
-    }},
-    /// This is just for sources that are of the `game-capture`, `window-capture` or `win-wasapi` type. Other sources will never emit this signal.
-    //TODO Add support for the `linux-capture` type as it does not contain the `title` field (its 'name' instead)
-    "unhooked": {struct UnhookedSignal {
-        POINTERS {
-            source: *mut libobs::obs_source_t,
-        }
-    }},
 ]);
 
 #[derive(Debug)]

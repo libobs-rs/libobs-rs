@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
 use crate::{
-    data::{immutable::ImmutableObsData, ObsData, ObsObjectUpdater},
+    data::{ImmutableObsData, ObsData, ObsObjectUpdater},
     runtime::ObsRuntime,
     utils::{ObsError, ObsString},
 };
@@ -29,11 +29,17 @@ impl Clone for Box<dyn ObsObjectTrait> {
     }
 }
 
+#[doc(hidden)]
 pub trait ObsObjectTraitSealed: Debug + Send + Sync {
     /// Replaces the settings data of the object. This should only be called if the actual OBS object has been updated.
-    fn replace_settings(&self, settings: ImmutableObsData) -> Result<(), ObsError>;
+    ///
+    /// DO NOT USE THIS METHOD UNLESS YOU KNOW WHAT YOU ARE DOING.
+    fn __internal_replace_settings(&self, settings: ImmutableObsData) -> Result<(), ObsError>;
     /// Replaces the hotkey data of the object. This should only be called if the actual OBS object has been updated.
-    fn replace_hotkey_data(&self, hotkey_data: ImmutableObsData) -> Result<(), ObsError>;
+    ///
+    /// DO NOT USE THIS METHOD UNLESS YOU KNOW WHAT YOU ARE DOING.
+    fn __internal_replace_hotkey_data(&self, hotkey_data: ImmutableObsData)
+        -> Result<(), ObsError>;
 }
 
 #[allow(private_bounds)]

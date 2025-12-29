@@ -1,6 +1,8 @@
 //! Monitor capture source for Windows using libobs-rs
 //! This source captures the entire monitor and is used for screen recording.
 
+use std::sync::Arc;
+
 use super::ObsDisplayCaptureMethod;
 use crate::define_object_manager;
 use crate::error::ObsSimpleError;
@@ -11,7 +13,7 @@ use libobs_simple_macro::obs_object_impl;
 use libobs_wrapper::{
     data::{ObsObjectBuilder, ObsObjectUpdater},
     scenes::ObsSceneRef,
-    sources::{ObsSourceBuilder, ObsSourceRef},
+    sources::{ObsSourceBuilder, ObsSourceRef, ObsSourceTrait},
     unsafe_send::Sendable,
     utils::ObsError,
 };
@@ -76,8 +78,12 @@ impl MonitorCaptureSourceBuilder {
     }
 }
 
+pub type GeneralSourceRef = Arc<Box<dyn ObsSourceTrait>>;
 impl ObsSourceBuilder for MonitorCaptureSourceBuilder {
-    fn add_to_scene(mut self, scene: &mut ObsSceneRef) -> Result<ObsSourceRef, ObsError>
+    fn add_to_scene(
+        mut self,
+        scene: &mut ObsSceneRef,
+    ) -> Result<GeneralSourceRef, ObsError>
     where
         Self: Sized,
     {
@@ -99,6 +105,6 @@ impl ObsSourceBuilder for MonitorCaptureSourceBuilder {
                 .update()?;
         }
 
-        Ok(res)
+        Ok(Arc::new(Box::new(res)))
     }
 }

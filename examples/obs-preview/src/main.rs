@@ -21,7 +21,7 @@ use libobs_wrapper::display::{
 };
 #[cfg(windows)]
 use libobs_wrapper::sources::ObsSourceBuilder;
-use libobs_wrapper::sources::ObsSourceRef;
+use libobs_wrapper::sources::{ObsSourceRef, ObsSourceTrait};
 use libobs_wrapper::unsafe_send::Sendable;
 use libobs_wrapper::{context::ObsContext, utils::StartupInfo};
 use winit::application::ApplicationHandler;
@@ -169,7 +169,7 @@ impl ObsInner {
         let should_exit = Arc::new(AtomicBool::new(false));
         let thread_exit = should_exit.clone();
         let handle = std::thread::spawn(move || {
-            let signal_manager = tmp.signal_manager();
+            let signal_manager = tmp.signals();
             let mut x = signal_manager.on_update().unwrap();
 
             println!("Listening for updates");

@@ -1841,6 +1841,7 @@ dependencies = [
  "display-info",
  "env_logger",
  "ffmpeg-sidecar",
+ "lazy_static",
  "libobs",
  "libobs-simple-macro",
  "libobs-window-helper",

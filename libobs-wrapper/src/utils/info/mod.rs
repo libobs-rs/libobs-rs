@@ -1,7 +1,7 @@
 mod startup;
 pub use startup::*;
 
-use crate::data::{immutable::ImmutableObsData, ObsData};
+use crate::data::{ImmutableObsData, ObsData};
 
 use super::ObsString;
 

@@ -1,14 +1,18 @@
+use std::sync::Arc;
+
 use libobs_simple_macro::obs_object_impl;
 #[cfg(feature = "window-list")]
 use libobs_window_helper::{get_all_windows, WindowInfo, WindowSearchMode};
 use libobs_wrapper::{
     data::{ObsObjectBuilder, ObsObjectUpdater, StringEnum},
-    sources::{ObsSourceBuilder, ObsSourceRef},
+    scenes::ObsSceneRef,
+    sources::{ObsSourceBuilder, ObsSourceRef, ObsSourceTrait},
+    utils::ObsError,
 };
 
 use super::{ObsHookRate, ObsWindowPriority};
-use crate::define_object_manager;
 use crate::error::ObsSimpleError;
+use crate::{define_object_manager, sources::macro_helper::add_source_specific_signals};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// Describes the capture mode of the game capture source.
@@ -172,4 +176,38 @@ impl GameCaptureSource {
     }
 }
 
-impl ObsSourceBuilder for GameCaptureSourceBuilder {}
+add_source_specific_signals!(GameCaptureSource, [
+    /// This is just for sources that are of the `game-capture`, `window-capture` or `win-wasapi` type. Other sources will never emit this signal.
+    //TODO Add support for the `linux-capture` type as it does not contain the `title` field (its 'name' instead)
+    "hooked": {struct HookedSignal {
+        title: String,
+        class: String,
+        executable: String;
+        POINTERS {
+            source: *mut libobs::obs_source_t,
+        }
+    }},
+    /// This is just for sources that are of the `game-capture`, `window-capture` or `win-wasapi` type. Other sources will never emit this signal.
+    //TODO Add support for the `linux-capture` type as it does not contain the `title` field (its 'name' instead)
+    "unhooked": {struct UnhookedSignal {
+        POINTERS {
+            source: *mut libobs::obs_source_t,
+        }
+    }},
+]);
+
+// Custom made signals for the game capture and implementation
+
+impl ObsSourceBuilder for GameCaptureSourceBuilder {
+    fn add_to_scene(self, scene: &mut ObsSceneRef) -> Result<Arc<Box<dyn ObsSourceTrait>>, ObsError>
+    where
+        Self: Sized,
+    {
+        let s = self.build()?;
+
+        let source = scene.add_source(s)?;
+        let source = GameCaptureSource::new(source)?;
+
+        Ok(Arc::new(Box::new(source)))
+    }
+}
