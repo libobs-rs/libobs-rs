@@ -278,39 +278,42 @@ impl ObsRuntime {
             operation();
             return Ok(());
         }
-        let is_within_runtime = std::thread::current().id() == self.thread_id;
-        if is_within_runtime {
-            log::warn!("run_with_obs_no_block called from within the OBS runtime thread. This is bad practice and can lead to deadlocks. Consider restructuring your code to avoid this scenario.");
-            operation();
-
-            return Ok(());
-        }
-
-        if !is_within_runtime && cfg!(not(feature = "enable_runtime")) {
-            return Err(ObsError::RuntimeOutsideThread);
-        }
-
-        #[cfg(feature = "enable_runtime")]
+        #[allow(unreachable_code)]
         {
-            let val = self.queued_commands.fetch_add(1, Ordering::SeqCst);
-            if val > 50 {
-                log::warn!("More than 50 queued commands. Try to batch them together.");
+            let is_within_runtime = std::thread::current().id() == self.thread_id;
+            if is_within_runtime {
+                log::warn!("run_with_obs_no_block called from within the OBS runtime thread. This is bad practice and can lead to deadlocks. Consider restructuring your code to avoid this scenario.");
+                operation();
+
+                return Ok(());
             }
 
-            let wrapper = move || -> Box<dyn std::any::Any + Send> {
-                operation();
-                Box::new(())
-            };
+            if !is_within_runtime && cfg!(not(feature = "enable_runtime")) {
+                return Err(ObsError::RuntimeOutsideThread);
+            }
 
-            self.command_sender
-                .send(ObsCommand::Execute(Box::new(wrapper), None))
-                .map_err(|_| {
-                    ObsError::RuntimeChannelError(
-                        "Failed to send command to OBS thread".to_string(),
-                    )
-                })?;
+            #[cfg(feature = "enable_runtime")]
+            {
+                let val = self.queued_commands.fetch_add(1, Ordering::SeqCst);
+                if val > 50 {
+                    log::warn!("More than 50 queued commands. Try to batch them together.");
+                }
 
-            Ok(())
+                let wrapper = move || -> Box<dyn std::any::Any + Send> {
+                    operation();
+                    Box::new(())
+                };
+
+                self.command_sender
+                    .send(ObsCommand::Execute(Box::new(wrapper), None))
+                    .map_err(|_| {
+                        ObsError::RuntimeChannelError(
+                            "Failed to send command to OBS thread".to_string(),
+                        )
+                    })?;
+
+                Ok(())
+            }
         }
     }
 
