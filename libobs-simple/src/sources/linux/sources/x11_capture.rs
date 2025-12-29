@@ -1,9 +1,9 @@
 use libobs_wrapper::{
     data::StringEnum,
-    sources::{ObsSourceBuilder, ObsSourceRef},
+    sources::{ObsSourceRef},
 };
 
-use crate::sources::macro_helper::define_object_manager;
+use crate::sources::macro_helper::{define_object_manager, impl_default_builder};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// Describes the X11 capture server type
@@ -29,7 +29,7 @@ define_object_manager!(
     ///
     /// This source provides screen capture functionality on Linux systems running X11.
     /// It can capture the entire screen or specific areas with cropping options.
-    struct X11CaptureSource("xshm_input") for ObsSourceRef {
+    struct X11CaptureSource("xshm_input") updates ObsSourceRef {
         /// Screen/Display to capture
         #[obs_property(type_t = "int")]
         screen: i64,
@@ -64,4 +64,4 @@ define_object_manager!(
     }
 );
 
-impl ObsSourceBuilder for X11CaptureSourceBuilder {}
+impl_default_builder!(X11CaptureSourceBuilder);

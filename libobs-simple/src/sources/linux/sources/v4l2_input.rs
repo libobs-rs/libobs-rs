@@ -1,10 +1,10 @@
 use libobs_wrapper::{
     data::StringEnum,
-    sources::{ObsSourceBuilder, ObsSourceRef},
+    sources::{ObsSourceRef},
 };
 use num_derive::{FromPrimitive, ToPrimitive};
 
-use crate::sources::macro_helper::define_object_manager;
+use crate::sources::macro_helper::{define_object_manager, impl_default_builder};
 
 #[repr(i64)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, FromPrimitive, ToPrimitive)]
@@ -34,7 +34,7 @@ define_object_manager!(
     ///
     /// This source captures video from V4L2 compatible devices such as webcams,
     /// capture cards, and other video input devices on Linux.
-    struct V4L2InputSource("v4l2_input") for ObsSourceRef {
+    struct V4L2InputSource("v4l2_input") updates ObsSourceRef {
         /// Device ID/path (e.g., "/dev/video0")
         #[obs_property(type_t = "string")]
         device_id: String,
@@ -83,4 +83,4 @@ impl V4L2InputSourceBuilder {
     }
 }
 
-impl ObsSourceBuilder for V4L2InputSourceBuilder {}
+impl_default_builder!(V4L2InputSourceBuilder);

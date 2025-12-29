@@ -14,7 +14,7 @@ macro_rules! forward_obs_source_impl {
             fn remove_scene_item_ptr(
                 &self,
                 scene_ptr: $crate::unsafe_send::SendableComp<*mut libobs::obs_scene_t>,
-            ) -> Result<(), ObsError> {
+            ) -> Result<(), libobs_wrapper::utils::ObsError> {
                 self.$var_name.remove_scene_item_ptr(scene_ptr)
             }
 

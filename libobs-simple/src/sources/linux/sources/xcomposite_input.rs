@@ -1,6 +1,9 @@
-use libobs_wrapper::sources::{ObsSourceBuilder, ObsSourceRef};
+use libobs_wrapper::{
+    data::ObsObjectBuilder,
+    sources::{ObsSourceBuilder, ObsSourceRef},
+};
 
-use crate::sources::macro_helper::define_object_manager;
+use crate::sources::macro_helper::{add_source_specific_signals, define_object_manager};
 
 define_object_manager!(
     #[derive(Debug)]
@@ -9,7 +12,7 @@ define_object_manager!(
     /// This source provides window capture functionality on Linux systems running X11
     /// using the XComposite extension. It can capture individual windows with their
     /// transparency and effects intact.
-    struct XCompositeInputSource("xcomposite_input") for ObsSourceRef {
+    struct XCompositeInputSource("xcomposite_input") updates ObsSourceRef {
         /// Window to capture (window ID as string)
         #[obs_property(type_t = "string")]
         capture_window: String,
@@ -44,4 +47,35 @@ define_object_manager!(
     }
 );
 
-impl ObsSourceBuilder for XCompositeInputSourceBuilder {}
+add_source_specific_signals!(XCompositeInputSource, [
+    //TODO Add support for the `linux-capture` type as it does not contain the `title` field (its 'name' instead)
+    "hooked": {struct HookedSignal {
+        name: String,
+        class: String;
+        POINTERS {
+            source: *mut libobs::obs_source_t,
+        }
+    }},
+    //TODO Add support for the `linux-capture` type as it does not contain the `title` field (its 'name' instead)
+    "unhooked": {struct UnhookedSignal {
+        POINTERS {
+            source: *mut libobs::obs_source_t,
+        }
+    }},
+]);
+
+impl ObsSourceBuilder for XCompositeInputSourceBuilder {
+    type T = XCompositeInputSource;
+
+    fn add_to_scene(
+        self,
+        scene: &mut libobs_wrapper::scenes::ObsSceneRef,
+    ) -> Result<Self::T, libobs_wrapper::utils::ObsError>
+    where
+        Self: Sized,
+    {
+        let source = scene.add_source(self.build()?)?;
+
+        XCompositeInputSource::new(source)
+    }
+}

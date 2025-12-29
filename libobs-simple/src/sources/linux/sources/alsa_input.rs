@@ -1,6 +1,6 @@
-use libobs_wrapper::sources::{ObsSourceBuilder, ObsSourceRef};
+use libobs_wrapper::sources::ObsSourceRef;
 
-use crate::sources::macro_helper::define_object_manager;
+use crate::sources::macro_helper::{define_object_manager, impl_default_builder};
 
 define_object_manager!(
     #[derive(Debug)]
@@ -8,7 +8,7 @@ define_object_manager!(
     ///
     /// This source captures audio from ALSA-compatible devices on Linux systems.
     /// It provides low-level access to audio hardware through the ALSA subsystem.
-    struct AlsaInputSource("alsa_input_capture") for ObsSourceRef {
+    struct AlsaInputSource("alsa_input_capture") updates ObsSourceRef {
         /// ALSA device ID (e.g., "default", "hw:0,0", or custom PCM device)
         #[obs_property(type_t = "string")]
         device_id: String,
@@ -35,4 +35,4 @@ impl AlsaInputSourceBuilder {
     }
 }
 
-impl ObsSourceBuilder for AlsaInputSourceBuilder {}
+impl_default_builder!(AlsaInputSourceBuilder);

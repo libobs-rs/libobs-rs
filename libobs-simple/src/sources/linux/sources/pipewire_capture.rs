@@ -2,11 +2,11 @@ use libobs_simple_macro::{obs_object_builder, obs_object_updater};
 use libobs_wrapper::{
     data::{object::ObsObjectTrait, ObsDataGetters},
     run_with_obs,
-    sources::{ObsSourceBuilder, ObsSourceRef, ObsSourceTrait},
+    sources::{ObsSourceRef, ObsSourceTrait},
     utils::ObsError,
 };
 
-use crate::sources::macro_helper::define_object_manager;
+use crate::sources::macro_helper::{define_object_manager, impl_default_builder};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// PipeWire source type
@@ -98,7 +98,7 @@ define_object_manager!(
     ///
     /// This source captures video from camera devices through PipeWire's camera portal,
     /// providing secure access to camera devices in sandboxed environments.
-    struct PipeWireCameraSource("pipewire-camera-source") for ObsSourceRef {
+    struct PipeWireCameraSource("pipewire-camera-source") updates ObsSourceRef {
         /// Camera device node (e.g., "/dev/video0")
         #[obs_property(type_t = "string")]
         camera_id: String,
@@ -166,7 +166,7 @@ impl PipeWireCameraSourceBuilder {
     }
 }
 
-impl ObsSourceBuilder for PipeWireDesktopCaptureSourceBuilder {}
-impl ObsSourceBuilder for PipeWireWindowCaptureSourceBuilder {}
-impl ObsSourceBuilder for PipeWireScreenCaptureSourceBuilder {}
-impl ObsSourceBuilder for PipeWireCameraSourceBuilder {}
+impl_default_builder!(PipeWireDesktopCaptureSourceBuilder);
+impl_default_builder!(PipeWireWindowCaptureSourceBuilder);
+impl_default_builder!(PipeWireScreenCaptureSourceBuilder);
+impl_default_builder!(PipeWireCameraSourceBuilder);

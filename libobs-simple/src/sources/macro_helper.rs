@@ -30,6 +30,7 @@ macro_rules! define_object_manager {
     };
 }
 
+#[allow(unused)]
 macro_rules! add_source_specific_signals {
     ($new_source_struct: ident, [
         $($(#[$attr:meta])* $signal_name: literal: { $($inner_def:tt)* }),* $(,)*
@@ -42,22 +43,23 @@ macro_rules! add_source_specific_signals {
     #[derive(Debug, Clone)]
     pub struct $new_source_struct {
         source: ObsSourceRef,
-        source_specific_signals: Arc<[<$new_source_struct Signals>]>,
+        source_specific_signals: std::sync::Arc<[<$new_source_struct Signals>]>,
     }
 
     impl $new_source_struct {
-        fn new(source: ObsSourceRef) -> Result<Self, ObsError> {
+        fn new(source: ObsSourceRef) -> Result<Self, libobs_wrapper::utils::ObsError> {
             use libobs_wrapper::data::object::ObsObjectTrait;
+            use libobs_wrapper::sources::ObsSourceTrait;
             let source_specific_signals =
                 [<$new_source_struct Signals>]::new(&source.as_ptr(), source.runtime().clone())?;
 
             Ok(Self {
                 source,
-                source_specific_signals: Arc::new(source_specific_signals),
+                source_specific_signals: std::sync::Arc::new(source_specific_signals),
             })
         }
 
-        pub fn source_specific_signals(&self) -> Arc<[<$new_source_struct Signals>]> {
+        pub fn source_specific_signals(&self) -> std::sync::Arc<[<$new_source_struct Signals>]> {
             self.source_specific_signals.clone()
         }
     }
@@ -69,5 +71,24 @@ macro_rules! add_source_specific_signals {
     };
 }
 
+macro_rules! impl_default_builder {
+    ($name: ident) => {
+        impl libobs_wrapper::sources::ObsSourceBuilder for $name {
+            type T = libobs_wrapper::sources::ObsSourceRef;
+
+            fn add_to_scene(
+                self,
+                scene: &mut libobs_wrapper::scenes::ObsSceneRef,
+            ) -> Result<Self::T, libobs_wrapper::utils::ObsError>
+            where
+                Self: Sized,
+            {
+                use libobs_wrapper::data::ObsObjectBuilder;
+                scene.add_source(self.build()?)
+            }
+        }
+    };
+}
+
 #[allow(unused)]
-pub(crate) use {add_source_specific_signals, define_object_manager};
+pub(crate) use {add_source_specific_signals, define_object_manager, impl_default_builder};
