@@ -10,7 +10,7 @@ use libobs_wrapper::{
 
 use super::{ObsHookRate, ObsWindowPriority};
 use crate::error::ObsSimpleError;
-use crate::{define_object_manager, sources::macro_helper::add_source_specific_signals};
+use crate::{define_object_manager, sources::macro_helper::impl_custom_source};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// Describes the capture mode of the game capture source.
@@ -174,7 +174,7 @@ impl GameCaptureSource {
     }
 }
 
-add_source_specific_signals!(GameCaptureSource, [
+impl_custom_source!(GameCaptureSource, [
     //TODO Add support for the `linux-capture` type as it does not contain the `title` field (its 'name' instead)
     "hooked": {struct HookedSignal {
         title: String,

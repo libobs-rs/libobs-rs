@@ -8,7 +8,7 @@ use libobs_wrapper::{context::ObsContext, utils::ObsPath};
 #[cfg(target_os = "linux")]
 use libobs_simple::sources::linux::LinuxGeneralScreenCapture;
 #[cfg(windows)]
-use libobs_simple::sources::windows::{MonitorCaptureSourceBuilder, MonitorCaptureSourceUpdater};
+use libobs_simple::sources::windows::MonitorCaptureSourceBuilder;
 #[cfg(windows)]
 use libobs_wrapper::data::ObsObjectUpdater;
 #[cfg(windows)]
@@ -80,14 +80,12 @@ fn main() -> anyhow::Result<()> {
         use std::thread;
         use std::time::Duration;
 
-        use libobs_wrapper::data::object::ObsObjectTrait;
-
         println!("Recording for 5 seconds and switching monitor...");
         thread::sleep(Duration::from_secs(5));
 
         // Switching monitor
         monitor_capture
-            .create_updater::<MonitorCaptureSourceUpdater>()?
+            .create_updater()?
             .set_monitor(&monitors[1 % monitors.len()])
             .update()?;
 

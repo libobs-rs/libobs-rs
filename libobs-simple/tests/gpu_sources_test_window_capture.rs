@@ -11,11 +11,9 @@ use std::{
 };
 
 use crate::common::{assert_not_black, find_notepad, initialize_obs};
-use libobs_simple::sources::windows::{
-    ObsWindowCaptureMethod, WindowCaptureSourceBuilder, WindowCaptureSourceUpdater,
-};
+use libobs_simple::sources::windows::{ObsWindowCaptureMethod, WindowCaptureSourceBuilder};
 use libobs_window_helper::WindowSearchMode;
-use libobs_wrapper::data::{object::ObsObjectTrait, output::ObsOutputTrait, ObsObjectUpdater};
+use libobs_wrapper::data::{output::ObsOutputTrait, ObsObjectUpdater};
 use libobs_wrapper::{sources::ObsSourceBuilder, utils::ObsPath};
 
 #[test]
@@ -66,7 +64,7 @@ pub fn record() {
         println!("Setting to {:?}", w.0.obs_id);
 
         source
-            .create_updater::<WindowCaptureSourceUpdater>()
+            .create_updater()
             .unwrap()
             .set_window(w)
             .update()

@@ -4,11 +4,9 @@ mod common;
 
 use std::{path::PathBuf, time::Duration};
 
-use libobs_simple::sources::windows::{
-    MonitorCaptureSourceBuilder, MonitorCaptureSourceUpdater, ObsDisplayCaptureMethod,
-};
+use libobs_simple::sources::windows::{MonitorCaptureSourceBuilder, ObsDisplayCaptureMethod};
 use libobs_wrapper::{
-    data::{object::ObsObjectTrait, output::ObsOutputTrait, ObsObjectUpdater},
+    data::{output::ObsOutputTrait, ObsObjectUpdater},
     sources::ObsSourceBuilder,
     utils::ObsPath,
 };
@@ -49,7 +47,7 @@ pub fn record() {
     if ENABLE_DXGI_TEST {
         println!("Testing DXGI capture method");
         capture_source
-            .create_updater::<MonitorCaptureSourceUpdater>()
+            .create_updater()
             .unwrap()
             .set_capture_method(ObsDisplayCaptureMethod::MethodDXGI)
             .update()

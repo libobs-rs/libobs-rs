@@ -5,13 +5,13 @@ use std::time::Duration;
 
 #[cfg(target_os = "linux")]
 use libobs_simple::sources::linux::LinuxGeneralScreenCapture;
+use libobs_simple::sources::windows::monitor_capture::MonitorCaptureSource;
 #[cfg(target_os = "linux")]
 use libobs_wrapper::utils::NixDisplay;
 
 #[cfg(windows)]
 use libobs_simple::sources::windows::{
-    GameCaptureSourceBuilder, MonitorCaptureSourceBuilder, MonitorCaptureSourceUpdater,
-    ObsGameCaptureMode, WindowSearchMode,
+    GameCaptureSourceBuilder, MonitorCaptureSourceBuilder, ObsGameCaptureMode, WindowSearchMode,
 };
 #[cfg(windows)]
 use libobs_simple::sources::ObsObjectUpdater;
@@ -21,7 +21,7 @@ use libobs_wrapper::display::{
 };
 #[cfg(windows)]
 use libobs_wrapper::sources::ObsSourceBuilder;
-use libobs_wrapper::sources::{ObsSourceRef, ObsSourceTrait};
+use libobs_wrapper::sources::ObsSourceTrait;
 use libobs_wrapper::unsafe_send::Sendable;
 use libobs_wrapper::{context::ObsContext, utils::StartupInfo};
 use winit::application::ApplicationHandler;
@@ -51,7 +51,7 @@ struct ObsInner {
     context: ObsContext,
     display: ObsDisplayRef,
     #[cfg_attr(not(windows), allow(dead_code))]
-    source: ObsSourceRef,
+    source: MonitorCaptureSource,
     _guard: SignalThreadGuard,
 }
 
@@ -281,8 +281,6 @@ impl ApplicationHandler for App {
                         let mut inner = self.obs.write().unwrap();
                         let inner = inner.as_mut();
                         if let Some(inner) = inner {
-                            use libobs_wrapper::data::object::ObsObjectTrait;
-
                             let monitor_index = self.monitor_index.clone();
 
                             let source = &mut inner.source;
@@ -294,7 +292,7 @@ impl ApplicationHandler for App {
                             let monitor = &monitors[monitor_index];
 
                             source
-                                .create_updater::<MonitorCaptureSourceUpdater>()
+                                .create_updater()
                                 .unwrap()
                                 .set_monitor(monitor)
                                 .update()

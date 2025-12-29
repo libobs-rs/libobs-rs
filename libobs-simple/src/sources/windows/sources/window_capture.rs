@@ -1,4 +1,4 @@
-use crate::{define_object_manager, sources::macro_helper::add_source_specific_signals};
+use crate::{define_object_manager, sources::macro_helper::impl_custom_source};
 
 use super::{ObsWindowCaptureMethod, ObsWindowPriority};
 use crate::error::ObsSimpleError;
@@ -129,7 +129,7 @@ impl WindowCaptureSource {
     }
 }
 
-add_source_specific_signals!(WindowCaptureSource, [
+impl_custom_source!(WindowCaptureSource, [
     "hooked": {struct HookedSignal {
         title: String,
         class: String,

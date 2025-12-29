@@ -31,7 +31,10 @@ macro_rules! define_object_manager {
 }
 
 #[allow(unused)]
-macro_rules! add_source_specific_signals {
+macro_rules! impl_custom_source {
+    ($new_source_struct: ident) => {
+        impl_custom_source!($new_source_struct, []);
+    };
     ($new_source_struct: ident, [
         $($(#[$attr:meta])* $signal_name: literal: { $($inner_def:tt)* }),* $(,)*
     ]) => {
@@ -61,6 +64,15 @@ macro_rules! add_source_specific_signals {
 
         pub fn source_specific_signals(&self) -> std::sync::Arc<[<$new_source_struct Signals>]> {
             self.source_specific_signals.clone()
+        }
+
+        pub fn create_updater<'a>(&'a mut self) -> Result<[<$new_source_struct Updater>]<'a>, libobs_wrapper::utils::ObsError> {
+            use libobs_wrapper::data::ObsObjectUpdater;
+            use libobs_wrapper::data::object::ObsObjectTrait;
+            [<$new_source_struct Updater>]::create_update(
+                self.runtime().clone(),
+                self
+            )
         }
     }
 
@@ -92,4 +104,4 @@ macro_rules! impl_default_builder {
 }
 
 #[allow(unused)]
-pub(crate) use {add_source_specific_signals, define_object_manager, impl_default_builder};
+pub(crate) use {define_object_manager, impl_custom_source, impl_default_builder};

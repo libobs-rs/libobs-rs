@@ -6,7 +6,10 @@
 /// It's not very consistent, if it doesn't crash, just run it again until it does :)
 use std::{collections::HashMap, sync::Arc, thread, time::Duration};
 
-use libobs_simple::sources::{windows::MonitorCaptureSourceBuilder, ObsSourceBuilder};
+use libobs_simple::sources::{
+    windows::{monitor_capture::MonitorCaptureSource, MonitorCaptureSourceBuilder},
+    ObsSourceBuilder,
+};
 use libobs_wrapper::{
     context::ObsContext,
     data::{
@@ -16,7 +19,6 @@ use libobs_wrapper::{
         audio::ObsAudioEncoder, video::ObsVideoEncoder, ObsContextEncoders, ObsVideoEncoderType,
     },
     enums::ObsScaleType,
-    sources::ObsSourceRef,
     utils::{AudioEncoderInfo, ObsPath, OutputInfo, VideoEncoderInfo},
 };
 
@@ -59,7 +61,7 @@ struct ReproState {
     // Key point: storing encoders by type to reuse them (like production code)
     video_encoders: HashMap<EncoderType, Arc<ObsVideoEncoder>>,
     _scene: libobs_wrapper::scenes::ObsSceneRef,
-    _monitor_capture: ObsSourceRef,
+    _monitor_capture: MonitorCaptureSource,
 }
 
 impl ReproState {

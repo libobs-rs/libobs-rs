@@ -4,8 +4,8 @@
 use std::sync::Arc;
 
 use super::ObsDisplayCaptureMethod;
-use crate::define_object_manager;
 use crate::error::ObsSimpleError;
+use crate::{define_object_manager, sources::macro_helper::impl_custom_source};
 /// Note: This does not update the capture method directly, instead the capture method gets
 /// stored in the struct. The capture method is being set to WGC at first, then the source is created and then the capture method is updated to the desired method.
 use display_info::DisplayInfo;
@@ -23,7 +23,7 @@ use num_traits::ToPrimitive;
 define_object_manager!(
     /// Provides an easy-to-use builder for the monitor capture source.
     #[derive(Debug)]
-    struct MonitorCaptureSource("monitor_capture") updates ObsSourceRef {
+    struct MonitorCaptureSource("monitor_capture") updates MonitorCaptureSource {
         #[obs_property(type_t = "string", settings_key = "monitor_id")]
         monitor_id_raw: String,
 
@@ -80,7 +80,7 @@ impl MonitorCaptureSourceBuilder {
 
 pub type GeneralSourceRef = Arc<Box<dyn ObsSourceTrait>>;
 impl ObsSourceBuilder for MonitorCaptureSourceBuilder {
-    type T = ObsSourceRef;
+    type T = MonitorCaptureSource;
 
     fn add_to_scene(mut self, scene: &mut ObsSceneRef) -> Result<Self::T, ObsError>
     where
@@ -96,7 +96,8 @@ impl ObsSourceBuilder for MonitorCaptureSourceBuilder {
         let runtime = self.runtime.clone();
 
         let b = self.build()?;
-        let mut res = scene.add_source(b)?;
+        let res = scene.add_source(b)?;
+        let mut res = MonitorCaptureSource::new(res)?;
 
         if let Some(method) = method_to_set {
             MonitorCaptureSourceUpdater::create_update(runtime, &mut res)?
@@ -107,3 +108,5 @@ impl ObsSourceBuilder for MonitorCaptureSourceBuilder {
         Ok(res)
     }
 }
+
+impl_custom_source!(MonitorCaptureSource);
