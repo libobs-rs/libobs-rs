@@ -115,7 +115,7 @@ pub fn obs_object_updater(attr: TokenStream, item: TokenStream) -> TokenStream {
                 } = self;
 
                 log::trace!("Updating settings for {:?}", Self::get_id());
-                settings_updater.update()?;
+                settings_updater.apply()?;
 
                 log::trace!("Updating raw settings for {:?}", Self::get_id());
                 let e = updatable.update_settings(settings);
@@ -294,8 +294,8 @@ pub fn obs_object_builder(attr: TokenStream, item: TokenStream) -> TokenStream {
                     ..
                 } = self;
 
-                settings_updater.update()?;
-                hotkeys_updater.update()?;
+                settings_updater.apply()?;
+                hotkeys_updater.apply()?;
 
                 Ok(libobs_wrapper::utils::ObjectInfo::new(
                     Self::get_id(),
