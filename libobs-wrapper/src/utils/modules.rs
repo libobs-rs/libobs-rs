@@ -34,97 +34,97 @@ impl ObsModules {
     #[allow(unknown_lints)]
     #[allow(ensure_obs_call_in_runtime)]
     pub(crate) unsafe fn add_paths(paths: &StartupPaths) -> Self {
-            internal_log_global(
-                ObsLogLevel::Info,
-                "[libobs-wrapper]: Adding module paths:".to_string(),
-            );
-            internal_log_global(
-                ObsLogLevel::Info,
-                format!(
-                    "[libobs-wrapper]:   libobs data path: {}",
-                    paths.libobs_data_path()
-                ),
-            );
-            internal_log_global(
-                ObsLogLevel::Info,
-                format!(
-                    "[libobs-wrapper]:   plugin bin path: {}",
-                    paths.plugin_bin_path()
-                ),
-            );
-            internal_log_global(
-                ObsLogLevel::Info,
-                format!(
-                    "[libobs-wrapper]:   plugin data path: {}",
-                    paths.plugin_data_path()
-                ),
-            );
+        internal_log_global(
+            ObsLogLevel::Info,
+            "[libobs-wrapper]: Adding module paths:".to_string(),
+        );
+        internal_log_global(
+            ObsLogLevel::Info,
+            format!(
+                "[libobs-wrapper]:   libobs data path: {}",
+                paths.libobs_data_path()
+            ),
+        );
+        internal_log_global(
+            ObsLogLevel::Info,
+            format!(
+                "[libobs-wrapper]:   plugin bin path: {}",
+                paths.plugin_bin_path()
+            ),
+        );
+        internal_log_global(
+            ObsLogLevel::Info,
+            format!(
+                "[libobs-wrapper]:   plugin data path: {}",
+                paths.plugin_data_path()
+            ),
+        );
 
-            libobs::obs_add_data_path(paths.libobs_data_path().as_ptr().0);
-            libobs::obs_add_module_path(
-                paths.plugin_bin_path().as_ptr().0,
-                paths.plugin_data_path().as_ptr().0,
-            );
+        libobs::obs_add_data_path(paths.libobs_data_path().as_ptr().0);
+        libobs::obs_add_module_path(
+            paths.plugin_bin_path().as_ptr().0,
+            paths.plugin_data_path().as_ptr().0,
+        );
 
-            #[allow(unused_mut)]
-            let mut disabled_plugins = vec!["obs-websocket", "frontend-tools"];
+        #[allow(unused_mut)]
+        let mut disabled_plugins = vec!["obs-websocket", "frontend-tools"];
 
-            #[cfg(feature = "__test_environment")]
-            {
-                disabled_plugins.extend(&["decklink-output-ui", "decklink-captions", "decklink"]);
+        #[cfg(feature = "__test_environment")]
+        {
+            disabled_plugins.extend(&["decklink-output-ui", "decklink-captions", "decklink"]);
+        }
+
+        let version = ObsContext::get_version_global().unwrap_or_default();
+        let version_parts: Vec<&str> = version.split('.').collect();
+        let major = version_parts
+            .first()
+            .and_then(|s| s.parse::<u32>().ok())
+            .unwrap_or(0);
+
+        // Check if obs_add_disabled_module exists at runtime
+        #[cfg(target_os = "linux")]
+        let has_disabled_module_fn = {
+            // Try to find symbol in already loaded libraries
+            let symbol_name = CString::new("obs_add_disabled_module").unwrap();
+            let sym = libc::dlsym(libc::RTLD_DEFAULT, symbol_name.as_ptr());
+            let found = !sym.is_null();
+
+            if !found && major >= 32 {
+                log::warn!("OBS version >= 32 but obs_add_disabled_module symbol not found, falling back to safe modules");
             }
 
-            let version = ObsContext::get_version_global().unwrap_or_default();
-            let version_parts: Vec<&str> = version.split('.').collect();
-            let major = version_parts
-                .first()
-                .and_then(|s| s.parse::<u32>().ok())
-                .unwrap_or(0);
+            found
+        };
+        #[cfg(not(target_os = "linux"))]
+        let has_disabled_module_fn = major >= 32;
 
-            // Check if obs_add_disabled_module exists at runtime
-            #[cfg(target_os = "linux")]
-            let has_disabled_module_fn = {
-                // Try to find symbol in already loaded libraries
-                let symbol_name = CString::new("obs_add_disabled_module").unwrap();
-                let sym = libc::dlsym(libc::RTLD_DEFAULT, symbol_name.as_ptr());
-                let found = !sym.is_null();
-
-                if !found && major >= 32 {
-                    log::warn!("OBS version >= 32 but obs_add_disabled_module symbol not found, falling back to safe modules");
-                }
-
-                found
-            };
-            #[cfg(not(target_os = "linux"))]
-            let has_disabled_module_fn = major >= 32;
-
-            if major >= 32 && has_disabled_module_fn {
-                for plugin in disabled_plugins {
-                    let c_str = CString::new(plugin).unwrap();
-                    #[cfg(target_os = "linux")]
-                    {
-                        let symbol_name = CString::new("obs_add_disabled_module").unwrap();
-                        let func = libc::dlsym(libc::RTLD_DEFAULT, symbol_name.as_ptr());
-                        if !func.is_null() {
-                            let add_disabled: extern "C" fn(*const std::os::raw::c_char) =
-                                std::mem::transmute(func);
-                            add_disabled(c_str.as_ptr());
-                        }
-                    }
-                    #[cfg(not(target_os = "linux"))]
-                    {
-                        libobs::obs_add_disabled_module(c_str.as_ptr());
+        if major >= 32 && has_disabled_module_fn {
+            for plugin in disabled_plugins {
+                let c_str = CString::new(plugin).unwrap();
+                #[cfg(target_os = "linux")]
+                {
+                    let symbol_name = CString::new("obs_add_disabled_module").unwrap();
+                    let func = libc::dlsym(libc::RTLD_DEFAULT, symbol_name.as_ptr());
+                    if !func.is_null() {
+                        let add_disabled: extern "C" fn(*const std::os::raw::c_char) =
+                            std::mem::transmute(func);
+                        add_disabled(c_str.as_ptr());
                     }
                 }
-            } else {
-                for plugin in SAFE_MODULES.split('|') {
-                    if disabled_plugins.contains(&plugin) {
-                        continue;
-                    }
-                    let c_str = CString::new(plugin).unwrap();
-                    libobs::obs_add_safe_module(c_str.as_ptr());
+                #[cfg(not(target_os = "linux"))]
+                {
+                    libobs::obs_add_disabled_module(c_str.as_ptr());
                 }
             }
+        } else {
+            for plugin in SAFE_MODULES.split('|') {
+                if disabled_plugins.contains(&plugin) {
+                    continue;
+                }
+                let c_str = CString::new(plugin).unwrap();
+                libobs::obs_add_safe_module(c_str.as_ptr());
+            }
+        }
 
         Self {
             paths: paths.clone(),
@@ -137,23 +137,23 @@ impl ObsModules {
     #[allow(unknown_lints)]
     #[allow(ensure_obs_call_in_runtime)]
     pub(crate) unsafe fn load_modules(&mut self) {
-            let mut failure_info: obs_module_failure_info = std::mem::zeroed();
-            internal_log_global(
-                ObsLogLevel::Info,
-                "---------------------------------".to_string(),
-            );
-            libobs::obs_load_all_modules2(&mut failure_info);
-            internal_log_global(
-                ObsLogLevel::Info,
-                "---------------------------------".to_string(),
-            );
-            libobs::obs_log_loaded_modules();
-            internal_log_global(
-                ObsLogLevel::Info,
-                "---------------------------------".to_string(),
-            );
-            libobs::obs_post_load_modules();
-            self.info = Some(Sendable(failure_info));
+        let mut failure_info: obs_module_failure_info = std::mem::zeroed();
+        internal_log_global(
+            ObsLogLevel::Info,
+            "---------------------------------".to_string(),
+        );
+        libobs::obs_load_all_modules2(&mut failure_info);
+        internal_log_global(
+            ObsLogLevel::Info,
+            "---------------------------------".to_string(),
+        );
+        libobs::obs_log_loaded_modules();
+        internal_log_global(
+            ObsLogLevel::Info,
+            "---------------------------------".to_string(),
+        );
+        libobs::obs_post_load_modules();
+        self.info = Some(Sendable(failure_info));
 
         self.log_if_failed();
     }
