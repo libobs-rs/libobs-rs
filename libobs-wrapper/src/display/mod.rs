@@ -61,6 +61,9 @@ impl Drop for PosRemoveGuard {
     fn drop(&mut self) {
         let mut map = DISPLAY_POSITIONS.write().unwrap();
         map.remove(&self.id);
+        unsafe {
+            obs_get_audio();
+        }
     }
 }
 
