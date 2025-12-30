@@ -1,3 +1,6 @@
+#![allow(unknown_lints)]
+#![allow(ensure_obs_call_in_runtime)]
+
 use std::{
     env::current_exe,
     ffi::{c_void, CStr, CString},
