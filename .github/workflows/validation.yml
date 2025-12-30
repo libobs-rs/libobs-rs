@@ -84,7 +84,15 @@ jobs:
         uses: baptiste0928/cargo-install@v3
         with:
           crate: cargo-hack
+      - name: Install cargo-dylint from crates.io
+        uses: baptiste0928/cargo-install@v3
+        with:
+          crate: cargo-dylint
 
+      - name: Install dylint-link from crates.io
+        uses: baptiste0928/cargo-install@v3
+        with:
+          crate: dylint-link
       - name: Install OBS build dependencies (Windows)
         if: matrix.os != 'ubuntu-latest'
         run: cargo obs-build build --out-dir target/debug/deps
@@ -150,6 +158,11 @@ jobs:
 
       - name: Check Rust with Clippy
         run: cargo clippy -- -D warnings
+        env:
+          TOP_SECRET_NO_DUMMY_DLL: true
+
+      - name: Check Rust with Dylint
+        run: cargo dylint --all --workspace
         env:
           TOP_SECRET_NO_DUMMY_DLL: true
       # Run cargo check to ensure code will compile

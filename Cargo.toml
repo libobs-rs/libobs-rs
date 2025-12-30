@@ -53,3 +53,8 @@ windows = "0.62"
 
 [workspace.lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage,coverage_nightly)'] }
+
+[workspace.metadata.dylint]
+libraries = [
+    { git = "https://github.com/libobs-rs/libobs-rs-lints", rev ="2fc3486"  },
+]

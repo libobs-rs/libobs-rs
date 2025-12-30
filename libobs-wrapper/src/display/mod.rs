@@ -9,12 +9,11 @@ pub use window_manager::{MiscDisplayTrait, ShowHideTrait, WindowPositionTrait};
 
 pub use creation_data::*;
 pub use enums::*;
-use libobs::obs_video_info;
+use libobs::{obs_get_audio, obs_video_info};
 
 use crate::utils::ObsError;
 use crate::{impl_obs_drop, run_with_obs, runtime::ObsRuntime, unsafe_send::Sendable};
 use lazy_static::lazy_static;
-use libobs::obs_render_main_texture_src_color_only;
 use std::collections::HashMap;
 use std::mem::MaybeUninit;
 use std::{
@@ -93,7 +92,7 @@ unsafe extern "C" fn render_display(data: *mut c_void, width: u32, height: u32) 
     libobs::gs_set_viewport(pos.0, pos.1, width as i32, height as i32);
     //draw_backdrop(&s.buffers, ovi.base_width as f32, ovi.base_height as f32);
 
-    obs_render_main_texture_src_color_only();
+    libobs::obs_render_main_texture_src_color_only();
 
     libobs::gs_projection_pop();
     libobs::gs_viewport_pop();
