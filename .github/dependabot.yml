@@ -5,4 +5,4 @@ updates:
     # Look for `Cargo.toml` and `lock` files in the `root` directory
     directory: "/"
     schedule:
-      interval: "daily"
+      interval: "weekly"
