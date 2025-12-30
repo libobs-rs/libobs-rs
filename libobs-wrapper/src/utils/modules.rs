@@ -30,8 +30,10 @@ impl Debug for ObsModules {
 static SAFE_MODULES: &str = "decklink|image-source|linux-alsa|linux-capture|linux-pipewire|linux-pulseaudio|linux-v4l2|obs-ffmpeg|obs-filters|obs-nvenc|obs-outputs|obs-qsv11|obs-transitions|obs-vst|obs-websocket|obs-x264|rtmp-services|text-freetype2|vlc-video|decklink-captions|decklink-output-ui|obslua|obspython|frontend-tools";
 
 impl ObsModules {
-    pub fn add_paths(paths: &StartupPaths) -> Self {
-        unsafe {
+    /// Safety: ALWAYS CALL THIS IN THE OBS RUNTIME CONTEXT
+    #[allow(unknown_lints)]
+    #[allow(ensure_obs_call_in_runtime)]
+    pub(crate) unsafe fn add_paths(paths: &StartupPaths) -> Self {
             internal_log_global(
                 ObsLogLevel::Info,
                 "[libobs-wrapper]: Adding module paths:".to_string(),
@@ -123,7 +125,6 @@ impl ObsModules {
                     libobs::obs_add_safe_module(c_str.as_ptr());
                 }
             }
-        }
 
         Self {
             paths: paths.clone(),
@@ -132,8 +133,10 @@ impl ObsModules {
         }
     }
 
-    pub fn load_modules(&mut self) {
-        unsafe {
+    /// Safety: ALWAYS CALL THIS IN THE OBS RUNTIME CONTEXT
+    #[allow(unknown_lints)]
+    #[allow(ensure_obs_call_in_runtime)]
+    pub(crate) unsafe fn load_modules(&mut self) {
             let mut failure_info: obs_module_failure_info = std::mem::zeroed();
             internal_log_global(
                 ObsLogLevel::Info,
@@ -151,13 +154,14 @@ impl ObsModules {
             );
             libobs::obs_post_load_modules();
             self.info = Some(Sendable(failure_info));
-        }
 
         self.log_if_failed();
     }
 
     #[cfg_attr(coverage_nightly, coverage(off))]
-    pub fn log_if_failed(&self) {
+    #[allow(unknown_lints)]
+    #[allow(ensure_obs_call_in_runtime)]
+    unsafe fn log_if_failed(&self) {
         if self.info.as_ref().is_none_or(|x| x.0.count == 0) {
             return;
         }
@@ -165,8 +169,8 @@ impl ObsModules {
         let info = &self.info.as_ref().unwrap().0;
         let mut failed_modules = Vec::new();
         for i in 0..info.count {
-            let module = unsafe { info.failed_modules.add(i) };
-            let plugin_name = unsafe { CStr::from_ptr(*module) };
+            let module = info.failed_modules.add(i);
+            let plugin_name = CStr::from_ptr(*module);
             failed_modules.push(plugin_name.to_string_lossy());
         }
 

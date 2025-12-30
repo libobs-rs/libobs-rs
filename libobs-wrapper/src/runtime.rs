@@ -154,7 +154,7 @@ impl ObsRuntime {
     /// Creates the OBS thread and performs core initialization.
     #[cfg(not(feature = "enable_runtime"))]
     fn init(info: StartupInfo) -> Result<(ObsRuntime, ObsModules, StartupInfo), ObsError> {
-        let (startup, mut modules, platform_specific) = Self::initialize_inner(info)?;
+        let (startup, mut modules, platform_specific) = unsafe { Self::initialize_inner(info)? };
 
         let runtime = Self {
             _guard: Arc::new(_ObsRuntimeGuard {}),
@@ -178,7 +178,7 @@ impl ObsRuntime {
         let handle = std::thread::spawn(move || {
             log::trace!("Starting OBS thread");
 
-            let res = Self::initialize_inner(info);
+            let res = unsafe { Self::initialize_inner(info) };
 
             match res {
                 Ok((info, modules, _platform_specific)) => {
@@ -200,7 +200,7 @@ impl ObsRuntime {
                         }
                     }
 
-                    let r = Self::shutdown_inner();
+                    let r = unsafe { Self::shutdown_inner() };
                     if let Err(err) = r {
                         log::error!("Failed to shut down OBS context: {:?}", err);
                     }
@@ -358,7 +358,12 @@ impl ObsRuntime {
     /// # Returns
     ///
     /// A `Result` containing the updated startup info and loaded modules, or an error
-    fn initialize_inner(
+    ///
+    /// # Safety
+    /// This function must be called within the OBS runtime context to ensure thread safety.
+    #[allow(unknown_lints)]
+    #[allow(ensure_obs_call_in_runtime)]
+    unsafe fn initialize_inner(
         mut info: StartupInfo,
     ) -> Result<(StartupInfo, ObsModules, Option<Arc<PlatformSpecificGuard>>), ObsError> {
         // Checks that there are no other threads
@@ -453,7 +458,7 @@ impl ObsRuntime {
             return Err(ObsError::Failure);
         }
 
-        let mut obs_modules = ObsModules::add_paths(&info.startup_paths);
+        let mut obs_modules = unsafe { ObsModules::add_paths(&info.startup_paths) };
 
         // Note that audio is meant to only be reset
         // once. See the link below for information.
@@ -487,7 +492,9 @@ impl ObsRuntime {
             libobs::obs_set_video_levels(sdr_info.sdr_white_level, sdr_info.hdr_nominal_peak_level);
         }
 
-        obs_modules.load_modules();
+        unsafe {
+            obs_modules.load_modules();
+        }
 
         internal_log_global(
             ObsLogLevel::Info,
@@ -504,7 +511,11 @@ impl ObsRuntime {
     /// - Calling `obs_shutdown` to clean up OBS resources
     /// - Removing log and crash handlers
     /// - Checking for memory leaks
-    fn shutdown_inner() -> Result<(), ObsError> {
+    ///
+    /// Safety: Always run this in the OBS runtime context.
+    #[allow(unknown_lints)]
+    #[allow(ensure_obs_call_in_runtime)]
+    unsafe fn shutdown_inner() -> Result<(), ObsError> {
         // Clean up sources
         for i in 0..libobs::MAX_CHANNELS {
             unsafe { libobs::obs_set_output_source(i, ptr::null_mut()) };
@@ -620,7 +631,7 @@ impl Drop for _ObsRuntimeGuard {
     /// Ensures the OBS thread is properly shut down when the runtime is dropped
     fn drop(&mut self) {
         log::trace!("Dropping ObsRuntime and shutting down OBS thread");
-        let r = ObsRuntime::shutdown_inner();
+        let r = unsafe { ObsRuntime::shutdown_inner() };
 
         if thread::panicking() {
             return;

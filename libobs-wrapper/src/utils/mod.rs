@@ -27,6 +27,11 @@ pub const ENCODER_HIDE_FLAGS: u32 =
     libobs::OBS_ENCODER_CAP_DEPRECATED | libobs::OBS_ENCODER_CAP_INTERNAL;
 
 /// Internal function to free calldata structs, same implementation as libobs
+///
+/// Safety: Only call this function with a valid calldata pointer and ensure that
+/// this function runs within the OBS Runtime.
+#[allow(unknown_lints)]
+#[allow(ensure_obs_call_in_runtime)]
 pub(crate) unsafe fn calldata_free(data: *mut libobs::calldata_t) {
     if !(*data).fixed {
         libobs::bfree((*data).stack as *mut _);

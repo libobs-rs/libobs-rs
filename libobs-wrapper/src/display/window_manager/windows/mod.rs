@@ -38,6 +38,10 @@ unsafe fn update_color_space_from_userdata(window: HWND) {
     let user_data = GetWindowLongPtrW(window, GWLP_USERDATA) as *mut obs_display_t;
     if !user_data.is_null() {
         log::trace!("Updating color space for display change/move");
+
+        // Safety: This function locks a mutex under the hood and only changes one bool, so this is fine.
+        #[allow(unknown_lints)]
+        #[allow(ensure_obs_call_in_runtime)]
         libobs::obs_display_update_color_space(user_data);
     }
 }

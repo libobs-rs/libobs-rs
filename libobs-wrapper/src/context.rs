@@ -116,6 +116,9 @@ impl ObsContext {
     /// Returns true if the major version matches, false otherwise.
     pub fn check_version_compatibility() -> bool {
         unsafe {
+            #[allow(unknown_lints)]
+            #[allow(ensure_obs_call_in_runtime)]
+            // Safety: This is fine, we are just getting a version string, which doesn't allocate any memory or have side effects.
             let version = libobs::obs_get_version_string();
             if version.is_null() {
                 return false;
@@ -163,6 +166,11 @@ impl ObsContext {
     /// If initialization fails, an `ObsError` is returned.
     pub fn new(info: StartupInfo) -> Result<ObsContext, ObsError> {
         log::trace!("Getting version number...");
+
+        #[allow(unknown_lints)]
+        #[allow(ensure_obs_call_in_runtime)]
+        // Safety: This is fine, we are just getting a version number, which does not require
+        // to be on the OBS thread.
         let version_numb = unsafe { libobs::obs_get_version() };
         if version_numb == 0 {
             return Err(ObsError::InvalidDll);
@@ -198,6 +206,9 @@ impl ObsContext {
 
     pub fn get_version_global() -> Result<String, ObsError> {
         unsafe {
+            #[allow(unknown_lints)]
+            #[allow(ensure_obs_call_in_runtime)]
+            // Safety: This is fine, it just returns a globally allocated variable
             let version = libobs::obs_get_version_string();
             let version_cstr = CStr::from_ptr(version);
 

@@ -6,6 +6,7 @@
     unnecessary_transmutes,
     non_snake_case,
     no_unqualified_libobs_uses,
+    ensure_obs_call_in_runtime,
     clippy::all
 )]
 

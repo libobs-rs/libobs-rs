@@ -11,11 +11,11 @@
         "stdint.h": "c"
     },
     "rust-analyzer.cargo.targetDir": true,
-    /*"rust-analyzer.check.overrideCommand": [
+    "rust-analyzer.check.overrideCommand": [
         "python",
         "scripts/lint.py"
-    ],*/
-    "rust-analyzer.check.command": "clippy",
+    ],
+    //"rust-analyzer.check.command": "clippy",
     "rust-analyzer.cargo.features": [],
     "nixEnvSelector.nixFile": "${workspaceFolder}/flake.nix",
     "nixEnvSelector.useFlakes": true,

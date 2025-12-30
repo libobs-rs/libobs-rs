@@ -9,7 +9,7 @@ pub use window_manager::{MiscDisplayTrait, ShowHideTrait, WindowPositionTrait};
 
 pub use creation_data::*;
 pub use enums::*;
-use libobs::{obs_get_audio, obs_video_info};
+use libobs::obs_video_info;
 
 use crate::utils::ObsError;
 use crate::{impl_obs_drop, run_with_obs, runtime::ObsRuntime, unsafe_send::Sendable};
@@ -61,12 +61,13 @@ impl Drop for PosRemoveGuard {
     fn drop(&mut self) {
         let mut map = DISPLAY_POSITIONS.write().unwrap();
         map.remove(&self.id);
-        unsafe {
-            obs_get_audio();
-        }
     }
 }
 
+#[allow(unknown_lints)]
+#[allow(ensure_obs_call_in_runtime)]
+/// # Safety
+/// Always call this function in the graphics/rendering thread of OBS, never call this function directly!
 unsafe extern "C" fn render_display(data: *mut c_void, width: u32, height: u32) {
     let id = data as usize;
     let pos = DISPLAY_POSITIONS

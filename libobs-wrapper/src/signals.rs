@@ -117,6 +117,9 @@ macro_rules! __signals_impl_signal {
                 static ref [<$signal_name:snake:upper _SENDERS>]: std::sync::Arc<std::sync::RwLock<std::collections::HashMap<$crate::unsafe_send::SendableComp<$ptr>, tokio::sync::broadcast::Sender<$gen_type>>>> = std::sync::Arc::new(std::sync::RwLock::new(std::collections::HashMap::new()));
             }
 
+            /// Safety: This will always be called within the OBS runtime.
+            #[allow(unknown_lints)]
+            #[allow(ensure_obs_call_in_runtime)]
             unsafe fn [< $signal_name:snake _handler_inner>](cd: *mut libobs::calldata_t) -> Result<$gen_type, $crate::utils::ObsError> {
                 let e = $crate::__signals_impl_primitive_handler!($field_name, $gen_type)(cd);
 
@@ -171,6 +174,9 @@ macro_rules! __signals_impl_signal {
                 $(pub $ptr_field_name: $crate::unsafe_send::Sendable<$ptr_field_type>,)*
             }
 
+            #[allow(unknown_lints)]
+            #[allow(ensure_obs_call_in_runtime)]
+            /// Safety: This will always be called within the OBS runtime.
             unsafe fn [< $signal_name:snake _handler_inner>](cd: *mut libobs::calldata_t) -> Result<$name, $crate::utils::ObsError> {
                 $(
                     let $field_name = $crate::__signals_impl_primitive_handler!($field_name, $field_type)(cd)?;
@@ -197,6 +203,9 @@ macro_rules! impl_signal_manager {
             $($crate::__signals_impl_signal!($ptr, $signal_name, $($inner_def)*);)*
 
             $(
+            #[allow(unknown_lints)]
+            #[allow(ensure_obs_call_in_runtime)]
+            /// Safety: This will always be called within the OBS runtime.
             extern "C" fn [< $signal_name:snake _handler>](obj_ptr: *mut std::ffi::c_void, __internal_calldata: *mut libobs::calldata_t) {
                 #[allow(unused_unsafe)]
                 let res = unsafe { [< $signal_name:snake _handler_inner>](__internal_calldata) };

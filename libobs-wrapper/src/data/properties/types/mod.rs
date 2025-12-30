@@ -32,7 +32,14 @@ pub use text::*;
 use super::{macros::impl_general_property, ObsProperty, ObsPropertyType};
 
 impl ObsPropertyType {
-    fn inner_to_property_struct(&self, pointer: *mut obs_property) -> ObsProperty {
+    /// Safety:
+    /// The caller must ensure that `pointer` is non-null and points to a valid
+    /// `libobs::obs_property` instance for the duration of this call.
+    /// All access to the underlying libobs property must be performed on the OBS thread,
+    /// as required by the module's top-level documentation.
+    #[allow(unknown_lints)]
+    #[allow(ensure_obs_call_in_runtime)]
+    unsafe fn inner_to_property_struct(&self, pointer: *mut obs_property) -> ObsProperty {
         let name = unsafe { libobs::obs_property_name(pointer) };
         let name = unsafe { CStr::from_ptr(name) };
         let name = name.to_string_lossy().to_string();
@@ -79,6 +86,8 @@ impl ObsPropertyType {
     /// `libobs::obs_property` instance for the duration of this call. All access
     /// to the underlying libobs property must be performed on the OBS thread,
     /// as required by the module's top-level documentation.
+    #[allow(unknown_lints)]
+    #[allow(ensure_obs_call_in_runtime)]
     pub unsafe fn to_property_struct(&self, pointer: *mut obs_property) -> ObsProperty {
         self.inner_to_property_struct(pointer)
     }
