@@ -88,10 +88,14 @@ jobs:
       - name: Install OBS build dependencies (Windows)
         if: matrix.os != 'ubuntu-latest'
         run: cargo obs-build build --out-dir target/debug/deps
+        env:
+          GITHUB_TOKEN: ${{ secrets.CLI_GITHUB_CI_TOKEN }}
 
       - name: Install OBS build dependencies (Windows - nextest)
         if: matrix.os != 'ubuntu-latest'
         run: cargo obs-build build --out-dir target/nextest-all-features/debug/deps
+        env:
+          GITHUB_TOKEN: ${{ secrets.CLI_GITHUB_CI_TOKEN }}
 
       - name: Set up virtual display for Linux
         if: matrix.os == 'ubuntu-latest'
