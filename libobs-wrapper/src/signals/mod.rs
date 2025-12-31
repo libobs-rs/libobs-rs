@@ -38,15 +38,16 @@ macro_rules! impl_signal_manager {
                 let _ = senders.send(res);
             })*
 
-            #[derive(Debug)]
             /// This signal manager must be within an `Arc` if you want to clone it.
+            #[derive(Debug)]
             pub struct $name {
                 pointer: $crate::unsafe_send::SendableComp<$ptr>,
-                runtime: $crate::runtime::ObsRuntime
+                runtime: $crate::runtime::ObsRuntime,
+                _drop_guard: std::sync::Arc<dyn $crate::utils::ObsDropGuard + Send + Sync>,
             }
 
             impl $name {
-                pub(crate) fn new(ptr: &$crate::unsafe_send::Sendable<$ptr>, runtime: $crate::runtime::ObsRuntime) -> Result<Self, $crate::utils::ObsError> {
+                pub(crate) fn new(ptr: &$crate::unsafe_send::Sendable<$ptr>, runtime: $crate::runtime::ObsRuntime, drop_guard: std::sync::Arc<dyn $crate::utils::ObsDropGuard + Send + Sync>) -> Result<Self, $crate::utils::ObsError> {
                     use $crate::{utils::ObsString, unsafe_send::SendableComp};
                     let pointer =  SendableComp(ptr.0);
 
@@ -79,7 +80,8 @@ macro_rules! impl_signal_manager {
 
                     Ok(Self {
                         pointer,
-                        runtime
+                        runtime,
+                        _drop_guard: drop_guard
                     })
                 }
 

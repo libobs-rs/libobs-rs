@@ -17,6 +17,8 @@ mod modules;
 
 mod calldata;
 
+use std::fmt::Debug;
+
 pub use calldata::*;
 pub use error::*;
 pub use info::*;
@@ -30,7 +32,8 @@ pub const ENCODER_HIDE_FLAGS: u32 =
 
 /// Internal function to free calldata structs, same implementation as libobs
 ///
-/// Safety: Only call this function with a valid calldata pointer and ensure that
+/// # Safety
+/// Only call this function with a valid calldata pointer and ensure that
 /// this function runs within the OBS Runtime.
 #[allow(unknown_lints)]
 #[allow(ensure_obs_call_in_runtime)]
@@ -38,4 +41,9 @@ pub(crate) unsafe fn calldata_free(data: *mut libobs::calldata_t) {
     if !(*data).fixed {
         libobs::bfree((*data).stack as *mut _);
     }
+}
+
+/// This should be implemented for any struct that releases OBS resources when dropped
+pub trait ObsDropGuard: Debug {
+
 }

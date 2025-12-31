@@ -42,7 +42,8 @@ impl ObsOutputTraitSealed for ObsReplayBufferOutputRef {
         output.id = ObsString::new("replay_buffer");
         let output = ObsOutputRef::new(output, runtime.clone())?;
 
-        let replay_signal_manager = ObsReplayOutputSignals::new(&output.as_ptr(), runtime)?;
+        let replay_signal_manager =
+            ObsReplayOutputSignals::new(&output.as_ptr(), runtime, output._drop_guard.clone())?;
         Ok(Self {
             replay_signal_manager: Arc::new(replay_signal_manager),
             output,
@@ -53,7 +54,10 @@ impl ObsOutputTraitSealed for ObsReplayBufferOutputRef {
 forward_obs_object_impl!(ObsReplayBufferOutputRef, output);
 forward_obs_output_impl!(ObsReplayBufferOutputRef, output);
 
-impl_signal_manager!(|ptr| unsafe { libobs::obs_output_get_signal_handler(ptr) }, ObsReplayOutputSignals for ObsReplayOutputRef<*mut libobs::obs_output>, [
+impl_signal_manager!(|ptr| {
+    // Safety: Again, it carries a reference of the drop guard so we must have a valid pointer
+    unsafe { libobs::obs_output_get_signal_handler(ptr) }
+}, ObsReplayOutputSignals for ObsReplayOutputRef<*mut libobs::obs_output>, [
     "saved": {}
 ]);
 
@@ -83,6 +87,7 @@ impl ObsReplayBufferOutputRef {
 
         log::trace!("Getting procedure handler for replay buffer output...");
         let proc_handler = run_with_obs!(self.runtime().clone(), (output_ptr), move || {
+            // Safety: At this point, output_ptr MUST be a valid pointer as we haven't released the output yet.
             let ph = unsafe { libobs::obs_output_get_proc_handler(output_ptr) };
             if ph.is_null() {
                 return Err(ObsError::OutputSaveBufferFailure(
@@ -93,7 +98,8 @@ impl ObsReplayBufferOutputRef {
         })??;
 
         log::trace!("Calling 'save' procedure on replay buffer output...");
-        self.runtime().call_proc_handler(&proc_handler, "save")?;
+        // Safety: we know that the proc handler is valid because we got it from OBS earlier
+        unsafe { self.runtime().call_proc_handler(&proc_handler, "save")? };
 
         log::trace!("Waiting for 'saved' signal from replay buffer output...");
         self.replay_signals()
@@ -106,9 +112,11 @@ impl ObsReplayBufferOutputRef {
             })?;
 
         log::trace!("Retrieving last replay path from replay buffer output...");
-        let mut calldata = self
-            .runtime()
-            .call_proc_handler(&proc_handler, "get_last_replay")?;
+        // Safety: We know that the proc handler is valid because we got it from OBS earlier
+        let mut calldata = unsafe {
+            self.runtime()
+                .call_proc_handler(&proc_handler, "get_last_replay")?
+        };
 
         log::trace!("Extracting path from calldata...");
         let path = calldata.get_string("path")?;

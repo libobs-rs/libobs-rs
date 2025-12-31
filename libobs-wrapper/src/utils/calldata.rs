@@ -82,7 +82,9 @@ impl_obs_drop!(_CalldataWrapperDropGuard, (calldata_ptr), move || unsafe {
 
 /// Extension trait on `ObsRuntime` to call a proc handler and return a RAII calldata wrapper.
 pub trait ObsCalldataExt {
-    fn call_proc_handler<T: Into<ObsString>>(
+    /// # Safety
+    /// Make sure that the proc_handler pointer is valid.
+    unsafe fn call_proc_handler<T: Into<ObsString>>(
         &self,
         proc_handler: &Sendable<*mut proc_handler_t>,
         name: T,
@@ -90,24 +92,31 @@ pub trait ObsCalldataExt {
 }
 
 impl ObsCalldataExt for ObsRuntime {
-    fn call_proc_handler<T: Into<ObsString>>(
+    unsafe fn call_proc_handler<T: Into<ObsString>>(
         &self,
         proc_handler: &Sendable<*mut proc_handler_t>,
         name: T,
     ) -> Result<CalldataWrapper, ObsError> {
         if proc_handler.0.is_null() {
-            return Err(ObsError::NullPointer);
+            return Err(ObsError::NullPointer(None));
         }
 
         let proc_handler = proc_handler.clone();
         let name: ObsString = name.into();
         let name = Sendable(name);
-        let mut calldata = run_with_obs!(self.clone(), (proc_handler, name), move || unsafe {
-            let data: calldata_t = std::mem::zeroed();
+        let mut calldata = run_with_obs!(self.clone(), (proc_handler, name), move || {
+            // Safety: calldata will be properly freed by the drop guard and we are using a struct for the `zeroed` call.
+            let data: calldata_t = unsafe { std::mem::zeroed()};
             let mut data = Box::pin(data);
-            let raw_ptr = Pin::as_mut(&mut data).get_unchecked_mut();
+            // Safety: Data will not get moved out of the pinned box, only the proc handler call will use the pointer and not move it.
+            let raw_ptr = unsafe {
+                Pin::as_mut(&mut data).get_unchecked_mut()
+            };
 
-            let ok = libobs::proc_handler_call(proc_handler, name.as_ptr().0, raw_ptr);
+            // Safety: we can't exactly make sure that the proc_handler pointer is valid, but the name pointer and the raw_ptr of the calldata is valid.
+            let ok = unsafe {
+                libobs::proc_handler_call(proc_handler, name.as_ptr().0, raw_ptr)
+            };
             if !ok {
                 return Err(ObsError::Unexpected(
                     "Couldn't call proc handler".to_string(),
@@ -135,7 +144,7 @@ impl ObsCalldataExt for ObsRuntime {
 }
 
 impl ObsCalldataExt for ObsContext {
-    fn call_proc_handler<T: Into<ObsString>>(
+    unsafe fn call_proc_handler<T: Into<ObsString>>(
         &self,
         proc_handler: &Sendable<*mut proc_handler_t>,
         name: T,

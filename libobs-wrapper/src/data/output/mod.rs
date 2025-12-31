@@ -8,7 +8,7 @@ use crate::data::ImmutableObsData;
 use crate::data::ObsDataPointers;
 use crate::runtime::ObsRuntime;
 use crate::unsafe_send::Sendable;
-use crate::utils::OutputInfo;
+use crate::utils::{ObsDropGuard, OutputInfo};
 use crate::{impl_obs_drop, impl_signal_manager, run_with_obs};
 
 use crate::{
@@ -30,6 +30,8 @@ struct _ObsOutputDropGuard {
     output: Sendable<*mut obs_output>,
     runtime: ObsRuntime,
 }
+
+impl ObsDropGuard for _ObsOutputDropGuard {}
 
 impl_obs_drop!(_ObsOutputDropGuard, (output), move || unsafe {
     libobs::obs_output_release(output);
@@ -129,7 +131,12 @@ impl ObsOutputTraitSealed for ObsOutputRef {
             None => ImmutableObsData::new(&runtime)?,
         };
 
-        let signal_manager = ObsOutputSignals::new(&output, runtime.clone())?;
+        let drop_guard = Arc::new(_ObsOutputDropGuard {
+            output: output.clone(),
+            runtime: runtime.clone(),
+        });
+
+        let signal_manager = ObsOutputSignals::new(&output, runtime.clone(), drop_guard.clone())?;
         Ok(Self {
             settings: Arc::new(RwLock::new(settings)),
             hotkey_data: Arc::new(RwLock::new(hotkey_data)),
@@ -141,10 +148,7 @@ impl ObsOutputTraitSealed for ObsOutputRef {
             id,
             name,
 
-            _drop_guard: Arc::new(_ObsOutputDropGuard {
-                output,
-                runtime: runtime.clone(),
-            }),
+            _drop_guard: drop_guard,
 
             runtime,
             signal_manager: Arc::new(signal_manager),

@@ -10,6 +10,7 @@ pub struct Vec2 {
 
 impl From<libobs::vec2> for Vec2 {
     fn from(raw: libobs::vec2) -> Self {
+        // SAFETY: libobs::vec2 is a C representation with a known layout, the __bindgen_anon_1 must be set
         let inner = unsafe { raw.__bindgen_anon_1.__bindgen_anon_1 };
         Self {
             x: inner.x,

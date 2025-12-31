@@ -14,6 +14,7 @@ use crate::enums::ObsBoundsType;
 use crate::macros::impl_eq_of_ptr;
 use crate::sources::{ObsSourceTrait, ObsSourceTraitSealed};
 use crate::unsafe_send::SendableComp;
+use crate::utils::ObsDropGuard;
 use crate::{
     graphics::Vec2,
     impl_obs_drop, impl_signal_manager, run_with_obs,
@@ -28,6 +29,8 @@ struct _SceneDropGuard {
     scene: Sendable<*mut obs_scene_t>,
     runtime: ObsRuntime,
 }
+
+impl ObsDropGuard for _SceneDropGuard {}
 
 impl_obs_drop!(_SceneDropGuard, (scene), move || unsafe {
     let scene_source = libobs::obs_scene_get_source(scene);
@@ -81,16 +84,22 @@ impl ObsSceneRef {
             Sendable(libobs::obs_scene_create(name_ptr))
         })?;
 
-        let signals = Arc::new(ObsSceneSignals::new(&scene, runtime.clone())?);
+        let drop_guard = Arc::new(_SceneDropGuard {
+            scene: scene.clone(),
+            runtime: runtime.clone(),
+        });
+
+        let signals = Arc::new(ObsSceneSignals::new(
+            &scene,
+            runtime.clone(),
+            drop_guard.clone(),
+        )?);
         Ok(Self {
             name,
             scene: Arc::new(scene.clone()),
             sources: Arc::new(RwLock::new(HashSet::new())),
             active_scenes,
-            _guard: Arc::new(_SceneDropGuard {
-                scene,
-                runtime: runtime.clone(),
-            }),
+            _guard: drop_guard,
             runtime,
             signals,
         })

@@ -18,7 +18,7 @@ use crate::{
     run_with_obs,
     runtime::ObsRuntime,
     unsafe_send::{Sendable, SendableComp},
-    utils::{ObsError, ObsString},
+    utils::{ObsDropGuard, ObsError, ObsString},
 };
 
 use std::{
@@ -78,13 +78,12 @@ impl ObsSourceRef {
         let source_ptr = run_with_obs!(
             runtime,
             (hotkey_data_ptr, settings_ptr, id_ptr, name_ptr),
-            move || unsafe {
-                Sendable(libobs::obs_source_create(
-                    id_ptr,
-                    name_ptr,
-                    settings_ptr,
-                    hotkey_data_ptr,
-                ))
+            move || {
+                // Safety: Id, Name must be valid pointers because they are not dropped. Also the settings_ptr and hotkey_data_ptr may be null, its fine.
+                let source_ptr = unsafe {
+                    libobs::obs_source_create(id_ptr, name_ptr, settings_ptr, hotkey_data_ptr)
+                };
+                Sendable(source_ptr)
             }
         )?;
 
@@ -94,24 +93,29 @@ impl ObsSourceRef {
 
         // Getting default settings if none were provided
         let settings = {
-            let default_settings_ptr = run_with_obs!(runtime, (source_ptr), move || unsafe {
-                Sendable(libobs::obs_source_get_settings(source_ptr))
+            let default_settings_ptr = run_with_obs!(runtime, (source_ptr), move || {
+                // Safety: The source_ptr must be valid because we just created it and made sure it is not a null pointer.
+                unsafe {
+                    Sendable(libobs::obs_source_get_settings(source_ptr))
+                }
             })?;
 
             ImmutableObsData::from_raw(default_settings_ptr, runtime.clone())
         };
 
-        let signals = ObsSourceSignals::new(&source_ptr, runtime.clone())?;
+        let drop_guard = Arc::new(_ObsSourceGuard {
+            source: source_ptr.clone(),
+            runtime: runtime.clone(),
+        });
+
+        let signals = ObsSourceSignals::new(&source_ptr, runtime.clone(), drop_guard.clone())?;
         Ok(Self {
             source: source_ptr.clone(),
             id,
             name,
             settings: Arc::new(RwLock::new(settings)),
             hotkey_data: Arc::new(RwLock::new(hotkey_data)),
-            _guard: Arc::new(_ObsSourceGuard {
-                source: source_ptr,
-                runtime: runtime.clone(),
-            }),
+            _guard: drop_guard,
             scene_items: Arc::new(RwLock::new(HashMap::new())),
             runtime,
             signal_manager: Arc::new(signals),
@@ -309,6 +313,8 @@ struct _ObsSourceGuard {
     source: Sendable<*mut obs_source_t>,
     runtime: ObsRuntime,
 }
+
+impl ObsDropGuard for _ObsSourceGuard {}
 
 impl_obs_drop!(_ObsSourceGuard, (source), move || unsafe {
     libobs::obs_source_release(source);

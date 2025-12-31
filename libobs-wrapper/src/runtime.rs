@@ -186,7 +186,7 @@ impl ObsRuntime {
             .spawn(move || {
                 log::trace!("Starting OBS thread");
 
-                let res = Self::initialize_inner(info);
+                let res = unsafe { Self::initialize_inner(info) };
 
                 match res {
                     Ok((info, modules, _platform_specific)) => {

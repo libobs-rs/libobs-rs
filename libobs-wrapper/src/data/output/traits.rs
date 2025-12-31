@@ -73,7 +73,7 @@ pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsObjectTrait {
     /// Fails if the output is active or encoder is null.
     fn set_video_encoder(&mut self, encoder: Arc<ObsVideoEncoder>) -> Result<(), ObsError> {
         if encoder.as_ptr().0.is_null() {
-            return Err(ObsError::NullPointer);
+            return Err(ObsError::NullPointer(None));
         }
 
         if self.is_active()? {
@@ -120,7 +120,7 @@ pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsObjectTrait {
         mixer_idx: usize,
     ) -> Result<(), ObsError> {
         if encoder.as_ptr().0.is_null() {
-            return Err(ObsError::NullPointer);
+            return Err(ObsError::NullPointer(None));
         }
 
         if self.is_active()? {
