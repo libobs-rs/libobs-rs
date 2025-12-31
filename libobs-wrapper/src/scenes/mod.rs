@@ -164,7 +164,7 @@ impl ObsSceneRef {
         })?;
 
         if ptr.0.is_null() {
-            return Err(ObsError::NullPointer);
+            return Err(ObsError::NullPointer(None));
         }
 
         //TODO We should clear one reference because with this obs doesn't clean up properly

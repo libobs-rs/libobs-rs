@@ -1,6 +1,9 @@
 use getters0::Getters;
 
-use crate::data::properties::{get_enum, macros::assert_type, ObsTextInfoType, ObsTextType};
+use crate::{
+    data::properties::{get_enum, macros::is_of_type_result, ObsTextInfoType, ObsTextType},
+    run_with_obs,
+};
 
 use super::PropertyCreationInfo;
 
@@ -15,29 +18,34 @@ pub struct ObsTextProperty {
     word_wrap: bool,
 }
 
-impl From<PropertyCreationInfo> for ObsTextProperty {
-    fn from(
+impl TryFrom<PropertyCreationInfo> for ObsTextProperty {
+    type Error = crate::utils::ObsError;
+
+    fn try_from(
         PropertyCreationInfo {
             name,
             description,
             pointer,
+            runtime,
         }: PropertyCreationInfo,
-    ) -> Self {
-        assert_type!(Text, pointer);
+    ) -> Result<Self, Self::Error> {
+        run_with_obs!(runtime, (pointer), move || {
+            is_of_type_result!(Text, pointer)?;
 
-        let info_type = get_enum!(pointer, text_info_type, ObsTextInfoType);
-        let text_type = get_enum!(pointer, text_type, ObsTextType);
+            let info_type = get_enum!(pointer, text_info_type, ObsTextInfoType)?;
+            let text_type = get_enum!(pointer, text_type, ObsTextType)?;
 
-        let monospace = unsafe { libobs::obs_property_text_monospace(pointer) };
-        let word_wrap = unsafe { libobs::obs_property_text_info_word_wrap(pointer) };
+            let monospace = unsafe { libobs::obs_property_text_monospace(pointer) };
+            let word_wrap = unsafe { libobs::obs_property_text_info_word_wrap(pointer) };
 
-        ObsTextProperty {
-            name,
-            description,
-            monospace,
-            text_type,
-            info_type,
-            word_wrap,
-        }
+            Ok(ObsTextProperty {
+                name,
+                description,
+                monospace,
+                text_type,
+                info_type,
+                word_wrap,
+            })
+        })?
     }
 }

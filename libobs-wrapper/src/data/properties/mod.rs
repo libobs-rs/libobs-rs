@@ -72,11 +72,17 @@ pub(crate) fn get_properties_inner(
         return Ok(HashMap::new());
     }
 
-    run_with_obs!(runtime, (properties_raw), move || {
+    let runtime_clone = Sendable(runtime.clone());
+    run_with_obs!(runtime, (properties_raw, runtime_clone), move || {
         let mut result = HashMap::new();
         let mut property = unsafe { libobs::obs_properties_first(properties_raw) };
         while !property.is_null() {
             let name = unsafe { libobs::obs_property_name(property) };
+            if name.is_null() {
+                unsafe { libobs::obs_property_next(&mut property) };
+                continue;
+            }
+
             let name = unsafe { CStr::from_ptr(name as _) };
             let name = name.to_string_lossy().to_string();
 
@@ -87,7 +93,10 @@ pub(crate) fn get_properties_inner(
             log::trace!("Property: {:?}", name);
             match p_type {
                 Some(p_type) => {
-                    result.insert(name, unsafe { p_type.to_property_struct(property) });
+                    let prop_struct = unsafe { p_type.to_property_struct(&runtime_clone, Sendable(property)) };
+                    if let Ok(r) = prop_struct {
+                        result.insert(name, r);
+                    }
                 }
                 None => {
                     result.insert(name, ObsProperty::Invalid);

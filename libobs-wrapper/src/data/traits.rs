@@ -48,7 +48,7 @@ pub trait ObsDataGetters {
 
         let result = result.unwrap();
         if result.0.is_null() {
-            return Err(ObsError::NullPointer);
+            return Err(ObsError::NullPointer(None));
         }
 
         let result = unsafe { CStr::from_ptr(result.0) };
@@ -123,7 +123,7 @@ pub trait ObsDataGetters {
         })?;
 
         if ptr.0.is_null() {
-            return Err(ObsError::NullPointer);
+            return Err(ObsError::NullPointer(None));
         }
 
         let ptr = unsafe { CStr::from_ptr(ptr.0) };

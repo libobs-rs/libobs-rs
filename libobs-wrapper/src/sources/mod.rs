@@ -80,7 +80,7 @@ impl ObsSourceRef {
         )?;
 
         if source.0.is_null() {
-            return Err(ObsError::NullPointer);
+            return Err(ObsError::NullPointer(None));
         }
 
         let signals = ObsSourceSignals::new(&source, runtime.clone())?;

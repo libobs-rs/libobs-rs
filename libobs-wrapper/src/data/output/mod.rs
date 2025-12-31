@@ -119,7 +119,7 @@ impl ObsOutputRef {
         })?;
 
         if output.0.is_null() {
-            return Err(ObsError::NullPointer);
+            return Err(ObsError::NullPointer(None));
         }
 
         let signal_manager = ObsOutputSignals::new(&output, runtime.clone())?;
@@ -189,7 +189,7 @@ impl ObsOutputRef {
     /// A Result indicating success or an error
     pub fn set_video_encoder(&mut self, encoder: Arc<ObsVideoEncoder>) -> Result<(), ObsError> {
         if encoder.encoder.0.is_null() {
-            return Err(ObsError::NullPointer);
+            return Err(ObsError::NullPointer(None));
         }
 
         if self.is_active()? {
@@ -280,7 +280,7 @@ impl ObsOutputRef {
         mixer_idx: usize,
     ) -> Result<(), ObsError> {
         if encoder.encoder.0.is_null() {
-            return Err(ObsError::NullPointer);
+            return Err(ObsError::NullPointer(None));
         }
 
         if self.is_active()? {

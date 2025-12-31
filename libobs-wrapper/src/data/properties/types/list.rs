@@ -1,5 +1,8 @@
 use super::PropertyCreationInfo;
-use crate::data::properties::{assert_type, get_enum, ObsComboFormat, ObsComboType};
+use crate::{
+    data::properties::{get_enum, is_of_type_result, ObsComboFormat, ObsComboType},
+    run_with_obs,
+};
 use getters0::Getters;
 use std::ffi::CStr;
 
@@ -40,63 +43,80 @@ impl ObsListItem {
     }
 }
 
-impl From<PropertyCreationInfo> for ObsListProperty {
-    fn from(
+impl TryFrom<PropertyCreationInfo> for ObsListProperty {
+    type Error = crate::utils::ObsError;
+
+    fn try_from(
         PropertyCreationInfo {
             name,
             description,
             pointer,
+            runtime,
         }: PropertyCreationInfo,
-    ) -> Self {
-        assert_type!(List, pointer);
+    ) -> Result<Self, Self::Error> {
+        run_with_obs!(runtime, (pointer), move || {
+            is_of_type_result!(List, pointer)?;
 
-        let list_type = get_enum!(pointer, list_type, ObsComboType);
-        let format = get_enum!(pointer, list_format, ObsComboFormat);
+            let list_type = get_enum!(pointer, list_type, ObsComboType)?;
+            let format = get_enum!(pointer, list_format, ObsComboFormat)?;
 
-        let count = unsafe { libobs::obs_property_list_item_count(pointer) };
-        let mut items = Vec::with_capacity(count);
+            let count = unsafe { libobs::obs_property_list_item_count(pointer) };
+            let mut items = Vec::with_capacity(count);
 
-        for i in 0..count {
-            let list_name = unsafe {
-                CStr::from_ptr(libobs::obs_property_list_item_name(pointer, i))
-                    .to_str()
-                    .unwrap_or_default()
-                    .to_string()
-            };
-            let is_disabled = unsafe { libobs::obs_property_list_item_disabled(pointer, i) };
-            let value = match format {
-                ObsComboFormat::Invalid => ObsListItemValue::Invalid,
-                ObsComboFormat::Int => {
-                    let int_val = unsafe { libobs::obs_property_list_item_int(pointer, i) };
-                    ObsListItemValue::Int(int_val)
+            for i in 0..count {
+                let list_item_name = unsafe { libobs::obs_property_list_item_name(pointer, i) };
+                if list_item_name.is_null() {
+                    continue;
                 }
-                ObsComboFormat::Float => {
-                    let float_val = unsafe { libobs::obs_property_list_item_float(pointer, i) };
-                    ObsListItemValue::Float(float_val)
-                }
-                ObsComboFormat::String => {
-                    let string_val = unsafe {
-                        CStr::from_ptr(libobs::obs_property_list_item_string(pointer, i))
-                            .to_str()
-                            .unwrap_or_default()
-                            .to_string()
-                    };
-                    ObsListItemValue::String(string_val)
-                }
-                ObsComboFormat::Bool => {
-                    let bool_val = unsafe { libobs::obs_property_list_item_bool(pointer, i) };
-                    ObsListItemValue::Bool(bool_val)
-                }
-            };
-            items.push(ObsListItem::new(list_name, value, is_disabled));
-        }
 
-        Self {
-            name,
-            description,
-            list_type,
-            format,
-            items,
-        }
+                let list_name = unsafe {
+                    CStr::from_ptr(list_item_name)
+                        .to_str()
+                        .unwrap_or_default()
+                        .to_string()
+                };
+
+                let is_disabled = unsafe { libobs::obs_property_list_item_disabled(pointer, i) };
+                let value = match format {
+                    ObsComboFormat::Invalid => ObsListItemValue::Invalid,
+                    ObsComboFormat::Int => {
+                        let int_val = unsafe { libobs::obs_property_list_item_int(pointer, i) };
+                        ObsListItemValue::Int(int_val)
+                    }
+                    ObsComboFormat::Float => {
+                        let float_val = unsafe { libobs::obs_property_list_item_float(pointer, i) };
+                        ObsListItemValue::Float(float_val)
+                    }
+                    ObsComboFormat::String => {
+                        let item_string =
+                            unsafe { libobs::obs_property_list_item_string(pointer, i) };
+
+                        if item_string.is_null() {
+                            ObsListItemValue::String(String::new())
+                        } else {
+                            let string_val = unsafe {
+                                CStr::from_ptr(item_string)
+                                    .to_string_lossy()
+                                    .to_string()
+                            };
+                            ObsListItemValue::String(string_val)
+                        }
+                    }
+                    ObsComboFormat::Bool => {
+                        let bool_val = unsafe { libobs::obs_property_list_item_bool(pointer, i) };
+                        ObsListItemValue::Bool(bool_val)
+                    }
+                };
+                items.push(ObsListItem::new(list_name, value, is_disabled));
+            }
+
+            Ok(Self {
+                name,
+                description,
+                list_type,
+                format,
+                items,
+            })
+        })?
     }
 }

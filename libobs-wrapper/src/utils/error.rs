@@ -24,7 +24,7 @@ pub enum ObsError {
     /// The function returned a null pointer, often indicating
     /// an error with creating the object of the requested
     /// pointer.
-    NullPointer,
+    NullPointer(Option<String>),
     OutputAlreadyActive,
     OutputStartFailure(Option<String>),
     OutputStopFailure(Option<String>),
@@ -83,7 +83,7 @@ impl Display for ObsError {
             ObsError::ResetVideoFailure(status) => write!(f, "Could not reset obs video. Status: {:?}", status),
             ObsError::ResetVideoFailureGraphicsModule => write!(f, "Unable to reset video because the program attempted to change the graphics module. This is a bug!"),
             ObsError::ResetVideoFailureOutputActive => write!(f, "Unable to reset video because some outputs were still active."),
-            ObsError::NullPointer => write!(f, "The function returned a null pointer, often indicating an error with creating the object of the requested pointer."),
+            ObsError::NullPointer(e) => write!(f, "The function returned a null pointer, often indicating an error with creating the object of the requested pointer. Details: {:?}", e),
             ObsError::OutputAlreadyActive => write!(f, "Output is already active."),
             ObsError::OutputStartFailure(s) => write!(f, "Output failed to start. Error is {:?}", s),
             ObsError::OutputStopFailure(s) => write!(f, "Output failed to stop. Error is {:?}", s),

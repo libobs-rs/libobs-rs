@@ -20,45 +20,53 @@ where
 macro_rules! impl_from_property {
     ($n_type: ident, $obs_number_name: ident) => {
         paste::paste! {
-            impl From<super::PropertyCreationInfo> for ObsNumberProperty<[<$n_type>]> {
-                fn from(
-                    super::PropertyCreationInfo {
+            impl TryFrom<super::PropertyCreationInfo> for ObsNumberProperty<[<$n_type>]> {
+                type Error = crate::utils::ObsError;
+
+                fn try_from(
+                    crate::data::properties::PropertyCreationInfo {
                         name,
                         description,
                         pointer,
-                    }: super::PropertyCreationInfo,
-                ) -> Self {
-                    use crate::data::properties::ObsNumberType;
+                        runtime,
+                    }: crate::data::properties::PropertyCreationInfo,
+                ) -> Result<Self, Self::Error> {
+                    $crate::run_with_obs!(runtime, (pointer), move || {
+                        use crate::data::properties::ObsNumberType;
 
-                    let min = unsafe { libobs::[<obs_property_ $obs_number_name _min>](pointer) };
-                    let max = unsafe { libobs::[<obs_property_ $obs_number_name _max>](pointer) };
-                    let step = unsafe { libobs::[<obs_property_ $obs_number_name _step>](pointer)};
+                        let min = unsafe { libobs::[<obs_property_ $obs_number_name _min>](pointer) };
+                        let max = unsafe { libobs::[<obs_property_ $obs_number_name _max>](pointer) };
+                        let step = unsafe { libobs::[<obs_property_ $obs_number_name _step>](pointer)};
 
-                    let suffix = unsafe { libobs::[<obs_property_ $obs_number_name _suffix>](pointer) };
-                    let suffix = if suffix.is_null() {
-                        String::new()
-                    } else {
-                        let suffix = unsafe { std::ffi::CStr::from_ptr(suffix) };
-                        let suffix = suffix.to_str().unwrap_or_default();
-                        suffix.to_string()
-                    };
+                        let suffix = unsafe { libobs::[<obs_property_ $obs_number_name _suffix>](pointer) };
+                        let suffix = if suffix.is_null() {
+                            String::new()
+                        } else {
+                            let suffix = unsafe { std::ffi::CStr::from_ptr(suffix) };
+                            let suffix = suffix.to_str().unwrap_or_default();
+                            suffix.to_string()
+                        };
 
-                    let number_type = unsafe { libobs::[<obs_property_ $obs_number_name _type >](pointer) };
-                    let number_type = crate::macros::enum_from_number!(ObsNumberType, number_type);
+                        let number_type = unsafe { libobs::[<obs_property_ $obs_number_name _type >](pointer) };
+                        let number_type = crate::macros::enum_from_number!(ObsNumberType, number_type);
 
-                    if number_type.is_none() {
-                        panic!("Invalid number type got none");
-                    }
+                        if number_type.is_none() {
+                            return Err(crate::utils::ObsError::EnumConversionError(format!(
+                                "ObsNumberType for property {}",
+                                name
+                            )));
+                        }
 
-                    return ObsNumberProperty {
-                        name,
-                        description,
-                        min,
-                        max,
-                        step,
-                        suffix,
-                        number_type: number_type.unwrap(),
-                    };
+                        Ok(ObsNumberProperty {
+                            name,
+                            description,
+                            min,
+                            max,
+                            step,
+                            suffix,
+                            number_type: number_type.unwrap(),
+                        })
+                    })?
                 }
             }
         }

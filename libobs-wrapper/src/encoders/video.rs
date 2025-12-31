@@ -53,7 +53,7 @@ impl ObsVideoEncoder {
         )?;
 
         if encoder.0.is_null() {
-            return Err(ObsError::NullPointer);
+            return Err(ObsError::NullPointer(None));
         }
 
         Ok(Arc::new(Self {

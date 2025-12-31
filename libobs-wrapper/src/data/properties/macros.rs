@@ -1,16 +1,19 @@
-macro_rules! assert_type {
+macro_rules! is_of_type_result {
     ($prop_type: ident, $name: ident) => {{
-        use crate::data::properties::ObsPropertyType;
+        {
+            use crate::data::properties::ObsPropertyType;
 
-        let p_type = unsafe { libobs::obs_property_get_type($name) };
-        let p_type = crate::macros::enum_from_number!(ObsPropertyType, p_type);
+            let p_type = unsafe { libobs::obs_property_get_type($name) };
+            let p_type = crate::macros::enum_from_number!(ObsPropertyType, p_type);
 
-        if p_type.is_none_or(|e| !matches!(e, ObsPropertyType::$prop_type)) {
-            panic!(
-                "Invalid property type: expected {:?}, got {:?}",
-                ObsPropertyType::$prop_type,
-                p_type
-            );
+            if p_type.is_none_or(|e| !matches!(e, ObsPropertyType::$prop_type)) {
+                Err(crate::utils::ObsError::InvocationError(format!(
+                    "Property is not of type {}",
+                    stringify!($prop_type)
+                )))
+            } else {
+                Ok(())
+            }
         }
     }};
 }
@@ -24,16 +27,23 @@ macro_rules! impl_general_property {
                 name: String,
                 description: Option<String>
             }
-            impl From<crate::data::properties::PropertyCreationInfo> for [<Obs $type Property>] {
-                fn from(
+            impl TryFrom<crate::data::properties::PropertyCreationInfo> for [<Obs $type Property>] {
+                type Error = crate::utils::ObsError;
+
+                fn try_from(
                     crate::data::properties::PropertyCreationInfo {
                         name,
                         description,
                         pointer,
+                        runtime
                     }: crate::data::properties::PropertyCreationInfo,
-                ) -> Self {
-                    crate::data::properties::assert_type!($type, pointer);
-                    Self { name, description }
+                ) -> Result<Self, Self::Error> {
+                    crate::run_with_obs!(runtime, (pointer), move || {
+                        crate::data::properties::is_of_type_result!($type, pointer)?;
+                        Ok(())
+                    })??;
+
+                    Ok(Self { name, description })
                 }
             }
         }
@@ -46,12 +56,14 @@ macro_rules! get_enum {
             {
                 let v = unsafe { libobs::[<obs_property_ $name>]($pointer_name) };
 
-                let v = crate::macros::enum_from_number!($enum_name, v);
-                if v.is_none() {
-                    panic!("Invalid {} type got none", stringify!($name));
-                }
-
-                v.unwrap()
+                crate::macros::enum_from_number!($enum_name, v)
+                    .ok_or_else(|| {
+                        crate::utils::ObsError::EnumConversionError(format!(
+                            "Failed to convert {} to enum {}",
+                            stringify!($name),
+                            stringify!($enum_name)
+                        ))
+                    })
             }
         }
     };
@@ -66,7 +78,7 @@ macro_rules! get_opt_str {
             None
         } else {
             let v = unsafe { std::ffi::CStr::from_ptr(v as _) };
-            let v = v.to_str().expect("OBS returned invalid string").to_string();
+            let v = v.to_string_lossy().to_string();
             if v.is_empty() {
                 None
             } else {
@@ -76,7 +88,7 @@ macro_rules! get_opt_str {
     }};
 }
 
-pub(super) use assert_type;
 pub(super) use get_enum;
 pub(super) use get_opt_str;
 pub(super) use impl_general_property;
+pub(super) use is_of_type_result;

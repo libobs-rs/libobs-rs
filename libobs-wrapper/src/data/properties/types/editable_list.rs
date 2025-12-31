@@ -1,6 +1,9 @@
 use getters0::Getters;
 
-use crate::data::properties::{assert_type, get_enum, get_opt_str, ObsEditableListType};
+use crate::{
+    data::properties::{get_enum, get_opt_str, is_of_type_result, ObsEditableListType},
+    run_with_obs,
+};
 
 use super::PropertyCreationInfo;
 
@@ -14,26 +17,31 @@ pub struct ObsEditableListProperty {
     default_path: String,
 }
 
-impl From<PropertyCreationInfo> for ObsEditableListProperty {
-    fn from(
+impl TryFrom<PropertyCreationInfo> for ObsEditableListProperty {
+    type Error = crate::utils::ObsError;
+
+    fn try_from(
         PropertyCreationInfo {
             name,
             description,
             pointer,
+            runtime,
         }: PropertyCreationInfo,
-    ) -> Self {
-        assert_type!(EditableList, pointer);
+    ) -> Result<Self, Self::Error> {
+        run_with_obs!(runtime, (pointer), move || {
+            is_of_type_result!(EditableList, pointer)?;
 
-        let list_type = get_enum!(pointer, list_type, ObsEditableListType);
-        let filter = get_opt_str!(pointer, path_filter).unwrap_or_default();
-        let default_path = get_opt_str!(pointer, path_default_path).unwrap_or_default();
+            let list_type = get_enum!(pointer, list_type, ObsEditableListType)?;
+            let filter = get_opt_str!(pointer, path_filter).unwrap_or_default();
+            let default_path = get_opt_str!(pointer, path_default_path).unwrap_or_default();
 
-        Self {
-            name,
-            description,
-            list_type,
-            filter,
-            default_path,
-        }
+            Ok(Self {
+                name,
+                description,
+                list_type,
+                filter,
+                default_path,
+            })
+        })?
     }
 }
