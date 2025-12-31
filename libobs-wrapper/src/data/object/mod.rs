@@ -65,4 +65,8 @@ pub trait ObsObjectTrait: ObsObjectClone + ObsObjectTraitSealed {
         let runtime = self.runtime().clone();
         T::create_update(runtime, self)
     }
+
+    /// Creates a new reference to the drop guard.
+    /// This is useful if you are using the underlying raw pointer, make sure to store it along the drop guard
+    fn drop_guard(&self) -> Option<std::sync::Arc<dyn crate::utils::ObsDropGuard + Send + Sync>>;
 }

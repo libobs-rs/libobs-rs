@@ -6,7 +6,7 @@ use crate::{
     data::{ObsDataGetters, ObsDataPointers},
     run_with_obs,
     runtime::ObsRuntime,
-    unsafe_send::Sendable,
+    unsafe_send::{Sendable, SmartPointerSendable},
     utils::ObsError,
 };
 
@@ -16,9 +16,8 @@ use super::{ObsData, _ObsDataDropGuard};
 /// Immutable wrapper around obs_data_t to be prevent modification and to be used in creation of other objects.
 /// This should not be updated directly using the pointer, but instead through the corresponding update methods on the holder of this data.
 pub struct ImmutableObsData {
-    ptr: Sendable<*mut obs_data_t>,
     runtime: ObsRuntime,
-    _drop_guard: Arc<_ObsDataDropGuard>,
+    ptr: SmartPointerSendable<*mut obs_data_t>,
 }
 
 impl ImmutableObsData {
@@ -27,31 +26,32 @@ impl ImmutableObsData {
             Sendable(libobs::obs_data_create())
         })?;
 
-        Ok(ImmutableObsData {
-            ptr: ptr.clone(),
+        let drop_guard = Arc::new(_ObsDataDropGuard {
+            obs_data: ptr.clone(),
             runtime: runtime.clone(),
-            _drop_guard: Arc::new(_ObsDataDropGuard {
-                obs_data: ptr,
-                runtime: runtime.clone(),
-            }),
-        })
+        });
+
+        let ptr = SmartPointerSendable::new(ptr.0, drop_guard);
+        Ok(ImmutableObsData { ptr, runtime })
     }
 
     pub fn from_raw(data: Sendable<*mut obs_data_t>, runtime: ObsRuntime) -> Self {
         ImmutableObsData {
-            ptr: data.clone(),
-            runtime: runtime.clone(),
-            _drop_guard: Arc::new(_ObsDataDropGuard {
-                obs_data: data.clone(),
-                runtime,
-            }),
+            ptr: SmartPointerSendable::new(
+                data.0,
+                Arc::new(_ObsDataDropGuard {
+                    obs_data: data.clone(),
+                    runtime: runtime.clone(),
+                }),
+            ),
+            runtime,
         }
     }
 
     pub fn to_mutable(&self) -> Result<ObsData, ObsError> {
         let ptr = self.ptr.clone();
         let json = run_with_obs!(self.runtime, (ptr), move || unsafe {
-            Sendable(libobs::obs_data_get_json(ptr))
+            Sendable(libobs::obs_data_get_json(ptr.0))
         })?;
 
         let json = unsafe { CStr::from_ptr(json.0) }

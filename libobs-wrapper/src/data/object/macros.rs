@@ -65,6 +65,10 @@ macro_rules! forward_obs_object_impl {
             ) -> Result<(), $crate::utils::ObsError> {
                 self.$var_name.update_settings(settings)
             }
+
+            fn drop_guard(&self) -> Option<std::sync::Arc<dyn $crate::utils::ObsDropGuard + Send + Sync>> {
+                self.$var_name.drop_guard()
+            }
         }
     };
 }

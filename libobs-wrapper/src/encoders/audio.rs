@@ -7,25 +7,35 @@ use std::{
 
 use crate::{
     data::{
-        object::{inner_fn_update_settings, ObsObjectTrait, ObsObjectTraitSealed},
-        ImmutableObsData, ObsDataPointers,
+        ImmutableObsData, ObsDataPointers, object::{ObsObjectTrait, ObsObjectTraitSealed, inner_fn_update_settings}
     },
     encoders::ObsEncoderTrait,
     impl_obs_drop, run_with_obs,
     runtime::ObsRuntime,
-    unsafe_send::Sendable,
-    utils::{AudioEncoderInfo, ObsError, ObsString},
+    unsafe_send::{Sendable, SmartPointerSendable},
+    utils::{AudioEncoderInfo, ObsDropGuard, ObsError, ObsString},
 };
+
+pub struct _ObsAudioEncoderDropGuard {
+    encoder: Sendable<*mut libobs::obs_encoder_t>,
+    runtime: ObsRuntime,
+}
+
+impl ObsDropGuard for _ObsAudioEncoderDropGuard {}
+
+impl_obs_drop!(_ObsAudioEncoderDropGuard, (encoder), move || unsafe {
+    libobs::obs_encoder_release(encoder);
+});
 
 #[derive(Clone, Debug)]
 #[allow(dead_code)]
 pub struct ObsAudioEncoder {
-    pub(crate) encoder: Sendable<*mut libobs::obs_encoder_t>,
     pub(crate) id: ObsString,
     pub(crate) name: ObsString,
     pub(crate) settings: Arc<RwLock<ImmutableObsData>>,
     pub(crate) hotkey_data: Arc<RwLock<ImmutableObsData>>,
     pub(crate) runtime: ObsRuntime,
+    pub(crate) encoder: SmartPointerSendable<*mut libobs::obs_encoder_t>,
 }
 
 impl ObsAudioEncoder {
@@ -67,9 +77,16 @@ impl ObsAudioEncoder {
             return Err(ObsError::NullPointer(None));
         }
 
+        let drop_guard = Arc::new(_ObsAudioEncoderDropGuard {
+            encoder: encoder.clone(),
+            runtime: runtime.clone(),
+        });
+
+        let encoder = SmartPointerSendable::new(encoder.0, drop_guard);
+
         let settings = {
             let settings_ptr = run_with_obs!(runtime, (encoder), move || unsafe {
-                Sendable(libobs::obs_encoder_get_settings(encoder))
+                Sendable(libobs::obs_encoder_get_settings(encoder.get_ptr()))
             })?;
 
             ImmutableObsData::from_raw(settings_ptr, runtime.clone())
@@ -102,10 +119,6 @@ impl ObsAudioEncoder {
         })
     }
 }
-
-impl_obs_drop!(ObsAudioEncoder, (encoder), move || unsafe {
-    libobs::obs_encoder_release(encoder);
-});
 
 impl ObsObjectTraitSealed for ObsAudioEncoder {
     fn __internal_replace_settings(&self, settings: ImmutableObsData) -> Result<(), ObsError> {
@@ -177,6 +190,10 @@ impl ObsObjectTrait for ObsAudioEncoder {
         }
 
         inner_fn_update_settings!(self, libobs::obs_encoder_update, settings)
+    }
+
+    fn drop_guard(&self) -> Option<std::sync::Arc<dyn crate::utils::ObsDropGuard + Send + Sync>> {
+        Some(self.drop_guard)
     }
 }
 

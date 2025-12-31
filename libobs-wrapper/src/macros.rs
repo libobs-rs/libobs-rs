@@ -9,7 +9,7 @@ macro_rules! run_with_obs_impl {
             $runtime.run_with_obs_result(move || {
                 $(let $var = $var;)*
                 let inner_obs_run = {
-                    $(let $var = $var.0;)*
+                    //$(let $var = $var.0;)*
                     $operation
                 };
                 return inner_obs_run()

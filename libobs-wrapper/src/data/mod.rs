@@ -1,7 +1,7 @@
 use std::{ffi::CString, sync::Arc};
 
 use crate::{
-    impl_obs_drop, run_with_obs, runtime::ObsRuntime, unsafe_send::Sendable, utils::ObsError,
+    impl_obs_drop, run_with_obs, runtime::ObsRuntime, unsafe_send::Sendable, utils::{ObsDropGuard, ObsError},
 };
 pub use immutable::ImmutableObsData;
 use libobs::obs_data;
@@ -24,6 +24,8 @@ pub(crate) struct _ObsDataDropGuard {
     obs_data: Sendable<*mut obs_data>,
     pub(crate) runtime: ObsRuntime,
 }
+
+impl ObsDropGuard for _ObsDataDropGuard {}
 
 /// Contains `obs_data` and its related strings. Note that
 /// this struct prevents string pointers from being freed

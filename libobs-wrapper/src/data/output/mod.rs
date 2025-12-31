@@ -216,6 +216,10 @@ impl ObsObjectTrait for ObsOutputRef {
 
         inner_fn_update_settings!(self, libobs::obs_output_update, settings)
     }
+
+    fn drop_guard(&self) -> Option<std::sync::Arc<dyn crate::utils::ObsDropGuard + Send + Sync>> {
+        Some(self._drop_guard.clone())
+    }
 }
 
 impl ObsOutputTrait for ObsOutputRef {
