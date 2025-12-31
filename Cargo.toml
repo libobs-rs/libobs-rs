@@ -56,5 +56,5 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage,coverage_nightly)
 
 [workspace.metadata.dylint]
 libraries = [
-    { git = "https://github.com/libobs-rs/libobs-rs-lints", rev ="ddbf224"  },
+    { git = "https://github.com/libobs-rs/libobs-rs-lints", rev ="16a8c87"  },
 ]
