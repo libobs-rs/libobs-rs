@@ -1804,7 +1804,7 @@ dependencies = [
 
 [[package]]
 name = "libobs"
-version = "4.0.4+32.0.2"
+version = "5.0.0+32.0.2"
 dependencies = [
  "bindgen",
  "pkg-config",
@@ -1813,7 +1813,7 @@ dependencies = [
 
 [[package]]
 name = "libobs-bootstrapper"
-version = "0.2.7"
+version = "0.3.0"
 dependencies = [
  "async-stream",
  "futures-core",
@@ -1835,12 +1835,13 @@ dependencies = [
 
 [[package]]
 name = "libobs-simple"
-version = "6.0.3+32.0.2"
+version = "7.0.0+32.0.2"
 dependencies = [
  "anyhow",
  "display-info",
  "env_logger",
  "ffmpeg-sidecar",
+ "lazy_static",
  "libobs",
  "libobs-simple-macro",
  "libobs-window-helper",
@@ -1856,7 +1857,7 @@ dependencies = [
 
 [[package]]
 name = "libobs-simple-macro"
-version = "6.0.3"
+version = "7.0.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1865,7 +1866,7 @@ dependencies = [
 
 [[package]]
 name = "libobs-window-helper"
-version = "0.3.2"
+version = "0.4.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -1875,7 +1876,7 @@ dependencies = [
 
 [[package]]
 name = "libobs-wrapper"
-version = "7.0.7+32.0.2"
+version = "8.0.0+32.0.2"
 dependencies = [
  "arboard",
  "chrono",
@@ -2934,6 +2935,17 @@ name = "regex-syntax"
 version = "0.8.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a2d987857b319362043e95f5353c0535c1f58eec5336fdfcf626430af7def58"
+
+[[package]]
+name = "replay-buffer"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "env_logger",
+ "libobs",
+ "libobs-simple",
+ "libobs-wrapper",
+]
 
 [[package]]
 name = "reqwest"

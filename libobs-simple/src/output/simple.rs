@@ -37,7 +37,10 @@
 
 use libobs_wrapper::{
     context::ObsContext,
-    data::{output::ObsOutputRef, ObsData},
+    data::{
+        output::{ObsOutputRef, ObsOutputTrait},
+        ObsData, ObsDataSetters,
+    },
     encoders::{ObsAudioEncoderType, ObsContextEncoders, ObsVideoEncoderType},
     utils::{AudioEncoderInfo, ObsError, ObsPath, ObsString, OutputInfo, VideoEncoderInfo},
 };
@@ -64,7 +67,7 @@ pub enum X264Preset {
 }
 
 impl X264Preset {
-    fn as_str(&self) -> &'static str {
+    pub fn as_str(&self) -> &'static str {
         match self {
             X264Preset::UltraFast => "ultrafast",
             X264Preset::SuperFast => "superfast",
@@ -90,7 +93,7 @@ pub enum HardwarePreset {
 }
 
 impl HardwarePreset {
-    fn as_str(&self) -> &'static str {
+    pub fn as_str(&self) -> &'static str {
         match self {
             HardwarePreset::Speed => "speed",
             HardwarePreset::Balanced => "balanced",
@@ -357,7 +360,7 @@ impl SimpleOutputBuilder {
 
         let video_encoder_info = VideoEncoderInfo::new(
             video_encoder_type,
-            "simple_video",
+            format!("{}_video_encoder", self.settings.name),
             Some(video_settings),
             None,
         );
@@ -378,7 +381,7 @@ impl SimpleOutputBuilder {
 
         let audio_encoder_info = AudioEncoderInfo::new(
             audio_encoder_type,
-            "simple_audio",
+            format!("{}_audio_encoder", self.settings.name),
             Some(audio_settings),
             None,
         );

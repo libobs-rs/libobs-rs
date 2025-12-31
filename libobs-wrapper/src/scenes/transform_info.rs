@@ -7,7 +7,7 @@ use crate::{
     graphics::Vec2,
     macros::enum_from_number,
     scenes::ObsSceneRef,
-    sources::ObsSourceRef,
+    sources::ObsSourceTrait,
     utils::ObsError,
 };
 
@@ -151,10 +151,10 @@ impl ObsTransformInfoBuilder {
     }
 
     /// Builds the `ObsTransformInfo` instance and keeps values that have not been set the same.
-    pub fn build_with_fallback(
+    pub fn build_with_fallback<T: ObsSourceTrait>(
         self,
         scene: &ObsSceneRef,
-        source: &ObsSourceRef,
+        source: &T,
     ) -> Result<ObsTransformInfo, ObsError> {
         let current = scene.get_transform_info(source)?;
         let bounds_type = self

@@ -106,7 +106,7 @@ pub fn obs_object_updater(attr: TokenStream, item: TokenStream) -> TokenStream {
             }
 
             fn update(self) -> Result<(), libobs_wrapper::utils::ObsError> {
-                use libobs_wrapper::utils::traits::ObsUpdatable;
+                use libobs_wrapper::data::object::ObsObjectTrait;
                 let #updater_name {
                     settings_updater,
                     updatable,
@@ -115,10 +115,10 @@ pub fn obs_object_updater(attr: TokenStream, item: TokenStream) -> TokenStream {
                 } = self;
 
                 log::trace!("Updating settings for {:?}", Self::get_id());
-                settings_updater.update()?;
+                settings_updater.apply()?;
 
                 log::trace!("Updating raw settings for {:?}", Self::get_id());
-                let e = updatable.update_raw(settings);
+                let e = updatable.update_settings(settings);
                 log::trace!("Update done for {:?}", Self::get_id());
 
                 e
@@ -294,8 +294,8 @@ pub fn obs_object_builder(attr: TokenStream, item: TokenStream) -> TokenStream {
                     ..
                 } = self;
 
-                settings_updater.update()?;
-                hotkeys_updater.update()?;
+                settings_updater.apply()?;
+                hotkeys_updater.apply()?;
 
                 Ok(libobs_wrapper::utils::ObjectInfo::new(
                     Self::get_id(),

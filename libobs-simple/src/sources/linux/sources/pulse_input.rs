@@ -1,7 +1,7 @@
 use libobs_simple_macro::obs_object_impl;
-use libobs_wrapper::sources::{ObsSourceBuilder, ObsSourceRef};
+use libobs_wrapper::sources::ObsSourceRef;
 
-use crate::sources::macro_helper::define_object_manager;
+use crate::sources::macro_helper::{define_object_manager, impl_default_builder};
 
 define_object_manager!(
     #[derive(Debug)]
@@ -47,5 +47,5 @@ impl PulseOutputSource {
     }
 }
 
-impl ObsSourceBuilder for PulseInputSourceBuilder {}
-impl ObsSourceBuilder for PulseOutputSourceBuilder {}
+impl_default_builder!(PulseInputSourceBuilder);
+impl_default_builder!(PulseOutputSourceBuilder);

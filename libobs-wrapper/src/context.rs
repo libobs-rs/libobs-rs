@@ -43,7 +43,13 @@ use std::{
     thread::ThreadId,
 };
 
-use crate::display::{ObsDisplayCreationData, ObsDisplayRef};
+use crate::{
+    data::{
+        object::ObsObjectTrait,
+        output::{ObsOutputTrait, ObsOutputTraitSealed, ObsReplayBufferOutputRef},
+    },
+    display::{ObsDisplayCreationData, ObsDisplayRef},
+};
 use crate::{
     data::{output::ObsOutputRef, video::ObsVideoInfo, ObsData},
     enums::{ObsLogLevel, ObsResetVideoStatus},
@@ -61,6 +67,8 @@ use libobs::{audio_output, video_output};
 lazy_static::lazy_static! {
     pub(crate) static ref OBS_THREAD_ID: Mutex<Option<ThreadId>> = Mutex::new(None);
 }
+
+pub(crate) type GeneralStorage<T> = Arc<RwLock<Vec<Arc<Box<T>>>>>;
 
 /// Interface to the OBS context. Only one context
 /// can exist across all threads and any attempt to
@@ -86,7 +94,7 @@ pub struct ObsContext {
     /// early freeing.
     #[allow(dead_code)]
     #[get_mut]
-    pub(crate) outputs: Arc<RwLock<Vec<ObsOutputRef>>>,
+    pub(crate) outputs: GeneralStorage<dyn ObsOutputTrait>,
 
     #[get_mut]
     pub(crate) scenes: Arc<RwLock<Vec<ObsSceneRef>>>,
@@ -325,6 +333,28 @@ impl ObsContext {
         ObsData::new(self.runtime.clone())
     }
 
+    pub fn replay_buffer(
+        &mut self,
+        info: OutputInfo,
+    ) -> Result<ObsReplayBufferOutputRef, ObsError> {
+        let output = ObsReplayBufferOutputRef::new(info, self.runtime.clone());
+
+        match output {
+            Ok(x) => {
+                let tmp = x.clone();
+                self.outputs
+                    .write()
+                    .map_err(|_| {
+                        ObsError::LockError("Failed to acquire write lock on outputs".to_string())
+                    })?
+                    .push(Arc::new(Box::new(x)));
+                Ok(tmp)
+            }
+
+            Err(x) => Err(x),
+        }
+    }
+
     pub fn output(&mut self, info: OutputInfo) -> Result<ObsOutputRef, ObsError> {
         let output = ObsOutputRef::new(info, self.runtime.clone());
 
@@ -336,7 +366,7 @@ impl ObsContext {
                     .map_err(|_| {
                         ObsError::LockError("Failed to acquire write lock on outputs".to_string())
                     })?
-                    .push(x);
+                    .push(Arc::new(Box::new(x)));
                 Ok(tmp)
             }
 
@@ -503,7 +533,10 @@ impl ObsContext {
         Ok(d)
     }
 
-    pub fn get_output(&mut self, name: &str) -> Result<Option<ObsOutputRef>, ObsError> {
+    pub fn get_output(
+        &mut self,
+        name: &str,
+    ) -> Result<Option<Arc<Box<dyn ObsOutputTrait>>>, ObsError> {
         let o = self
             .outputs
             .read()
@@ -518,11 +551,9 @@ impl ObsContext {
     pub fn update_output(&mut self, name: &str, settings: ObsData) -> Result<(), ObsError> {
         match self
             .outputs
-            .write()
-            .map_err(|_| {
-                ObsError::LockError("Failed to acquire write lock on outputs".to_string())
-            })?
-            .iter_mut()
+            .read()
+            .map_err(|_| ObsError::LockError("Failed to acquire read lock on outputs".to_string()))?
+            .iter()
             .find(|x| x.name().to_string().as_str() == name)
         {
             Some(output) => output.update_settings(settings),
@@ -542,9 +573,24 @@ impl ObsContext {
         Ok(f)
     }
 
+    /// Creates a new scene
+    ///
+    /// If the channel is provided, the scene will be set to that output channel.
+    ///
+    /// There are 64 channels that you can assign scenes to,
+    /// which will draw on top of each other in ascending index order
+    /// when a output is rendered.
+    ///
+    /// # Arguments
+    /// * `name` - The name of the scene. This must be unique.
+    /// * `channel` - Optional channel to bind the scene to. If provided, the scene will be set as active for that channel.
+    ///
+    /// # Returns
+    /// A Result containing the new ObsSceneRef or an error
     pub fn scene<T: Into<ObsString> + Send + Sync>(
         &mut self,
         name: T,
+        channel: Option<u32>,
     ) -> Result<ObsSceneRef, ObsError> {
         let scene = ObsSceneRef::new(
             name.into(),
@@ -558,6 +604,9 @@ impl ObsContext {
             .map_err(|_| ObsError::LockError("Failed to acquire write lock on scenes".to_string()))?
             .push(scene);
 
+        if let Some(channel) = channel {
+            tmp.set_to_channel(channel)?;
+        }
         Ok(tmp)
     }
 
@@ -569,6 +618,7 @@ impl ObsContext {
             .iter()
             .find(|x| x.name().to_string().as_str() == name)
             .cloned();
+
         Ok(r)
     }
 

@@ -1,9 +1,6 @@
-use libobs_wrapper::{
-    data::StringEnum,
-    sources::{ObsSourceBuilder, ObsSourceRef},
-};
+use libobs_wrapper::{data::StringEnum, sources::ObsSourceRef};
 
-use crate::sources::macro_helper::define_object_manager;
+use crate::sources::macro_helper::{define_object_manager, impl_default_builder};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// Describes the X11 capture server type
@@ -64,4 +61,4 @@ define_object_manager!(
     }
 );
 
-impl ObsSourceBuilder for X11CaptureSourceBuilder {}
+impl_default_builder!(X11CaptureSourceBuilder);

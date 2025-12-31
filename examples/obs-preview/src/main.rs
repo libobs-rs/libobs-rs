@@ -5,16 +5,16 @@ use std::time::Duration;
 
 #[cfg(target_os = "linux")]
 use libobs_simple::sources::linux::LinuxGeneralScreenCapture;
+#[cfg(windows)]
+use libobs_simple::sources::windows::monitor_capture::MonitorCaptureSource;
+#[cfg(target_os = "linux")]
+use libobs_wrapper::sources::ObsSourceRef;
 #[cfg(target_os = "linux")]
 use libobs_wrapper::utils::NixDisplay;
 
 #[cfg(windows)]
-use libobs_wrapper::utils::traits::ObsUpdatable;
-
-#[cfg(windows)]
 use libobs_simple::sources::windows::{
-    GameCaptureSourceBuilder, MonitorCaptureSourceBuilder, MonitorCaptureSourceUpdater,
-    ObsGameCaptureMode, WindowSearchMode,
+    GameCaptureSourceBuilder, MonitorCaptureSourceBuilder, ObsGameCaptureMode, WindowSearchMode,
 };
 #[cfg(windows)]
 use libobs_simple::sources::ObsObjectUpdater;
@@ -24,7 +24,7 @@ use libobs_wrapper::display::{
 };
 #[cfg(windows)]
 use libobs_wrapper::sources::ObsSourceBuilder;
-use libobs_wrapper::sources::ObsSourceRef;
+use libobs_wrapper::sources::ObsSourceTrait;
 use libobs_wrapper::unsafe_send::Sendable;
 use libobs_wrapper::{context::ObsContext, utils::StartupInfo};
 use winit::application::ApplicationHandler;
@@ -53,8 +53,10 @@ impl Drop for SignalThreadGuard {
 struct ObsInner {
     context: ObsContext,
     display: ObsDisplayRef,
-    #[cfg_attr(not(windows), allow(dead_code))]
-    source: ObsSourceRef,
+    #[cfg(windows)]
+    _source: MonitorCaptureSource,
+    #[cfg(target_os = "linux")]
+    _source: ObsSourceRef,
     _guard: SignalThreadGuard,
 }
 
@@ -85,7 +87,7 @@ impl ObsInner {
         //let _output = context.simple_output_builder("recording.mp4")
         //    .build()?;
 
-        let mut scene = context.scene("Main Scene")?;
+        let mut scene = context.scene("Main Scene", Some(0))?;
 
         #[cfg(windows)]
         let apex = GameCaptureSourceBuilder::get_windows(WindowSearchMode::ExcludeMinimized)?;
@@ -134,8 +136,6 @@ impl ObsInner {
             println!("No Apex window found for game capture");
         }
 
-        scene.set_to_channel(0)?;
-
         let hwnd = window.window_handle().unwrap().as_raw();
 
         #[cfg(windows)]
@@ -172,7 +172,7 @@ impl ObsInner {
         let should_exit = Arc::new(AtomicBool::new(false));
         let thread_exit = should_exit.clone();
         let handle = std::thread::spawn(move || {
-            let signal_manager = tmp.signal_manager();
+            let signal_manager = tmp.signals();
             let mut x = signal_manager.on_update().unwrap();
 
             println!("Listening for updates");
@@ -191,7 +191,7 @@ impl ObsInner {
             context,
             #[cfg_attr(not(target_os = "linux"), allow(unused_unsafe))]
             display,
-            source: monitor_src,
+            _source: monitor_src,
             _guard: SignalThreadGuard {
                 should_exit,
                 handle: Some(handle),
@@ -286,7 +286,7 @@ impl ApplicationHandler for App {
                         if let Some(inner) = inner {
                             let monitor_index = self.monitor_index.clone();
 
-                            let source = &mut inner.source;
+                            let source = &mut inner._source;
                             let monitors = MonitorCaptureSourceBuilder::get_monitors().unwrap();
 
                             let monitor_index = monitor_index
@@ -295,7 +295,7 @@ impl ApplicationHandler for App {
                             let monitor = &monitors[monitor_index];
 
                             source
-                                .create_updater::<MonitorCaptureSourceUpdater>()
+                                .create_updater()
                                 .unwrap()
                                 .set_monitor(monitor)
                                 .update()

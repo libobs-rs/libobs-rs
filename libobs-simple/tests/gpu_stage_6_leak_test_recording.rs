@@ -4,12 +4,11 @@ mod common;
 
 use std::{path::PathBuf, process::Command, time::Duration};
 
-use libobs_simple::sources::windows::{ObsWindowCaptureMethod, WindowCaptureSourceBuilder};
-use libobs_wrapper::{
-    data::output::ReplayBufferOutput,
-    sources::ObsSourceBuilder,
-    utils::{ObjectInfo, ObsPath, ObsString},
+use libobs_simple::{
+    output::replay::ObsContextReplayExt,
+    sources::windows::{ObsWindowCaptureMethod, WindowCaptureSourceBuilder},
 };
+use libobs_wrapper::{data::output::ObsOutputTrait, sources::ObsSourceBuilder, utils::ObsPath};
 
 use common::{assert_not_black, find_notepad, initialize_obs};
 
@@ -33,39 +32,13 @@ pub fn test_recording() {
     println!("Recording {:?}", window.0.obs_id);
 
     let (mut context, mut output) = initialize_obs(rec_file);
-    let ae = {
-        let ae = output.audio_encoders().read().unwrap();
-        ae.as_ref().unwrap().clone()
-    };
-
-    let mut replay_buffer_settings = context.data().unwrap();
-    replay_buffer_settings
-        .bulk_update()
-        .set_string("directory", ObsPath::from_relative("."))
-        .set_string("format", "%CCYY-%MM-%DD %hh-%mm-%ss")
-        .set_string("extension", "mp4")
-        .set_int("max_time_sec", 15)
-        .set_int("max_size_mb", 500)
-        .update()
-        .unwrap();
 
     let mut replay_buffer = context
-        .output(ObjectInfo {
-            id: ObsString::new("replay_buffer"),
-            name: ObsString::new("replay_buffer_output"),
-            hotkey_data: None,
-            settings: Some(replay_buffer_settings),
-        })
+        .replay_buffer_builder("replay_output", ObsPath::from_relative("."))
+        .build()
         .unwrap();
 
-    replay_buffer
-        .set_video_encoder(output.get_current_video_encoder().unwrap().unwrap())
-        .unwrap();
-
-    replay_buffer.set_audio_encoder(ae.clone(), 0).unwrap();
-
-    let mut scene = context.scene("main").unwrap();
-    scene.set_to_channel(0).unwrap();
+    let mut scene = context.scene("main", Some(0)).unwrap();
 
     let source_name = "test_capture";
     context

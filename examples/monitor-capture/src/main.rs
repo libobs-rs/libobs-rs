@@ -1,20 +1,18 @@
 use libobs_simple::output::simple::ObsContextSimpleExt;
+use libobs_wrapper::data::output::ObsOutputTrait;
 #[cfg(target_os = "linux")]
 use libobs_wrapper::logger::ObsLogger;
 use libobs_wrapper::utils::StartupInfo;
 use libobs_wrapper::{context::ObsContext, utils::ObsPath};
 
+#[cfg(target_os = "linux")]
+use libobs_simple::sources::linux::LinuxGeneralScreenCapture;
 #[cfg(windows)]
-use libobs_simple::sources::windows::{MonitorCaptureSourceBuilder, MonitorCaptureSourceUpdater};
+use libobs_simple::sources::windows::MonitorCaptureSourceBuilder;
 #[cfg(windows)]
 use libobs_wrapper::data::ObsObjectUpdater;
 #[cfg(windows)]
 use libobs_wrapper::sources::ObsSourceBuilder;
-#[cfg(windows)]
-use libobs_wrapper::utils::traits::ObsUpdatable;
-
-#[cfg(target_os = "linux")]
-use libobs_simple::sources::linux::LinuxGeneralScreenCapture;
 #[cfg(target_os = "linux")]
 use std::io::{self, Write};
 
@@ -36,7 +34,7 @@ fn main() -> anyhow::Result<()> {
 
     let mut context = ObsContext::new(startup_info)?;
 
-    let mut scene = context.scene("main")?;
+    let mut scene = context.scene("main", Some(0))?;
 
     // Platform-specific screen/monitor capture setup
     #[cfg(windows)]
@@ -67,9 +65,6 @@ fn main() -> anyhow::Result<()> {
         screen_capture.add_to_scene(&mut scene)?;
     }
 
-    // Common output and encoder setup
-    scene.set_to_channel(0)?;
-
     // Set up output to ./recording.mp4
     let mut output = context
         .simple_output_builder("monitor-capture-output", ObsPath::new("record.mp4"))
@@ -87,7 +82,7 @@ fn main() -> anyhow::Result<()> {
 
         // Switching monitor
         monitor_capture
-            .create_updater::<MonitorCaptureSourceUpdater>()?
+            .create_updater()?
             .set_monitor(&monitors[1 % monitors.len()])
             .update()?;
 

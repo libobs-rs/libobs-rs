@@ -1,10 +1,7 @@
-use libobs_wrapper::{
-    data::StringEnum,
-    sources::{ObsSourceBuilder, ObsSourceRef},
-};
+use libobs_wrapper::{data::StringEnum, sources::ObsSourceRef};
 use num_derive::{FromPrimitive, ToPrimitive};
 
-use crate::sources::macro_helper::define_object_manager;
+use crate::sources::macro_helper::{define_object_manager, impl_default_builder};
 
 #[repr(i64)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, FromPrimitive, ToPrimitive)]
@@ -83,4 +80,4 @@ impl V4L2InputSourceBuilder {
     }
 }
 
-impl ObsSourceBuilder for V4L2InputSourceBuilder {}
+impl_default_builder!(V4L2InputSourceBuilder);

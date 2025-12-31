@@ -4,13 +4,11 @@ mod common;
 
 use std::{path::PathBuf, time::Duration};
 
-use libobs_simple::sources::windows::{
-    MonitorCaptureSourceBuilder, MonitorCaptureSourceUpdater, ObsDisplayCaptureMethod,
-};
+use libobs_simple::sources::windows::{MonitorCaptureSourceBuilder, ObsDisplayCaptureMethod};
 use libobs_wrapper::{
-    data::ObsObjectUpdater,
+    data::{output::ObsOutputTrait, ObsObjectUpdater},
     sources::ObsSourceBuilder,
-    utils::{traits::ObsUpdatable, ObsPath},
+    utils::ObsPath,
 };
 
 use crate::common::{assert_not_black, initialize_obs};
@@ -29,7 +27,7 @@ pub fn record() {
     let path_out: PathBuf = rec_file.clone().into();
 
     let (mut context, mut output) = initialize_obs(rec_file);
-    let mut scene = context.scene("main").unwrap();
+    let mut scene = context.scene("main", Some(0)).unwrap();
 
     let monitor = MonitorCaptureSourceBuilder::get_monitors().unwrap()[0].clone();
     println!("Using monitor {:?}", monitor);
@@ -41,7 +39,6 @@ pub fn record() {
         .add_to_scene(&mut scene)
         .unwrap();
 
-    scene.set_to_channel(0).unwrap();
     output.start().unwrap();
 
     println!("Recording started");
@@ -49,7 +46,7 @@ pub fn record() {
     if ENABLE_DXGI_TEST {
         println!("Testing DXGI capture method");
         capture_source
-            .create_updater::<MonitorCaptureSourceUpdater>()
+            .create_updater()
             .unwrap()
             .set_capture_method(ObsDisplayCaptureMethod::MethodDXGI)
             .update()

@@ -1,28 +1,13 @@
 use std::ffi::CStr;
 
-use libobs::obs_data;
-
 use crate::{
-    data::ObsData,
+    data::ObsDataPointers,
     run_with_obs,
-    runtime::ObsRuntime,
     unsafe_send::Sendable,
     utils::{ObsError, ObsString},
 };
 
-impl ObsDataGetters for ObsData {
-    fn runtime(&self) -> &ObsRuntime {
-        &self.runtime
-    }
-
-    fn as_ptr(&self) -> Sendable<*mut obs_data> {
-        self.obs_data.clone()
-    }
-}
-
-pub trait ObsDataGetters {
-    fn runtime(&self) -> &ObsRuntime;
-    fn as_ptr(&self) -> Sendable<*mut obs_data>;
+pub trait ObsDataGetters: ObsDataPointers {
     fn get_string<T: Into<ObsString> + Send + Sync>(
         &self,
         key: T,

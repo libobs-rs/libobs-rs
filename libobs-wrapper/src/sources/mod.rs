@@ -1,21 +1,30 @@
 mod builder;
 pub use builder::*;
 
+mod traits;
+pub use traits::*;
+
+mod macros;
+
 use libobs::{obs_scene_item, obs_scene_t, obs_source_t};
 
 use crate::{
-    data::{immutable::ImmutableObsData, ObsData},
+    data::{
+        object::{inner_fn_update_settings, ObsObjectTrait, ObsObjectTraitSealed},
+        ImmutableObsData, ObsDataPointers,
+    },
     impl_obs_drop, impl_signal_manager,
     macros::impl_eq_of_ptr,
     run_with_obs,
     runtime::ObsRuntime,
     unsafe_send::{Sendable, SendableComp},
-    utils::{traits::ObsUpdatable, ObsError, ObsString},
+    utils::{ObsError, ObsString},
 };
 
 use std::{
     collections::HashMap,
     hash::Hash,
+    ptr,
     sync::{Arc, RwLock},
 };
 
@@ -28,8 +37,8 @@ pub struct ObsSourceRef {
     pub(crate) source: Sendable<*mut obs_source_t>,
     pub(crate) id: ObsString,
     pub(crate) name: ObsString,
-    pub(crate) settings: Arc<ImmutableObsData>,
-    pub(crate) hotkey_data: Arc<ImmutableObsData>,
+    pub(crate) settings: Arc<RwLock<ImmutableObsData>>,
+    pub(crate) hotkey_data: Arc<RwLock<ImmutableObsData>>,
 
     /// This is a map to all attached scene items of this source.
     /// If the corresponding scene gets dropped, the scene will remove itself from the map and drop the scene item as well.
@@ -44,29 +53,29 @@ impl ObsSourceRef {
     pub fn new<T: Into<ObsString> + Sync + Send, K: Into<ObsString> + Sync + Send>(
         id: T,
         name: K,
-        mut settings: Option<ObsData>,
-        mut hotkey_data: Option<ObsData>,
+        settings: Option<ImmutableObsData>,
+        hotkey_data: Option<ImmutableObsData>,
         runtime: ObsRuntime,
     ) -> Result<Self, ObsError> {
         let id = id.into();
         let name = name.into();
 
-        let settings = match settings.take() {
-            Some(x) => ImmutableObsData::from(x),
-            None => ImmutableObsData::new(&runtime)?,
-        };
-
-        let hotkey_data = match hotkey_data.take() {
-            Some(x) => ImmutableObsData::from(x),
+        // We are creating empty immutable settings here because OBS would do it nonetheless if we passed a null pointer.
+        let hotkey_data = match hotkey_data {
+            Some(x) => x,
             None => ImmutableObsData::new(&runtime)?,
         };
 
         let hotkey_data_ptr = hotkey_data.as_ptr();
-        let settings_ptr = settings.as_ptr();
+        let settings_ptr = settings
+            .as_ref()
+            .map(|s| s.as_ptr())
+            .unwrap_or(Sendable(ptr::null_mut()));
+
         let id_ptr = id.as_ptr();
         let name_ptr = name.as_ptr();
 
-        let source = run_with_obs!(
+        let source_ptr = run_with_obs!(
             runtime,
             (hotkey_data_ptr, settings_ptr, id_ptr, name_ptr),
             move || unsafe {
@@ -79,19 +88,28 @@ impl ObsSourceRef {
             }
         )?;
 
-        if source.0.is_null() {
+        if source_ptr.0.is_null() {
             return Err(ObsError::NullPointer(None));
         }
 
-        let signals = ObsSourceSignals::new(&source, runtime.clone())?;
+        // Getting default settings if none were provided
+        let settings = {
+            let default_settings_ptr = run_with_obs!(runtime, (source_ptr), move || unsafe {
+                Sendable(libobs::obs_source_get_settings(source_ptr))
+            })?;
+
+            ImmutableObsData::from_raw(default_settings_ptr, runtime.clone())
+        };
+
+        let signals = ObsSourceSignals::new(&source_ptr, runtime.clone())?;
         Ok(Self {
-            source: source.clone(),
+            source: source_ptr.clone(),
             id,
             name,
-            settings: Arc::new(settings),
-            hotkey_data: Arc::new(hotkey_data),
+            settings: Arc::new(RwLock::new(settings)),
+            hotkey_data: Arc::new(RwLock::new(hotkey_data)),
             _guard: Arc::new(_ObsSourceGuard {
-                source,
+                source: source_ptr,
                 runtime: runtime.clone(),
             }),
             scene_items: Arc::new(RwLock::new(HashMap::new())),
@@ -99,62 +117,119 @@ impl ObsSourceRef {
             signal_manager: Arc::new(signals),
         })
     }
+}
 
-    pub fn settings(&self) -> &ImmutableObsData {
-        &self.settings
+impl ObsObjectTraitSealed for ObsSourceRef {
+    fn __internal_replace_settings(&self, settings: ImmutableObsData) -> Result<(), ObsError> {
+        let mut guard = self
+            .settings
+            .write()
+            .map_err(|_| ObsError::LockError("Failed to acquire write lock on settings".into()))?;
+
+        *guard = settings;
+        Ok(())
     }
 
-    pub fn hotkey_data(&self) -> &ImmutableObsData {
-        &self.hotkey_data
-    }
+    fn __internal_replace_hotkey_data(
+        &self,
+        hotkey_data: ImmutableObsData,
+    ) -> Result<(), ObsError> {
+        let mut guard = self.hotkey_data.write().map_err(|_| {
+            ObsError::LockError("Failed to acquire write lock on hotkey data".into())
+        })?;
 
-    pub fn name(&self) -> String {
-        self.name.to_string()
-    }
-
-    pub fn id(&self) -> String {
-        self.id.to_string()
-    }
-
-    pub fn signal_manager(&self) -> Arc<ObsSourceSignals> {
-        self.signal_manager.clone()
-    }
-
-    pub fn as_ptr(&self) -> *mut obs_source_t {
-        self.source.0
+        *guard = hotkey_data;
+        Ok(())
     }
 }
 
-impl ObsUpdatable for ObsSourceRef {
-    fn update_raw(&mut self, data: ObsData) -> Result<(), ObsError> {
-        let data_ptr = data.as_ptr();
-        let source_ptr = self.source.clone();
-        log::trace!("Updating source: {:?}", self.source);
-        run_with_obs!(self.runtime, (source_ptr, data_ptr), move || unsafe {
-            libobs::obs_source_update(source_ptr, data_ptr);
-        })
+impl ObsObjectTrait for ObsSourceRef {
+    fn runtime(&self) -> &ObsRuntime {
+        &self.runtime
     }
 
-    fn reset_and_update_raw(&mut self, data: ObsData) -> Result<(), ObsError> {
-        let source_ptr = self.source.clone();
-        run_with_obs!(self.runtime, (source_ptr), move || unsafe {
-            libobs::obs_source_reset_settings(source_ptr, data.as_ptr().0);
-        })
+    fn settings(&self) -> Result<ImmutableObsData, ObsError> {
+        let res = self
+            .settings
+            .read()
+            .map_err(|_| ObsError::LockError("Failed to acquire read lock on settings".into()))?
+            .clone();
+
+        Ok(res)
     }
 
-    fn runtime(&self) -> ObsRuntime {
-        self.runtime.clone()
+    fn hotkey_data(&self) -> Result<ImmutableObsData, ObsError> {
+        let res = self
+            .hotkey_data
+            .read()
+            .map_err(|_| ObsError::LockError("Failed to acquire read lock on hotkey data".into()))?
+            .clone();
+
+        Ok(res)
     }
 
-    fn get_settings(&self) -> Result<ImmutableObsData, ObsError> {
-        log::trace!("Getting settings for source: {:?}", self.source);
-        let source_ptr = self.source.clone();
-        let res = run_with_obs!(self.runtime, (source_ptr), move || unsafe {
-            Sendable(libobs::obs_source_get_settings(source_ptr))
+    fn id(&self) -> ObsString {
+        self.id.clone()
+    }
+
+    fn name(&self) -> ObsString {
+        self.name.clone()
+    }
+
+    fn update_settings(&self, settings: crate::data::ObsData) -> Result<(), ObsError> {
+        inner_fn_update_settings!(self, libobs::obs_source_update, settings)
+    }
+}
+
+impl ObsSourceTraitSealed for ObsSourceRef {
+    fn add_scene_item_ptr(
+        &self,
+        scene_ptr: SendableComp<*mut libobs::obs_scene_t>,
+        item_ptr: Sendable<*mut libobs::obs_scene_item>,
+    ) -> Result<(), ObsError> {
+        self.scene_items
+            .write()
+            .map_err(|_| {
+                ObsError::LockError("Failed to acquire write lock on scene items map".into())
+            })
+            .map(|mut guard| {
+                guard.insert(scene_ptr, item_ptr);
+            })
+    }
+
+    fn remove_scene_item_ptr(
+        &self,
+        scene_ptr: SendableComp<*mut libobs::obs_scene_t>,
+    ) -> Result<(), ObsError> {
+        self.scene_items
+            .write()
+            .map_err(|_| {
+                ObsError::LockError("Failed to acquire write lock on scene items map".into())
+            })
+            .map(|mut guard| {
+                guard.remove(&scene_ptr);
+            })
+    }
+
+    fn get_scene_item_ptr(
+        &self,
+        scene_ptr: &SendableComp<*mut libobs::obs_scene_t>,
+    ) -> Result<Option<Sendable<*mut libobs::obs_scene_item>>, ObsError> {
+        let guard = self.scene_items.read().map_err(|_| {
+            ObsError::LockError("Failed to acquire read lock on scene items map".into())
         })?;
 
-        log::trace!("Got settings: {:?}", res);
-        Ok(ImmutableObsData::from_raw(res, self.runtime.clone()))
+        Ok(guard.get(scene_ptr).cloned())
+    }
+}
+
+impl ObsSourceTrait for ObsSourceRef {
+    fn as_ptr(&self) -> Sendable<*mut libobs::obs_source_t> {
+        self.source.clone()
+    }
+
+    fn signals(&self) -> &Arc<ObsSourceSignals> {
+        &self.signal_manager
     }
 }
 
@@ -227,23 +302,6 @@ impl_signal_manager!(|ptr| unsafe { libobs::obs_source_get_signal_handler(ptr) }
     "media_stopped": {},
     "media_next": {},
     "media_previous": {},
-    /// This is just for sources that are of the `game-capture`, `window-capture` or `win-wasapi` type. Other sources will never emit this signal.
-    //TODO Add support for the `linux-capture` type as it does not contain the `title` field (its 'name' instead)
-    "hooked": {struct HookedSignal {
-        title: String,
-        class: String,
-        executable: String;
-        POINTERS {
-            source: *mut libobs::obs_source_t,
-        }
-    }},
-    /// This is just for sources that are of the `game-capture`, `window-capture` or `win-wasapi` type. Other sources will never emit this signal.
-    //TODO Add support for the `linux-capture` type as it does not contain the `title` field (its 'name' instead)
-    "unhooked": {struct UnhookedSignal {
-        POINTERS {
-            source: *mut libobs::obs_source_t,
-        }
-    }},
 ]);
 
 #[derive(Debug)]

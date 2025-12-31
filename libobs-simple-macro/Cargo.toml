@@ -1,6 +1,6 @@
 [package]
 name = "libobs-simple-macro"
-version = "6.0.3"
+version = "7.0.0"
 description = "Helper macro for libobs-simple"
 repository = "https://github.com/libobs-rs/libobs-rs"
 documentation = "https://libobs-rs.github.io/libobs-rs/libobs_simple_macro/"

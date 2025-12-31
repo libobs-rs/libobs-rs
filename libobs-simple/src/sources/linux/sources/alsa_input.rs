@@ -1,6 +1,6 @@
-use libobs_wrapper::sources::{ObsSourceBuilder, ObsSourceRef};
+use libobs_wrapper::sources::ObsSourceRef;
 
-use crate::sources::macro_helper::define_object_manager;
+use crate::sources::macro_helper::{define_object_manager, impl_default_builder};
 
 define_object_manager!(
     #[derive(Debug)]
@@ -35,4 +35,4 @@ impl AlsaInputSourceBuilder {
     }
 }
 
-impl ObsSourceBuilder for AlsaInputSourceBuilder {}
+impl_default_builder!(AlsaInputSourceBuilder);

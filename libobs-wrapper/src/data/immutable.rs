@@ -3,7 +3,10 @@ use std::{ffi::CStr, sync::Arc};
 use libobs::obs_data_t;
 
 use crate::{
-    data::ObsDataGetters, impl_obs_drop, run_with_obs, runtime::ObsRuntime, unsafe_send::Sendable,
+    data::{ObsDataGetters, ObsDataPointers},
+    run_with_obs,
+    runtime::ObsRuntime,
+    unsafe_send::Sendable,
     utils::ObsError,
 };
 
@@ -58,13 +61,9 @@ impl ImmutableObsData {
 
         ObsData::from_json(json.as_ref(), self.runtime.clone())
     }
-
-    pub fn as_ptr(&self) -> Sendable<*mut obs_data_t> {
-        self.ptr.clone()
-    }
 }
 
-impl ObsDataGetters for ImmutableObsData {
+impl ObsDataPointers for ImmutableObsData {
     fn runtime(&self) -> &ObsRuntime {
         &self.runtime
     }
@@ -73,6 +72,8 @@ impl ObsDataGetters for ImmutableObsData {
         self.ptr.clone()
     }
 }
+
+impl ObsDataGetters for ImmutableObsData {}
 
 impl From<ObsData> for ImmutableObsData {
     fn from(mut data: ObsData) -> Self {
@@ -87,7 +88,3 @@ impl From<ObsData> for ImmutableObsData {
         }
     }
 }
-
-impl_obs_drop!(ImmutableObsData, (ptr), move || unsafe {
-    libobs::obs_data_release(ptr)
-});

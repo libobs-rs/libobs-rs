@@ -4,13 +4,17 @@ use std::sync::{Arc, RwLock};
 use libobs_simple::sources::linux::LinuxGeneralScreenCapture;
 #[cfg(target_os = "linux")]
 use libobs_simple::sources::linux::PipeWireSourceExtTrait;
+#[cfg(windows)]
+use libobs_simple::sources::windows::monitor_capture::MonitorCaptureSource;
 use libobs_wrapper::graphics::Vec2;
+#[cfg(target_os = "linux")]
+use libobs_wrapper::sources::ObsSourceRef;
 #[cfg(target_os = "linux")]
 use libobs_wrapper::utils::NixDisplay;
 
 #[cfg(windows)]
 use libobs_simple::sources::windows::{
-    GameCaptureSourceBuilder, MonitorCaptureSourceBuilder, ObsGameCaptureMode, WindowSearchMode,
+    GameCaptureSourceBuilder, MonitorCaptureSourceBuilder, WindowSearchMode,
 };
 use libobs_wrapper::data::video::ObsVideoInfoBuilder;
 use libobs_wrapper::display::{
@@ -18,7 +22,6 @@ use libobs_wrapper::display::{
 };
 #[cfg(windows)]
 use libobs_wrapper::sources::ObsSourceBuilder;
-use libobs_wrapper::sources::ObsSourceRef;
 use libobs_wrapper::unsafe_send::Sendable;
 use libobs_wrapper::{context::ObsContext, utils::StartupInfo};
 use winit::application::ApplicationHandler;
@@ -38,6 +41,9 @@ use winit::window::{Window, WindowId};
 struct ObsInner {
     context: ObsContext,
     display: ObsDisplayRef,
+    #[cfg(windows)]
+    _source: MonitorCaptureSource,
+    #[cfg(target_os = "linux")]
     _source: ObsSourceRef,
 }
 
@@ -63,7 +69,7 @@ impl ObsInner {
         }
 
         let mut context = info.start()?;
-        let mut scene = context.scene("Main Scene")?;
+        let mut scene = context.scene("Main Scene", Some(0))?;
 
         #[cfg(windows)]
         let apex = GameCaptureSourceBuilder::get_windows(WindowSearchMode::ExcludeMinimized)?;
@@ -111,6 +117,8 @@ impl ObsInner {
         let mut _apex_source = None;
         #[cfg(windows)]
         if let Some(apex) = apex {
+            use libobs_simple::sources::windows::game_capture::ObsGameCaptureMode;
+
             println!(
                 "Is used by other instance: {}",
                 GameCaptureSourceBuilder::is_window_in_use_by_other_instance(apex.pid)?
@@ -127,8 +135,6 @@ impl ObsInner {
         } else {
             println!("No Apex window found for game capture");
         }
-
-        scene.set_to_channel(0)?;
 
         let hwnd = window.window_handle().unwrap().as_raw();
 

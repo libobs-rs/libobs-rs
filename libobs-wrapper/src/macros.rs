@@ -8,11 +8,11 @@ macro_rules! run_with_obs_impl {
             $(let $var = $var.clone();)*
             $runtime.run_with_obs_result(move || {
                 $(let $var = $var;)*
-                let e = {
+                let inner_obs_run = {
                     $(let $var = $var.0;)*
                     $operation
                 };
-                return e()
+                return inner_obs_run()
             })
         }
     };
@@ -63,12 +63,12 @@ macro_rules! impl_obs_drop {
                 $(let $var = self.$var.clone();)*
                 #[cfg(any(not(feature = "no_blocking_drops"), test, feature="__test_environment"))]
                 {
-                    let r = $crate::run_with_obs!(self.runtime, ($($var),*), $operation);
+                    let run_with_obs_result = $crate::run_with_obs!(self.runtime, ($($var),*), $operation);
                     if std::thread::panicking() {
                         return;
                     }
 
-                    r.unwrap();
+                    run_with_obs_result.unwrap();
                 }
 
                 #[cfg(all(feature = "no_blocking_drops", not(test), not(feature="__test_environment")))]

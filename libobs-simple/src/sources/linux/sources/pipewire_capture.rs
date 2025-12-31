@@ -1,20 +1,19 @@
 use libobs_simple_macro::{obs_object_builder, obs_object_updater};
 use libobs_wrapper::{
-    data::ObsDataGetters,
+    data::{object::ObsObjectTrait, ObsDataGetters},
     run_with_obs,
-    sources::{ObsSourceBuilder, ObsSourceRef},
-    unsafe_send::Sendable,
-    utils::{traits::ObsUpdatable, ObsError},
+    sources::{ObsSourceRef, ObsSourceTrait},
+    utils::ObsError,
 };
 
-use crate::sources::macro_helper::define_object_manager;
+use crate::sources::macro_helper::{define_object_manager, impl_default_builder};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// PipeWire source type
 pub enum ObsPipeWireSourceType {
     /// Screen capture via desktop portal
     DesktopCapture,
-    /// Camera capture via camera portal  
+    /// Camera capture via camera portal
     CameraCapture,
 }
 /*
@@ -137,12 +136,12 @@ impl PipeWireSourceExtTrait for ObsSourceRef {
             return Err(ObsError::InvalidOperation(format!("Can't call 'get_restore_token' on a source of id {}. Expected 'pipewire-desktop-capture-source', 'pipewire-window-capture-source' or 'pipewire-screen-capture-source'", self.id())));
         }
 
-        let source_ptr = Sendable(self.as_ptr());
+        let source_ptr = self.as_ptr();
         run_with_obs!(self.runtime(), (source_ptr), move || unsafe {
             libobs::obs_source_save(source_ptr);
         })?;
 
-        let settings = self.get_settings()?;
+        let settings = self.settings()?;
         let token = settings.get_string("RestoreToken")?;
         Ok(token)
     }
@@ -167,7 +166,7 @@ impl PipeWireCameraSourceBuilder {
     }
 }
 
-impl ObsSourceBuilder for PipeWireDesktopCaptureSourceBuilder {}
-impl ObsSourceBuilder for PipeWireWindowCaptureSourceBuilder {}
-impl ObsSourceBuilder for PipeWireScreenCaptureSourceBuilder {}
-impl ObsSourceBuilder for PipeWireCameraSourceBuilder {}
+impl_default_builder!(PipeWireDesktopCaptureSourceBuilder);
+impl_default_builder!(PipeWireWindowCaptureSourceBuilder);
+impl_default_builder!(PipeWireScreenCaptureSourceBuilder);
+impl_default_builder!(PipeWireCameraSourceBuilder);

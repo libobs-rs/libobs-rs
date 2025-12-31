@@ -3,7 +3,6 @@ mod info;
 pub(crate) mod initialization;
 mod obs_string;
 mod path;
-pub mod traits;
 
 #[cfg(target_os = "linux")]
 pub(crate) mod linux;
@@ -16,6 +15,9 @@ mod path_tests;
 
 mod modules;
 
+mod calldata;
+
+pub use calldata::*;
 pub use error::*;
 pub use info::*;
 pub use initialization::NixDisplay;

@@ -2,6 +2,7 @@ mod common;
 
 use libobs_wrapper::{
     context::ObsContext,
+    data::ObsDataSetters,
     utils::{ObsString, OutputInfo, StartupInfo},
 };
 
@@ -75,7 +76,7 @@ pub fn test_output_lifecycle() {
 
     // After scope, output is dropped
     // Context should still be usable
-    let scene = context.scene("test_scene");
+    let scene = context.scene("test_scene", Some(0));
     assert!(scene.is_ok());
 }
 

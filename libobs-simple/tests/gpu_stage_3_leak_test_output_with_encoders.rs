@@ -1,13 +1,14 @@
 use env_logger::Env;
 use libobs_wrapper::{
     context::ObsContext,
+    data::{output::ObsOutputTrait, ObsDataSetters},
     encoders::{ObsContextEncoders, ObsVideoEncoderType},
     utils::{AudioEncoderInfo, OutputInfo, StartupInfo},
 };
 
-/// Stage 4: Initialize OBS with output, encoders, and create a scene
+/// Stage 3: Initialize OBS and create output with video and audio encoders
 #[test]
-pub fn test_scene() {
+pub fn test_output_with_encoders() {
     let _ = env_logger::Builder::from_env(Env::default().default_filter_or("debug"))
         .is_test(true)
         .try_init();
@@ -17,9 +18,10 @@ pub fn test_scene() {
 
     // Set up output settings
     let mut output_settings = context.data().unwrap();
-    let rec_file = "test_recording.mp4";
+    let rec_file = "leak_test_output_with_encoders.mp4";
     output_settings.set_string("path", rec_file).unwrap();
 
+    // Create output
     let output_name = "output";
     let output_info = OutputInfo::new("ffmpeg_muxer", output_name, Some(output_settings), None);
     let mut output = context.output(output_info).unwrap();
@@ -35,7 +37,7 @@ pub fn test_scene() {
         .set_string("preset", "fast")
         .set_string("rate_control", "cbr")
         .set_int("bitrate", 10000)
-        .update()
+        .apply()
         .unwrap();
 
     let encoders = context.available_video_encoders().unwrap();
@@ -60,9 +62,5 @@ pub fn test_scene() {
         AudioEncoderInfo::new("ffmpeg_aac", "audio_encoder", Some(audio_settings), None);
     output.create_and_set_audio_encoder(audio_info, 0).unwrap();
 
-    // Create a scene
-    let scene = context.scene("main").unwrap();
-    scene.set_to_channel(0).unwrap();
-
-    // Scene, output, and context will be dropped here, testing for memory leaks
+    // Output and context will be dropped here, testing for memory leaks
 }

@@ -153,3 +153,19 @@ impl From<String> for ObsString {
         }
     }
 }
+
+impl PartialEq<&str> for ObsString {
+    /// Compares an `ObsString` with a string slice for equality.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use libobs_wrapper::utils::ObsString;
+    ///
+    /// let obs_string = ObsString::new("Hello");
+    /// assert_eq!(obs_string, "Hello");
+    /// ```
+    fn eq(&self, other: &&str) -> bool {
+        self.c_string.to_str() == Ok(*other)
+    }
+}

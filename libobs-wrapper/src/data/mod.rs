@@ -1,16 +1,15 @@
 use std::{ffi::CString, sync::Arc};
 
 use crate::{
-    impl_obs_drop, run_with_obs,
-    runtime::ObsRuntime,
-    unsafe_send::Sendable,
-    utils::{ObsError, ObsString},
+    impl_obs_drop, run_with_obs, runtime::ObsRuntime, unsafe_send::Sendable, utils::ObsError,
 };
+pub use immutable::ImmutableObsData;
 use libobs::obs_data;
 
 pub mod audio;
-pub mod immutable;
+mod immutable;
 mod lib_support;
+pub mod object;
 pub mod output;
 pub mod properties;
 pub mod video;
@@ -61,97 +60,18 @@ impl ObsData {
         })
     }
 
-    pub fn bulk_update(&mut self) -> ObsDataUpdater {
-        ObsDataUpdater {
-            changes: Vec::new(),
-            obs_data: self.obs_data.clone(),
-            _drop_guard: self._drop_guard.clone(),
-        }
-    }
-
     /// Returns a pointer to the raw `obs_data`
     /// represented by `ObsData`.
     pub fn as_ptr(&self) -> Sendable<*mut obs_data> {
         self.obs_data.clone()
     }
 
-    /// Sets a string in `obs_data` and stores it so
-    /// it in `ObsData` does not get freed.
-    pub fn set_string<T: Into<ObsString> + Send + Sync, K: Into<ObsString> + Send + Sync>(
-        &mut self,
-        key: T,
-        value: K,
-    ) -> Result<&mut Self, ObsError> {
-        let key = key.into();
-        let value = value.into();
-
-        let key_ptr = key.as_ptr();
-        let value_ptr = value.as_ptr();
-        let data_ptr = self.obs_data.clone();
-
-        run_with_obs!(
-            self.runtime,
-            (data_ptr, key_ptr, value_ptr),
-            move || unsafe { libobs::obs_data_set_string(data_ptr, key_ptr, value_ptr) }
-        )?;
-
-        Ok(self)
-    }
-
-    /// Sets an int in `obs_data` and stores the key
-    /// in `ObsData` so it does not get freed.
-    pub fn set_int<T: Into<ObsString> + Sync + Send>(
-        &mut self,
-        key: T,
-        value: i64,
-    ) -> Result<&mut Self, ObsError> {
-        let key = key.into();
-
-        let key_ptr = key.as_ptr();
-        let data_ptr = self.obs_data.clone();
-
-        run_with_obs!(self.runtime, (key_ptr, data_ptr), move || unsafe {
-            libobs::obs_data_set_int(data_ptr, key_ptr, value);
-        })?;
-
-        Ok(self)
-    }
-
-    /// Sets a bool in `obs_data` and stores the key
-    /// in `ObsData` so it does not get freed.
-    pub fn set_bool<T: Into<ObsString> + Sync + Send>(
-        &mut self,
-        key: T,
-        value: bool,
-    ) -> Result<&mut Self, ObsError> {
-        let key = key.into();
-
-        let key_ptr = key.as_ptr();
-        let data_ptr = self.obs_data.clone();
-        run_with_obs!(self.runtime, (key_ptr, data_ptr), move || unsafe {
-            libobs::obs_data_set_bool(data_ptr, key_ptr, value);
-        })?;
-
-        Ok(self)
-    }
-
-    /// Sets a double in `obs_data` and stores the key
-    /// in `ObsData` so it does not get freed.
-    pub fn set_double<T: Into<ObsString> + Sync + Send>(
-        &mut self,
-        key: T,
-        value: f64,
-    ) -> Result<&mut Self, ObsError> {
-        let key = key.into();
-
-        let key_ptr = key.as_ptr();
-        let data_ptr = self.obs_data.clone();
-
-        run_with_obs!(self.runtime, (key_ptr, data_ptr), move || unsafe {
-            libobs::obs_data_set_double(data_ptr, key_ptr, value);
-        })?;
-
-        Ok(self)
+    pub fn bulk_update(&mut self) -> ObsDataUpdater {
+        ObsDataUpdater {
+            changes: Vec::new(),
+            obs_data: self.obs_data.clone(),
+            _drop_guard: self._drop_guard.clone(),
+        }
     }
 
     pub fn from_json(json: &str, runtime: ObsRuntime) -> Result<Self, ObsError> {
@@ -175,7 +95,26 @@ impl ObsData {
             }),
         })
     }
+
+    /// Converts this `ObsData` into an `ImmutableObsData`.
+    /// Transfers the pointer without cloning.
+    pub fn into_immutable(self) -> ImmutableObsData {
+        ImmutableObsData::from(self)
+    }
 }
+
+impl ObsDataPointers for ObsData {
+    fn runtime(&self) -> &ObsRuntime {
+        &self.runtime
+    }
+
+    fn as_ptr(&self) -> Sendable<*mut obs_data> {
+        self.obs_data.clone()
+    }
+}
+
+impl ObsDataGetters for ObsData {}
+impl ObsDataSetters for ObsData {}
 
 impl_obs_drop!(_ObsDataDropGuard, (obs_data), move || unsafe {
     libobs::obs_data_release(obs_data)

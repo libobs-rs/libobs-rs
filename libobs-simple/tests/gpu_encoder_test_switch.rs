@@ -6,10 +6,15 @@
 /// It's not very consistent, if it doesn't crash, just run it again until it does :)
 use std::{collections::HashMap, sync::Arc, thread, time::Duration};
 
-use libobs_simple::sources::{windows::MonitorCaptureSourceBuilder, ObsSourceBuilder};
+use libobs_simple::sources::{
+    windows::{monitor_capture::MonitorCaptureSource, MonitorCaptureSourceBuilder},
+    ObsSourceBuilder,
+};
 use libobs_wrapper::{
     context::ObsContext,
-    data::video::ObsVideoInfoBuilder,
+    data::{
+        object::ObsObjectTrait, output::ObsOutputTrait, video::ObsVideoInfoBuilder, ObsDataSetters,
+    },
     encoders::{
         audio::ObsAudioEncoder, video::ObsVideoEncoder, ObsContextEncoders, ObsVideoEncoderType,
     },
@@ -56,7 +61,7 @@ struct ReproState {
     // Key point: storing encoders by type to reuse them (like production code)
     video_encoders: HashMap<EncoderType, Arc<ObsVideoEncoder>>,
     _scene: libobs_wrapper::scenes::ObsSceneRef,
-    _monitor_capture: libobs_wrapper::sources::ObsSourceRef,
+    _monitor_capture: MonitorCaptureSource,
 }
 
 impl ReproState {
@@ -90,7 +95,7 @@ impl ReproState {
         let audio_encoder =
             ObsAudioEncoder::new_from_info(audio_info, 0, obs_context.runtime().clone()).unwrap();
 
-        let mut scene = obs_context.scene("main").unwrap();
+        let mut scene = obs_context.scene("main", Some(0)).unwrap();
         let monitors = MonitorCaptureSourceBuilder::get_monitors().unwrap();
 
         let monitor_capture = obs_context
@@ -99,9 +104,6 @@ impl ReproState {
             .set_monitor(&monitors[0])
             .add_to_scene(&mut scene)
             .unwrap();
-
-        // Register the source
-        scene.set_to_channel(0).unwrap();
 
         Self {
             obs_context,

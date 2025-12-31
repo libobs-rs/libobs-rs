@@ -1,9 +1,11 @@
 //! Monitor capture source for Windows using libobs-rs
 //! This source captures the entire monitor and is used for screen recording.
 
+use std::sync::Arc;
+
 use super::ObsDisplayCaptureMethod;
-use crate::define_object_manager;
 use crate::error::ObsSimpleError;
+use crate::{define_object_manager, sources::macro_helper::impl_custom_source};
 /// Note: This does not update the capture method directly, instead the capture method gets
 /// stored in the struct. The capture method is being set to WGC at first, then the source is created and then the capture method is updated to the desired method.
 use display_info::DisplayInfo;
@@ -11,7 +13,7 @@ use libobs_simple_macro::obs_object_impl;
 use libobs_wrapper::{
     data::{ObsObjectBuilder, ObsObjectUpdater},
     scenes::ObsSceneRef,
-    sources::{ObsSourceBuilder, ObsSourceRef},
+    sources::{ObsSourceBuilder, ObsSourceRef, ObsSourceTrait},
     unsafe_send::Sendable,
     utils::ObsError,
 };
@@ -76,8 +78,11 @@ impl MonitorCaptureSourceBuilder {
     }
 }
 
+pub type GeneralSourceRef = Arc<Box<dyn ObsSourceTrait>>;
 impl ObsSourceBuilder for MonitorCaptureSourceBuilder {
-    fn add_to_scene(mut self, scene: &mut ObsSceneRef) -> Result<ObsSourceRef, ObsError>
+    type T = MonitorCaptureSource;
+
+    fn add_to_scene(mut self, scene: &mut ObsSceneRef) -> Result<Self::T, ObsError>
     where
         Self: Sized,
     {
@@ -91,10 +96,11 @@ impl ObsSourceBuilder for MonitorCaptureSourceBuilder {
         let runtime = self.runtime.clone();
 
         let b = self.build()?;
-        let mut res = scene.add_source(b)?;
+        let res = scene.add_source(b)?;
+        let mut res = MonitorCaptureSource::new(res)?;
 
         if let Some(method) = method_to_set {
-            MonitorCaptureSourceUpdater::create_update(runtime, &mut res)?
+            MonitorCaptureSourceUpdater::create_update(runtime, res.inner_source_mut())?
                 .set_capture_method(method)
                 .update()?;
         }
@@ -102,3 +108,5 @@ impl ObsSourceBuilder for MonitorCaptureSourceBuilder {
         Ok(res)
     }
 }
+
+impl_custom_source!(MonitorCaptureSource);

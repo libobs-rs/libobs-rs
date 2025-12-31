@@ -1,6 +1,5 @@
-use libobs_wrapper::sources::{ObsSourceBuilder, ObsSourceRef};
-
-use crate::sources::macro_helper::define_object_manager;
+use crate::sources::macro_helper::{define_object_manager, impl_default_builder};
+use libobs_wrapper::sources::ObsSourceRef;
 
 define_object_manager!(
     #[derive(Debug)]
@@ -14,4 +13,4 @@ define_object_manager!(
     }
 );
 
-impl ObsSourceBuilder for JackOutputSourceBuilder {}
+impl_default_builder!(JackOutputSourceBuilder);

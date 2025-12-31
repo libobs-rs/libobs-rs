@@ -2,6 +2,7 @@ use libobs_simple::output::simple::ObsContextSimpleExt;
 use libobs_simple::sources::linux::{PipeWireScreenCaptureSourceBuilder, PipeWireSourceExtTrait};
 use libobs_simple::wrapper::{
     context::ObsContext,
+    data::output::ObsOutputTrait,
     enums::ObsLogLevel,
     logger::ObsLogger,
     sources::ObsSourceBuilder,
@@ -29,7 +30,7 @@ pub fn main() -> anyhow::Result<()> {
         .set_logger(Box::new(NoLogger {}));
     let mut context = ObsContext::new(startup_info)?;
 
-    let mut scene = context.scene("main")?;
+    let mut scene = context.scene("main", Some(0))?;
 
     let mut window_capture_builder = context
         .source_builder::<PipeWireScreenCaptureSourceBuilder, _>("PipeWire Screen Capture")?;

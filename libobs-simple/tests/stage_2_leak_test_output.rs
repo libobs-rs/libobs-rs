@@ -1,6 +1,7 @@
 use env_logger::Env;
 use libobs_wrapper::{
     context::ObsContext,
+    data::ObsDataSetters,
     utils::{OutputInfo, StartupInfo},
 };
 

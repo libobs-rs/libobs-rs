@@ -1,4 +1,4 @@
-use crate::define_object_manager;
+use crate::{define_object_manager, sources::macro_helper::impl_custom_source};
 
 use super::{ObsWindowCaptureMethod, ObsWindowPriority};
 use crate::error::ObsSimpleError;
@@ -129,8 +129,26 @@ impl WindowCaptureSource {
     }
 }
 
+impl_custom_source!(WindowCaptureSource, [
+    "hooked": {struct HookedSignal {
+        title: String,
+        class: String,
+        executable: String;
+        POINTERS {
+            source: *mut libobs::obs_source_t,
+        }
+    }},
+    "unhooked": {struct UnhookedSignal {
+        POINTERS {
+            source: *mut libobs::obs_source_t,
+        }
+    }},
+]);
+
 impl ObsSourceBuilder for WindowCaptureSourceBuilder {
-    fn add_to_scene(mut self, scene: &mut ObsSceneRef) -> Result<ObsSourceRef, ObsError>
+    type T = WindowCaptureSource;
+
+    fn add_to_scene(mut self, scene: &mut ObsSceneRef) -> Result<Self::T, ObsError>
     where
         Self: Sized,
     {
@@ -144,10 +162,11 @@ impl ObsSourceBuilder for WindowCaptureSourceBuilder {
         let runtime = self.runtime.clone();
 
         let b = self.build()?;
-        let mut res = scene.add_source(b)?;
+        let res = scene.add_source(b)?;
+        let mut res = WindowCaptureSource::new(res)?;
 
         if let Some(method) = method_to_set {
-            WindowCaptureSourceUpdater::create_update(runtime, &mut res)?
+            WindowCaptureSourceUpdater::create_update(runtime, res.inner_source_mut())?
                 .set_capture_method(method)
                 .update()?;
         }

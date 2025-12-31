@@ -1,6 +1,6 @@
 [package]
 name = "libobs"
-version = "4.0.4+32.0.2"
+version = "5.0.0+32.0.2"
 description = "LibOBS bindings for Rust"
 repository = "https://github.com/libobs-rs/libobs-rs"
 documentation = "https://libobs-rs.github.io/libobs-rs/libobs/"

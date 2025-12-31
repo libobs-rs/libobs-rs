@@ -1,13 +1,11 @@
-use crate::{data::ObsObjectBuilder, scenes::ObsSceneRef, utils::ObsError};
-
-use super::ObsSourceRef;
+use crate::{
+    data::ObsObjectBuilder, scenes::ObsSceneRef, sources::ObsSourceTrait, utils::ObsError,
+};
 
 pub trait ObsSourceBuilder: ObsObjectBuilder {
-    fn add_to_scene(self, scene: &mut ObsSceneRef) -> Result<ObsSourceRef, ObsError>
+    type T: ObsSourceTrait;
+
+    fn add_to_scene(self, scene: &mut ObsSceneRef) -> Result<Self::T, ObsError>
     where
-        Self: Sized,
-    {
-        let s = self.build()?;
-        scene.add_source(s)
-    }
+        Self: Sized;
 }

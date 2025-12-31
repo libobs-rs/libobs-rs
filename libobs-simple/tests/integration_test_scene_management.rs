@@ -12,7 +12,7 @@ pub fn test_scene_creation() {
     let mut context = ObsContext::new(StartupInfo::default()).unwrap();
 
     // Create a scene
-    let scene = context.scene("test_scene");
+    let scene = context.scene("test_scene", Some(0));
     assert!(scene.is_ok(), "Failed to create scene");
 }
 
@@ -25,7 +25,7 @@ pub fn test_scene_set_to_channel() {
 
     let mut context = ObsContext::new(StartupInfo::default()).unwrap();
 
-    let scene = context.scene("channel_test_scene").unwrap();
+    let scene = context.scene("channel_test_scene", Some(0)).unwrap();
 
     // Set scene to channel 0
     let result = scene.set_to_channel(0);
@@ -42,13 +42,13 @@ pub fn test_multiple_scenes() {
     let mut context = ObsContext::new(StartupInfo::default()).unwrap();
 
     // Create multiple scenes
-    let scene1 = context.scene("scene1");
+    let scene1 = context.scene("scene1", Some(0));
     assert!(scene1.is_ok());
 
-    let scene2 = context.scene("scene2");
+    let scene2 = context.scene("scene2", Some(1));
     assert!(scene2.is_ok());
 
-    let scene3 = context.scene("scene3");
+    let scene3 = context.scene("scene3", Some(2));
     assert!(scene3.is_ok());
 }
 
@@ -63,15 +63,14 @@ pub fn test_scene_lifecycle() {
 
     {
         // Scene is created within this scope
-        let scene = context.scene("lifecycle_scene").unwrap();
-        scene.set_to_channel(0).unwrap();
+        let _scene = context.scene("lifecycle_scene", Some(0)).unwrap();
 
         // Scene should be usable here
     }
 
     // After scope ends, scene is dropped
     // Context should still be valid
-    let scene2 = context.scene("another_scene");
+    let scene2 = context.scene("another_scene", Some(1));
     assert!(scene2.is_ok());
 }
 
@@ -85,9 +84,9 @@ pub fn test_scene_different_channels() {
     let mut context = ObsContext::new(StartupInfo::default()).unwrap();
 
     // Test setting scenes to different channels
-    let scene0 = context.scene("channel_0_scene").unwrap();
+    let scene0 = context.scene("channel_0_scene", Some(0)).unwrap();
     assert!(scene0.set_to_channel(0).is_ok());
 
-    let scene1 = context.scene("channel_1_scene").unwrap();
+    let scene1 = context.scene("channel_1_scene", Some(1)).unwrap();
     assert!(scene1.set_to_channel(1).is_ok());
 }

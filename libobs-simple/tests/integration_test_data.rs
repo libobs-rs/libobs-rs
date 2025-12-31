@@ -1,4 +1,8 @@
-use libobs_wrapper::{context::ObsContext, data::ObsDataGetters, utils::StartupInfo};
+use libobs_wrapper::{
+    context::ObsContext,
+    data::{ObsDataGetters, ObsDataSetters},
+    utils::StartupInfo,
+};
 
 /// Integration test: Test encoder settings manipulation
 #[test]

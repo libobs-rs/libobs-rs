@@ -1,7 +1,7 @@
 mod startup;
 pub use startup::*;
 
-use crate::data::ObsData;
+use crate::data::{ImmutableObsData, ObsData};
 
 use super::ObsString;
 
@@ -9,8 +9,8 @@ use super::ObsString;
 pub struct ObjectInfo {
     pub id: ObsString,
     pub name: ObsString,
-    pub settings: Option<ObsData>,
-    pub hotkey_data: Option<ObsData>,
+    pub settings: Option<ImmutableObsData>,
+    pub hotkey_data: Option<ImmutableObsData>,
 }
 
 impl ObjectInfo {
@@ -26,8 +26,8 @@ impl ObjectInfo {
         Self {
             id,
             name,
-            settings,
-            hotkey_data,
+            settings: settings.map(|s| s.into_immutable()),
+            hotkey_data: hotkey_data.map(|h| h.into_immutable()),
         }
     }
 }
