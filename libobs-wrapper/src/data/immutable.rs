@@ -27,20 +27,23 @@ impl ImmutableObsData {
         })?;
 
         let drop_guard = Arc::new(_ObsDataDropGuard {
-            obs_data: ptr.clone(),
+            data_ptr: ptr.clone(),
             runtime: runtime.clone(),
         });
 
         let ptr = SmartPointerSendable::new(ptr.0, drop_guard);
-        Ok(ImmutableObsData { ptr, runtime })
+        Ok(ImmutableObsData {
+            ptr,
+            runtime: runtime.clone(),
+        })
     }
 
-    pub fn from_raw(data: Sendable<*mut obs_data_t>, runtime: ObsRuntime) -> Self {
+    pub fn from_raw_pointer(data: Sendable<*mut obs_data_t>, runtime: ObsRuntime) -> Self {
         ImmutableObsData {
             ptr: SmartPointerSendable::new(
                 data.0,
                 Arc::new(_ObsDataDropGuard {
-                    obs_data: data.clone(),
+                    data_ptr: data.clone(),
                     runtime: runtime.clone(),
                 }),
             ),
@@ -50,14 +53,25 @@ impl ImmutableObsData {
 
     pub fn to_mutable(&self) -> Result<ObsData, ObsError> {
         let ptr = self.ptr.clone();
-        let json = run_with_obs!(self.runtime, (ptr), move || unsafe {
-            Sendable(libobs::obs_data_get_json(ptr.0))
-        })?;
+        let json = run_with_obs!(self.runtime, (ptr), move || {
+            let json_ptr = unsafe {
+                // Safety: We are making sure by using a SmartPointer, that this pointer is valid during the call.
+                libobs::obs_data_get_json(ptr.get_ptr())
+            };
 
-        let json = unsafe { CStr::from_ptr(json.0) }
-            .to_str()
-            .map_err(|_| ObsError::JsonParseError)?
-            .to_string();
+            if json_ptr.is_null() {
+                return Err(ObsError::NullPointer(Some(
+                    "Couldn't get json representation of OBS data".into(),
+                )));
+            }
+
+            let json = unsafe { CStr::from_ptr(json_ptr) }
+                .to_str()
+                .map_err(|_| ObsError::JsonParseError)?
+                .to_string();
+
+            Ok(json)
+        })??;
 
         ObsData::from_json(json.as_ref(), self.runtime.clone())
     }
@@ -68,7 +82,7 @@ impl ObsDataPointers for ImmutableObsData {
         &self.runtime
     }
 
-    fn as_ptr(&self) -> Sendable<*mut obs_data_t> {
+    fn as_ptr(&self) -> SmartPointerSendable<*mut obs_data_t> {
         self.ptr.clone()
     }
 }
@@ -76,15 +90,10 @@ impl ObsDataPointers for ImmutableObsData {
 impl ObsDataGetters for ImmutableObsData {}
 
 impl From<ObsData> for ImmutableObsData {
-    fn from(mut data: ObsData) -> Self {
-        // Set to null pointer to prevent double free
-        let ptr = data.obs_data.0;
-
-        data.obs_data.0 = std::ptr::null_mut();
+    fn from(data: ObsData) -> Self {
         ImmutableObsData {
-            ptr: Sendable(ptr),
+            ptr: data.as_ptr(),
             runtime: data.runtime.clone(),
-            _drop_guard: data._drop_guard,
         }
     }
 }

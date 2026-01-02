@@ -39,8 +39,8 @@ pub trait ObsObjectBuilder {
     fn get_id() -> ObsString;
 }
 
-pub trait ObsObjectUpdater<'a> {
-    type ToUpdate: ObsObjectTrait;
+pub trait ObsObjectUpdater<'a, K: Clone> {
+    type ToUpdate: ObsObjectTrait<K>;
     fn create_update(
         runtime: ObsRuntime,
         updatable: &'a mut Self::ToUpdate,

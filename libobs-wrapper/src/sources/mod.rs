@@ -13,18 +13,14 @@ use crate::{
         object::{inner_fn_update_settings, ObsObjectTrait, ObsObjectTraitSealed},
         ImmutableObsData, ObsDataPointers,
     },
-    impl_obs_drop, impl_signal_manager,
-    macros::impl_eq_of_ptr,
-    run_with_obs,
+    impl_obs_drop, impl_signal_manager, run_with_obs,
     runtime::ObsRuntime,
-    unsafe_send::{Sendable, SendableComp},
+    unsafe_send::{Sendable, SendableComp, SmartPointerSendable},
     utils::{ObsDropGuard, ObsError, ObsString},
 };
 
 use std::{
     collections::HashMap,
-    hash::Hash,
-    ptr,
     sync::{Arc, RwLock},
 };
 
@@ -32,23 +28,21 @@ use std::{
 #[allow(dead_code)]
 pub struct ObsSourceRef {
     /// Disconnect signals first
-    pub(crate) signal_manager: Arc<ObsSourceSignals>,
+    signal_manager: Arc<ObsSourceSignals>,
 
-    pub(crate) source: Sendable<*mut obs_source_t>,
-    pub(crate) id: ObsString,
-    pub(crate) name: ObsString,
-    pub(crate) settings: Arc<RwLock<ImmutableObsData>>,
-    pub(crate) hotkey_data: Arc<RwLock<ImmutableObsData>>,
+    id: ObsString,
+    name: ObsString,
+    settings: Arc<RwLock<ImmutableObsData>>,
+    hotkey_data: Arc<RwLock<ImmutableObsData>>,
 
     /// This is a map to all attached scene items of this source.
     /// If the corresponding scene gets dropped, the scene will remove itself from the map and drop the scene item as well.
-    pub(crate) scene_items:
+    scene_items:
         Arc<RwLock<HashMap<SendableComp<*mut obs_scene_t>, Sendable<*mut obs_scene_item>>>>,
-    _guard: Arc<_ObsSourceGuard>,
-    pub(crate) runtime: ObsRuntime,
+    runtime: ObsRuntime,
+    source: SmartPointerSendable<*mut obs_source_t>,
 }
 
-impl_eq_of_ptr!(ObsSourceRef, source);
 impl ObsSourceRef {
     pub fn new<T: Into<ObsString> + Sync + Send, K: Into<ObsString> + Sync + Send>(
         id: T,
@@ -67,55 +61,68 @@ impl ObsSourceRef {
         };
 
         let hotkey_data_ptr = hotkey_data.as_ptr();
-        let settings_ptr = settings
-            .as_ref()
-            .map(|s| s.as_ptr())
-            .unwrap_or(Sendable(ptr::null_mut()));
-
-        let id_ptr = id.as_ptr();
-        let name_ptr = name.as_ptr();
+        let settings_ptr = match settings {
+            Some(x) => Some(x.as_ptr()),
+            None => None,
+        };
 
         let source_ptr = run_with_obs!(
             runtime,
-            (hotkey_data_ptr, settings_ptr, id_ptr, name_ptr),
+            (hotkey_data_ptr, settings_ptr, id, name),
             move || {
-                // Safety: Id, Name must be valid pointers because they are not dropped. Also the settings_ptr and hotkey_data_ptr may be null, its fine.
-                let source_ptr = unsafe {
-                    libobs::obs_source_create(id_ptr, name_ptr, settings_ptr, hotkey_data_ptr)
-                };
-                Sendable(source_ptr)
-            }
-        )?;
+                let id_ptr = id.as_ptr().0;
+                let name_ptr = name.as_ptr().0;
 
-        if source_ptr.0.is_null() {
-            return Err(ObsError::NullPointer(None));
-        }
+                let settings_raw_ptr = match settings_ptr {
+                    Some(s) => s.get_ptr(),
+                    None => std::ptr::null_mut(),
+                };
+
+                let source_ptr = unsafe {
+                    // Safety: Id, Name must be valid pointers because they are not dropped. Also the settings_ptr and hotkey_data_ptr may be null, its fine.
+                    libobs::obs_source_create(
+                        id_ptr,
+                        name_ptr,
+                        settings_raw_ptr,
+                        hotkey_data_ptr.get_ptr(),
+                    )
+                };
+
+                if source_ptr.is_null() {
+                    Err(ObsError::NullPointer(None))
+                } else {
+                    Ok(Sendable(source_ptr))
+                }
+            }
+        )??;
+
+        let source_ptr = SmartPointerSendable::new(
+            source_ptr.0,
+            Arc::new(_ObsSourceGuard {
+                source: source_ptr.clone(),
+                runtime: runtime.clone(),
+            }),
+        );
 
         // Getting default settings if none were provided
         let settings = {
             let default_settings_ptr = run_with_obs!(runtime, (source_ptr), move || {
-                // Safety: The source_ptr must be valid because we just created it and made sure it is not a null pointer.
                 unsafe {
-                    Sendable(libobs::obs_source_get_settings(source_ptr))
+                    // Safety: This safe to call because we are using a smart pointer and the source pointer must not be dropped.
+                    Sendable(libobs::obs_source_get_settings(source_ptr.get_ptr()))
                 }
             })?;
 
-            ImmutableObsData::from_raw(default_settings_ptr, runtime.clone())
+            ImmutableObsData::from_raw_pointer(default_settings_ptr, runtime.clone())
         };
 
-        let drop_guard = Arc::new(_ObsSourceGuard {
-            source: source_ptr.clone(),
-            runtime: runtime.clone(),
-        });
-
-        let signals = ObsSourceSignals::new(&source_ptr, runtime.clone(), drop_guard.clone())?;
+        let signals = ObsSourceSignals::new(&source_ptr, runtime.clone())?;
         Ok(Self {
             source: source_ptr.clone(),
             id,
             name,
             settings: Arc::new(RwLock::new(settings)),
             hotkey_data: Arc::new(RwLock::new(hotkey_data)),
-            _guard: drop_guard,
             scene_items: Arc::new(RwLock::new(HashMap::new())),
             runtime,
             signal_manager: Arc::new(signals),
@@ -147,7 +154,7 @@ impl ObsObjectTraitSealed for ObsSourceRef {
     }
 }
 
-impl ObsObjectTrait for ObsSourceRef {
+impl ObsObjectTrait<*mut libobs::obs_source_t> for ObsSourceRef {
     fn runtime(&self) -> &ObsRuntime {
         &self.runtime
     }
@@ -182,6 +189,10 @@ impl ObsObjectTrait for ObsSourceRef {
 
     fn update_settings(&self, settings: crate::data::ObsData) -> Result<(), ObsError> {
         inner_fn_update_settings!(self, libobs::obs_source_update, settings)
+    }
+
+    fn as_ptr(&self) -> SmartPointerSendable<*mut libobs::obs_source_t> {
+        self.source.clone()
     }
 }
 
@@ -228,10 +239,6 @@ impl ObsSourceTraitSealed for ObsSourceRef {
 }
 
 impl ObsSourceTrait for ObsSourceRef {
-    fn as_ptr(&self) -> Sendable<*mut libobs::obs_source_t> {
-        self.source.clone()
-    }
-
     fn signals(&self) -> &Arc<ObsSourceSignals> {
         &self.signal_manager
     }
@@ -317,7 +324,7 @@ struct _ObsSourceGuard {
 impl ObsDropGuard for _ObsSourceGuard {}
 
 impl_obs_drop!(_ObsSourceGuard, (source), move || unsafe {
-    libobs::obs_source_release(source);
+    libobs::obs_source_release(source.0);
 });
 
 pub type ObsFilterRef = ObsSourceRef;

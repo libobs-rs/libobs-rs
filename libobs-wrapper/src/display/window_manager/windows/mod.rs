@@ -5,9 +5,9 @@ use std::sync::{
     Arc, Mutex,
 };
 
-use crate::display::ObsWindowHandle;
 use crate::unsafe_send::Sendable;
 use crate::utils::ObsError;
+use crate::{display::ObsWindowHandle, unsafe_send::SmartPointerSendable};
 use lazy_static::lazy_static;
 use libobs::obs_display_t;
 use windows::{
@@ -33,7 +33,9 @@ use windows::{
 
 const WM_DESTROY_WINDOW: u32 = 0x8001; // Custom message
 
-// Function to update color space from window user data
+/// Function to update color space from window user data
+/// # Safety
+/// This function may never be called if the display window handle attached to the window user data is invalid.
 unsafe fn update_color_space_from_userdata(window: HWND) {
     let user_data = GetWindowLongPtrW(window, GWLP_USERDATA) as *mut obs_display_t;
     if !user_data.is_null() {
@@ -53,6 +55,8 @@ extern "system" fn wndproc(
     l_param: LPARAM,
 ) -> LRESULT {
     unsafe {
+        // Safety: This is a valid window procedure called by the OS. I've seen this plenty of times.
+        // TODO: Check for safety when the window is closed but update_color_space_from_userdata is still called. Maybe we need a sender / receiver model here?
         match message {
             WM_NCHITTEST => LRESULT(HTTRANSPARENT as _),
             WM_DESTROY_WINDOW => {
@@ -143,7 +147,8 @@ pub(crate) struct WindowsPreviewChildWindowHandler {
     pub(in crate::display::window_manager) is_hidden: AtomicBool,
     pub(in crate::display::window_manager) render_at_bottom: bool,
 
-    pub(in crate::display::window_manager) obs_display: Option<Sendable<*mut obs_display_t>>,
+    pub(in crate::display::window_manager) obs_display:
+        Option<SmartPointerSendable<*mut obs_display_t>>,
 }
 
 impl WindowsPreviewChildWindowHandler {
@@ -292,13 +297,17 @@ impl WindowsPreviewChildWindowHandler {
     }
 
     /// Set the obs display pointer in the window's user data for message handling
-    pub(crate) fn set_display_handle(&mut self, handle: Sendable<*mut libobs::obs_display>) {
+    pub(crate) fn set_display_handle(
+        &mut self,
+        handle: SmartPointerSendable<*mut libobs::obs_display>,
+    ) {
+        // REVIEW: Check if this the display is still being dropped
         self.obs_display = Some(handle.clone());
         unsafe {
             SetWindowLongPtrW(
                 self.window_handle.get_hwnd(),
                 GWLP_USERDATA,
-                handle.0 as isize,
+                handle.get_ptr() as isize,
             );
         }
     }

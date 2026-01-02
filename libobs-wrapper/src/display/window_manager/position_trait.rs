@@ -131,11 +131,15 @@ impl WindowPositionTrait for ObsDisplayRef {
             }
         }
 
-        let pointer = self.display.clone();
-        run_with_obs!(self.runtime, (pointer), move || unsafe {
-            libobs::obs_display_resize(pointer, width, height);
-            // Update color space when window size changes
-            libobs::obs_display_update_color_space(pointer);
+        let pointer = self.as_ptr();
+        run_with_obs!(self.runtime, (pointer), move || {
+            unsafe {
+                // Safety: The pointer is valid because we are using a smart pointer
+
+                libobs::obs_display_resize(pointer.get_ptr(), width, height);
+                // Update color space when window size changes
+                libobs::obs_display_update_color_space(pointer.get_ptr());
+            }
         })
         .map_err(|e| ObsError::InvocationError(format!("{:?}", e)))?;
         Ok(())
@@ -170,12 +174,15 @@ impl WindowPositionTrait for ObsDisplayRef {
             return Ok((m.width, m.height));
         }
 
-        let pointer = self.display.clone();
-        let (width, height) = run_with_obs!(self.runtime, (pointer), move || unsafe {
+        let pointer = self.as_ptr();
+        let (width, height) = run_with_obs!(self.runtime, (pointer), move || {
             let mut w: u32 = 0;
             let mut h: u32 = 0;
+            unsafe {
+                // Safety: The pointer is valid because we are using a smart pointer and because `w` and `h` are valid mutable references.
+                libobs::obs_display_size(pointer.get_ptr(), &mut w, &mut h);
+            };
 
-            libobs::obs_display_size(pointer, &mut w, &mut h);
             (w, h)
         })
         .map_err(|e| ObsError::InvocationError(format!("{:?}", e)))?;

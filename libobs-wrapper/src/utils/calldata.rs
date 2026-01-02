@@ -12,11 +12,13 @@ use crate::{
     impl_obs_drop, run_with_obs,
     runtime::ObsRuntime,
     unsafe_send::Sendable,
-    utils::{calldata_free, ObsError, ObsString},
+    utils::{ObsError, ObsString, calldata_free},
 };
 
 /// RAII wrapper for libobs `calldata_t` ensuring stable address and proper free.
 pub struct CalldataWrapper {
+    // Not using a SmartPointerSendable here because its just way too complicated if we want to get the inner mut pointer
+    //TODO ?
     data: Sendable<Pin<Box<calldata_t>>>, // stable address
     runtime: ObsRuntime,
     _drop_guard: Arc<_CalldataWrapperDropGuard>,
@@ -33,13 +35,14 @@ impl CalldataWrapper {
     /// Extracts a C string pointer for the given key from the calldata.
     pub fn get_string<T: Into<ObsString>>(&mut self, key: T) -> Result<String, ObsError> {
         let key: ObsString = key.into();
-        let key = Sendable(key.clone());
         let self_ptr = self.as_mut_ptr();
 
-        let value = run_with_obs!(self.runtime.clone(), (self_ptr, key), move || unsafe {
-            let mut data = MaybeUninit::<*const c_char>::uninit();
+        let _drop_guard = self._drop_guard.clone(); // Ensure runtime is valid during the call
+        let value = run_with_obs!(self.runtime.clone(), (_drop_guard, self_ptr, key), move || unsafe {
+            let key_ptr = key.as_ptr().0;
 
-            let ok = libobs::calldata_get_string(self_ptr, key.as_ptr().0, data.as_mut_ptr());
+            let mut data = MaybeUninit::<*const c_char>::uninit();
+            let ok = libobs::calldata_get_string(self_ptr.0, key_ptr, data.as_mut_ptr());
             if !ok {
                 return Err(ObsError::Unexpected(format!(
                     "Calldata String {key} not found."
@@ -77,7 +80,7 @@ struct _CalldataWrapperDropGuard {
 }
 
 impl_obs_drop!(_CalldataWrapperDropGuard, (calldata_ptr), move || unsafe {
-    calldata_free(calldata_ptr);
+    calldata_free(calldata_ptr.0);
 });
 
 /// Extension trait on `ObsRuntime` to call a proc handler and return a RAII calldata wrapper.
@@ -103,7 +106,6 @@ impl ObsCalldataExt for ObsRuntime {
 
         let proc_handler = proc_handler.clone();
         let name: ObsString = name.into();
-        let name = Sendable(name);
         let mut calldata = run_with_obs!(self.clone(), (proc_handler, name), move || {
             // Safety: calldata will be properly freed by the drop guard and we are using a struct for the `zeroed` call.
             let data: calldata_t = unsafe { std::mem::zeroed()};
@@ -113,9 +115,9 @@ impl ObsCalldataExt for ObsRuntime {
                 Pin::as_mut(&mut data).get_unchecked_mut()
             };
 
-            // Safety: we can't exactly make sure that the proc_handler pointer is valid, but the name pointer and the raw_ptr of the calldata is valid.
+            // Safety: the caller must have made sure that the proc handler is valid, the name pointer and the raw_ptr of the calldata is valid.
             let ok = unsafe {
-                libobs::proc_handler_call(proc_handler, name.as_ptr().0, raw_ptr)
+                libobs::proc_handler_call(proc_handler.0, name.as_ptr().0, raw_ptr)
             };
             if !ok {
                 return Err(ObsError::Unexpected(

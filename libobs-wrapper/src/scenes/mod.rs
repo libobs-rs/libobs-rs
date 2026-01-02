@@ -7,13 +7,13 @@ use std::hash::Hash;
 use std::ptr;
 use std::sync::{Arc, RwLock};
 
-use getters0::Getters;
 use libobs::{obs_scene_item, obs_scene_t, obs_source_t, obs_transform_info, obs_video_info};
 
+use crate::data::object::ObsObjectTrait;
 use crate::enums::ObsBoundsType;
 use crate::macros::impl_eq_of_ptr;
 use crate::sources::{ObsSourceTrait, ObsSourceTraitSealed};
-use crate::unsafe_send::SendableComp;
+use crate::unsafe_send::{SendableComp, SmartPointerSendable};
 use crate::utils::ObsDropGuard;
 use crate::{
     graphics::Vec2,
@@ -33,7 +33,7 @@ struct _SceneDropGuard {
 impl ObsDropGuard for _SceneDropGuard {}
 
 impl_obs_drop!(_SceneDropGuard, (scene), move || unsafe {
-    let scene_source = libobs::obs_scene_get_source(scene);
+    let scene_source = libobs::obs_scene_get_source(scene.0);
 
     for i in 0..libobs::MAX_CHANNELS {
         let current_source = libobs::obs_get_output_source(i);
@@ -45,33 +45,24 @@ impl_obs_drop!(_SceneDropGuard, (scene), move || unsafe {
     }
 
     libobs::obs_source_release(scene_source);
-    libobs::obs_scene_release(scene);
+    libobs::obs_scene_release(scene.0);
 });
 
 type GeneralSetStorage<T> = Arc<RwLock<HashSet<Arc<Box<T>>>>>;
 
-#[derive(Debug, Clone, Getters)]
-#[skip_new]
+#[derive(Debug, Clone)]
 pub struct ObsSceneRef {
-    #[skip_getter]
-    pub(crate) scene: Arc<Sendable<*mut obs_scene_t>>,
     name: ObsString,
-    #[get_mut]
-    pub(crate) sources: GeneralSetStorage<dyn ObsSourceTrait>,
-    #[skip_getter]
+    sources: GeneralSetStorage<dyn ObsSourceTrait>,
     /// Maps the currently current active scenes by their channel (this is a shared reference between all scenes)
-    pub(crate) active_scenes: Arc<RwLock<HashMap<u32, ObsSceneRef>>>,
+    active_scenes: Arc<RwLock<HashMap<u32, ObsSceneRef>>>,
 
-    #[skip_getter]
-    _guard: Arc<_SceneDropGuard>,
-
-    #[skip_getter]
     runtime: ObsRuntime,
-
-    pub(crate) signals: Arc<ObsSceneSignals>,
+    signals: Arc<ObsSceneSignals>,
+    scene: SmartPointerSendable<*mut obs_scene_t>,
 }
 
-impl_eq_of_ptr!(ObsSceneRef, scene);
+impl_eq_of_ptr!(ObsSceneRef);
 
 impl ObsSceneRef {
     pub(crate) fn new(
@@ -79,9 +70,10 @@ impl ObsSceneRef {
         active_scenes: Arc<RwLock<HashMap<u32, ObsSceneRef>>>,
         runtime: ObsRuntime,
     ) -> Result<Self, ObsError> {
-        let name_ptr = name.as_ptr();
-        let scene = run_with_obs!(runtime, (name_ptr), move || unsafe {
-            Sendable(libobs::obs_scene_create(name_ptr))
+        let name_clone = name.clone();
+        let scene = run_with_obs!(runtime, (name_clone), move || unsafe {
+            let name_ptr = name_clone.as_ptr();
+            Sendable(libobs::obs_scene_create(name_ptr.0))
         })?;
 
         let drop_guard = Arc::new(_SceneDropGuard {
@@ -89,17 +81,14 @@ impl ObsSceneRef {
             runtime: runtime.clone(),
         });
 
-        let signals = Arc::new(ObsSceneSignals::new(
-            &scene,
-            runtime.clone(),
-            drop_guard.clone(),
-        )?);
+        let scene = SmartPointerSendable::new(scene.0, drop_guard);
+        let signals = Arc::new(ObsSceneSignals::new(&scene, runtime.clone())?);
+
         Ok(Self {
             name,
-            scene: Arc::new(scene.clone()),
+            scene,
             sources: Arc::new(RwLock::new(HashSet::new())),
             active_scenes,
-            _guard: drop_guard,
             runtime,
             signals,
         })
@@ -132,7 +121,7 @@ impl ObsSceneRef {
 
         let scene_source_ptr = self.get_scene_source_ptr()?;
         run_with_obs!(self.runtime, (scene_source_ptr), move || unsafe {
-            libobs::obs_set_output_source(channel, scene_source_ptr);
+            libobs::obs_set_output_source(channel, scene_source_ptr.0);
         })
     }
 
@@ -161,8 +150,11 @@ impl ObsSceneRef {
     /// Gets the underlying source pointer of this scene, which is used internally when setting it to a channel.
     pub fn get_scene_source_ptr(&self) -> Result<Sendable<*mut obs_source_t>, ObsError> {
         let scene_ptr = self.scene.clone();
-        run_with_obs!(self.runtime, (scene_ptr), move || unsafe {
-            Sendable(libobs::obs_scene_get_source(scene_ptr))
+        run_with_obs!(self.runtime, (scene_ptr), move || {
+            unsafe {
+                // Safety: We are in the runtime and the scene ptr must be valid because we are using a smart pointer
+                Sendable(libobs::obs_scene_get_source(scene_ptr.get_ptr()))
+            }
         })
     }
 
@@ -179,15 +171,20 @@ impl ObsSceneRef {
         )?;
 
         let scene_ptr = self.scene.clone();
-        let source_ptr = source.source.clone();
+        let source_ptr = source.as_ptr();
 
-        let ptr = run_with_obs!(self.runtime, (scene_ptr, source_ptr), move || unsafe {
-            Sendable(libobs::obs_scene_add(scene_ptr, source_ptr))
+        let ptr = run_with_obs!(self.runtime, (scene_ptr, source_ptr), move || {
+            let ptr = unsafe {
+                // Safety: Because we are using smart pointers for both scene and source, they are valid in this scope
+                libobs::obs_scene_add(scene_ptr.get_ptr(), source_ptr.get_ptr())
+            };
+
+            if ptr.is_null() {
+                Err(ObsError::NullPointer(None))
+            } else {
+                Ok(Sendable(ptr))
+            }
         })?;
-
-        if ptr.0.is_null() {
-            return Err(ObsError::NullPointer(None));
-        }
 
         //TODO We should clear one reference because with this obs doesn't clean up properly
         {
@@ -448,8 +445,8 @@ impl ObsSceneRef {
         Ok(true)
     }
 
-    pub fn as_ptr(&self) -> Sendable<*mut obs_scene_t> {
-        Sendable(self.scene.0)
+    pub fn as_ptr(&self) -> SmartPointerSendable<*mut obs_scene_t> {
+        self.scene.clone()
     }
 }
 

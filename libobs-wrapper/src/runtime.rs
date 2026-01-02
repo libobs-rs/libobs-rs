@@ -287,7 +287,6 @@ impl ObsRuntime {
         #[cfg(feature = "enable_runtime")]
         {
             if is_within_runtime {
-                log::warn!("run_with_obs_no_block called from within the OBS runtime thread. This is bad practice and can lead to deadlocks. Consider restructuring your code to avoid this scenario.");
                 operation();
 
                 return Ok(());

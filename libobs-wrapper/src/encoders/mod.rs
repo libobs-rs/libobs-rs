@@ -1,9 +1,5 @@
 use crate::{
-    context::ObsContext,
-    enums::{ObsEncoderType, OsEnumType},
-    run_with_obs,
-    runtime::ObsRuntime,
-    utils::{ObsError, ENCODER_HIDE_FLAGS},
+    context::ObsContext, enums::{ObsEncoderType, OsEnumType}, impl_obs_drop, run_with_obs, runtime::ObsRuntime, unsafe_send::Sendable, utils::{ENCODER_HIDE_FLAGS, ObsDropGuard, ObsError}
 };
 use std::{ffi::CStr, os::raw::c_char};
 
@@ -89,3 +85,17 @@ impl ObsContextEncoders for ObsContext {
             .collect::<Vec<_>>())
     }
 }
+
+
+
+#[derive(Debug)]
+pub(super) struct _ObsEncoderDropGuard {
+    encoder: Sendable<*mut libobs::obs_encoder_t>,
+    runtime: ObsRuntime,
+}
+
+impl ObsDropGuard for _ObsEncoderDropGuard {}
+
+impl_obs_drop!(_ObsEncoderDropGuard, (encoder), move || unsafe {
+    libobs::obs_encoder_release(encoder.0);
+});

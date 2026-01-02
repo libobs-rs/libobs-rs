@@ -132,10 +132,13 @@ impl ObsPropertyObject for StructName {
 impl ObsPropertyObjectPrivate for StructName {
     fn get_properties_raw(&self) -> Result<Sendable<*mut libobs::obs_properties_t>, ObsError> {
         let encoder_name: ObsString = self.encoder_id.clone().into();
-        let encoder_name_ptr = encoder_name.as_ptr();
 
-        run_with_obs!(self.runtime, (encoder_name_ptr), move || unsafe {
-            Sendable(libobs::obs_get_encoder_properties(encoder_name_ptr))
+        run_with_obs!(self.runtime, (encoder_name), move || {
+            let encoder_name_ptr = encoder_name.as_ptr().0;
+
+            let property_ptr = unsafe { libobs::obs_get_encoder_properties(encoder_name_ptr) };
+
+            Sendable(property_ptr)
         })
     }
 
@@ -144,9 +147,11 @@ impl ObsPropertyObjectPrivate for StructName {
         runtime: ObsRuntime,
     ) -> Result<Sendable<*mut libobs::obs_properties_t>, ObsError> {
         let id: ObsString = id.into();
-        let id_ptr = id.as_ptr();
-        run_with_obs!(runtime, (id_ptr), move || unsafe {
-            Sendable(libobs::obs_get_encoder_properties(id_ptr))
+        run_with_obs!(runtime, (id), move || {
+            let id_ptr = id.as_ptr();
+
+            let property_ptr = unsafe { libobs::obs_get_encoder_properties(id_ptr.0) };
+            Sendable(property_ptr)
         })
     }
 }

@@ -3,9 +3,19 @@ use std::ffi::CStr;
 use crate::{
     data::ObsDataPointers,
     run_with_obs,
-    unsafe_send::Sendable,
+    unsafe_send::SmartPointerSendable,
     utils::{ObsError, ObsString},
 };
+
+/// # Safety
+/// This function must be called on the OBS runtime.
+unsafe fn has_value(
+    data_ptr: SmartPointerSendable<*mut libobs::data_ptr>,
+    key: &ObsString,
+) -> bool {
+    libobs::obs_data_has_user_value(data_ptr.get_ptr(), key.as_ptr().0)
+        || libobs::obs_data_has_default_value(data_ptr.get_ptr(), key.as_ptr().0)
+}
 
 pub trait ObsDataGetters: ObsDataPointers {
     fn get_string<T: Into<ObsString> + Send + Sync>(
@@ -13,86 +23,98 @@ pub trait ObsDataGetters: ObsDataPointers {
         key: T,
     ) -> Result<Option<String>, ObsError> {
         let key = key.into();
-
-        let key_ptr = key.as_ptr();
         let data_ptr = self.as_ptr();
 
-        let result = run_with_obs!(self.runtime(), (data_ptr, key_ptr), move || unsafe {
-            if libobs::obs_data_has_user_value(data_ptr, key_ptr)
-                || libobs::obs_data_has_default_value(data_ptr, key_ptr)
-            {
-                Some(Sendable(libobs::obs_data_get_string(data_ptr, key_ptr)))
+        run_with_obs!(self.runtime(), (data_ptr, key), move || {
+            let has_value = unsafe {
+                // Safety: We are running on the OBS runtime.
+                has_value(data_ptr.clone(), &key)
+            };
+
+            if has_value {
+                let result = unsafe {
+                    // Safety: The pointer is valid because we are using a smart pointer
+                    libobs::obs_data_get_string(data_ptr.get_ptr(), key.as_ptr().0)
+                };
+
+                if result.is_null() {
+                    Err(ObsError::NullPointer(None))
+                } else {
+                    let result = unsafe {
+                        // Safety: The pointer is valid because OBS returned it and we are still in runtime.
+                        CStr::from_ptr(result)
+                    };
+                    let result = result
+                        .to_str()
+                        .map_err(|_| ObsError::StringConversionError)?
+                        .to_string();
+
+                    Ok(Some(result))
+                }
             } else {
-                None
+                Ok(None)
             }
-        })?;
-
-        if result.is_none() {
-            return Ok(None);
-        }
-
-        let result = result.unwrap();
-        if result.0.is_null() {
-            return Err(ObsError::NullPointer(None));
-        }
-
-        let result = unsafe { CStr::from_ptr(result.0) };
-        let result = result
-            .to_str()
-            .map_err(|_| ObsError::StringConversionError)?;
-
-        Ok(Some(result.to_string()))
+        })?
     }
     fn get_int<T: Into<ObsString> + Sync + Send>(&self, key: T) -> Result<Option<i64>, ObsError> {
         let key = key.into();
-
-        let key_ptr = key.as_ptr();
         let data_ptr = self.as_ptr();
 
-        let result = run_with_obs!(self.runtime(), (data_ptr, key_ptr), move || unsafe {
-            if libobs::obs_data_has_user_value(data_ptr, key_ptr)
-                || libobs::obs_data_has_default_value(data_ptr, key_ptr)
-            {
-                Some(libobs::obs_data_get_int(data_ptr, key_ptr))
+        run_with_obs!(self.runtime(), (data_ptr, key), move || {
+            let has_value = unsafe {
+                // Safety: We are running on the OBS runtime.
+                has_value(data_ptr.clone(), &key)
+            };
+
+            if has_value {
+                Some(unsafe {
+                    // Safety: The pointer is valid because we are using a smart pointer
+                    libobs::obs_data_get_int(data_ptr.get_ptr(), key.as_ptr().0)
+                })
             } else {
                 None
             }
-        })?;
-
-        Ok(result)
+        })
     }
     fn get_bool<T: Into<ObsString> + Sync + Send>(&self, key: T) -> Result<Option<bool>, ObsError> {
         let key = key.into();
 
-        let key_ptr = key.as_ptr();
         let data_ptr = self.as_ptr();
 
-        let result = run_with_obs!(self.runtime(), (data_ptr, key_ptr), move || unsafe {
-            if libobs::obs_data_has_user_value(data_ptr, key_ptr)
-                || libobs::obs_data_has_default_value(data_ptr, key_ptr)
-            {
-                Some(libobs::obs_data_get_bool(data_ptr, key_ptr))
+        run_with_obs!(self.runtime(), (data_ptr, key), move || {
+            let has_value = unsafe {
+                // Safety: We are running on the OBS runtime.
+                has_value(data_ptr.clone(), &key)
+            };
+
+            if has_value {
+                Some(unsafe {
+                    // Safety: The pointer is valid because we are using a smart pointer
+                    libobs::obs_data_get_bool(data_ptr.get_ptr(), key.as_ptr().0)
+                })
             } else {
                 None
             }
-        })?;
-
-        Ok(result)
+        })
     }
     fn get_double<T: Into<ObsString> + Sync + Send>(
         &self,
         key: T,
     ) -> Result<Option<f64>, ObsError> {
         let key = key.into();
-
-        let key_ptr = key.as_ptr();
         let data_ptr = self.as_ptr();
 
-        let result = run_with_obs!(self.runtime(), (key_ptr, data_ptr), move || unsafe {
-            if libobs::obs_data_has_user_value(data_ptr, key_ptr)
-                || libobs::obs_data_has_default_value(data_ptr, key_ptr)
-            {
-                Some(libobs::obs_data_get_double(data_ptr, key_ptr))
+        let result = run_with_obs!(self.runtime(), (key, data_ptr), move || {
+            let has_value = unsafe {
+                // Safety: We are running on the OBS runtime.
+                has_value(data_ptr.clone(), &key)
+            };
+
+            if has_value {
+                Some(unsafe {
+                    // Safety: The pointer is valid because we are using a smart pointer
+                    libobs::obs_data_get_double(data_ptr.get_ptr(), key.as_ptr().0)
+                })
             } else {
                 None
             }
@@ -103,17 +125,27 @@ pub trait ObsDataGetters: ObsDataPointers {
 
     fn get_json(&self) -> Result<String, ObsError> {
         let data_ptr = self.as_ptr();
-        let ptr = run_with_obs!(self.runtime(), (data_ptr), move || unsafe {
-            Sendable(libobs::obs_data_get_json(data_ptr))
-        })?;
+        run_with_obs!(self.runtime(), (data_ptr), move || {
+            let json_ptr = unsafe {
+                // Safety: The pointer is valid because we are using a smart pointer
+                libobs::obs_data_get_json(data_ptr.get_ptr())
+            };
 
-        if ptr.0.is_null() {
-            return Err(ObsError::NullPointer(None));
-        }
+            if json_ptr.is_null() {
+                return Err(ObsError::NullPointer(Some(
+                    "Couldn't get json representation of OBS data".into(),
+                )));
+            }
 
-        let ptr = unsafe { CStr::from_ptr(ptr.0) };
-        let ptr = ptr.to_str().map_err(|_| ObsError::JsonParseError)?;
+            let json = unsafe {
+                // Safety: The pointer is valid because OBS returned it and we are still in runtime.
+                CStr::from_ptr(json_ptr)
+            }
+            .to_str()
+            .map_err(|_| ObsError::JsonParseError)?
+            .to_string();
 
-        Ok(ptr.to_string())
+            Ok(json)
+        })?
     }
 }

@@ -11,7 +11,7 @@ use std::{
 use crate::{
     data::{
         object::ObsObjectTrait,
-        output::{ObsOutputRef, ObsOutputTrait, ObsOutputTraitSealed},
+        output::{ObsOutputRef, ObsOutputTraitSealed},
     },
     forward_obs_object_impl, forward_obs_output_impl, impl_signal_manager, run_with_obs,
     runtime::ObsRuntime,
@@ -43,7 +43,7 @@ impl ObsOutputTraitSealed for ObsReplayBufferOutputRef {
         let output = ObsOutputRef::new(output, runtime.clone())?;
 
         let replay_signal_manager =
-            ObsReplayOutputSignals::new(&output.as_ptr(), runtime, output._drop_guard.clone())?;
+            ObsReplayOutputSignals::new(&output.as_ptr(), runtime)?;
         Ok(Self {
             replay_signal_manager: Arc::new(replay_signal_manager),
             output,
@@ -51,7 +51,7 @@ impl ObsOutputTraitSealed for ObsReplayBufferOutputRef {
     }
 }
 
-forward_obs_object_impl!(ObsReplayBufferOutputRef, output);
+forward_obs_object_impl!(ObsReplayBufferOutputRef, output, *mut libobs::obs_output);
 forward_obs_output_impl!(ObsReplayBufferOutputRef, output);
 
 impl_signal_manager!(|ptr| {
@@ -88,7 +88,7 @@ impl ObsReplayBufferOutputRef {
         log::trace!("Getting procedure handler for replay buffer output...");
         let proc_handler = run_with_obs!(self.runtime().clone(), (output_ptr), move || {
             // Safety: At this point, output_ptr MUST be a valid pointer as we haven't released the output yet.
-            let ph = unsafe { libobs::obs_output_get_proc_handler(output_ptr) };
+            let ph = unsafe { libobs::obs_output_get_proc_handler(output_ptr.get_ptr()) };
             if ph.is_null() {
                 return Err(ObsError::OutputSaveBufferFailure(
                     "Failed to get proc handler.".to_string(),

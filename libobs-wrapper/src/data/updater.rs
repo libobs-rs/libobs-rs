@@ -1,14 +1,11 @@
-use std::sync::Arc;
-
-use libobs::obs_data;
+use libobs::data_ptr;
 
 use crate::{
     run_with_obs,
-    unsafe_send::Sendable,
+    runtime::ObsRuntime,
+    unsafe_send::SmartPointerSendable,
     utils::{ObsError, ObsString},
 };
-
-use super::_ObsDataDropGuard;
 
 #[derive(Debug)]
 pub enum ObsDataChange {
@@ -23,12 +20,20 @@ pub enum ObsDataChange {
 /// This will apply the changes to the `ObsData` object.
 #[must_use = "The `update()` method must be called to apply changes."]
 pub struct ObsDataUpdater {
-    pub(crate) changes: Vec<ObsDataChange>,
-    pub(crate) obs_data: Sendable<*mut obs_data>,
-    pub(crate) _drop_guard: Arc<_ObsDataDropGuard>,
+    changes: Vec<ObsDataChange>,
+    runtime: ObsRuntime,
+    data_ptr: SmartPointerSendable<*mut data_ptr>,
 }
 
 impl ObsDataUpdater {
+    pub(super) fn new(data_ptr: SmartPointerSendable<*mut data_ptr>, runtime: ObsRuntime) -> Self {
+        ObsDataUpdater {
+            changes: Vec::new(),
+            data_ptr,
+            runtime,
+        }
+    }
+
     pub fn set_string_ref(&mut self, key: impl Into<ObsString>, value: impl Into<ObsString>) {
         let key = key.into();
         let value = value.into();
@@ -65,25 +70,27 @@ impl ObsDataUpdater {
     pub fn apply(self) -> Result<(), ObsError> {
         let ObsDataUpdater {
             changes,
-            obs_data,
-            _drop_guard,
+            data_ptr,
+            runtime,
         } = self;
 
-        let obs_data = obs_data.clone();
-        run_with_obs!(_drop_guard.runtime, (obs_data), move || unsafe {
+        let data_ptr = data_ptr.clone();
+        run_with_obs!(runtime, (data_ptr), move || unsafe {
             for change in changes {
                 match change {
-                    ObsDataChange::String(key, value) => {
-                        libobs::obs_data_set_string(obs_data, key.as_ptr().0, value.as_ptr().0)
-                    }
+                    ObsDataChange::String(key, value) => libobs::obs_data_set_string(
+                        data_ptr.get_ptr(),
+                        key.as_ptr().0,
+                        value.as_ptr().0,
+                    ),
                     ObsDataChange::Int(key, value) => {
-                        libobs::obs_data_set_int(obs_data, key.as_ptr().0, value)
+                        libobs::obs_data_set_int(data_ptr.get_ptr(), key.as_ptr().0, value)
                     }
                     ObsDataChange::Bool(key, value) => {
-                        libobs::obs_data_set_bool(obs_data, key.as_ptr().0, value)
+                        libobs::obs_data_set_bool(data_ptr.get_ptr(), key.as_ptr().0, value)
                     }
                     ObsDataChange::Double(key, value) => {
-                        libobs::obs_data_set_double(obs_data, key.as_ptr().0, value)
+                        libobs::obs_data_set_double(data_ptr.get_ptr(), key.as_ptr().0, value)
                     }
                 };
             }

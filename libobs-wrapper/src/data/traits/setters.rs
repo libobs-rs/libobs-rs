@@ -15,15 +15,14 @@ pub trait ObsDataSetters: ObsDataPointers {
         let key = key.into();
         let value = value.into();
 
-        let key_ptr = key.as_ptr();
-        let value_ptr = value.as_ptr();
         let data_ptr = self.as_ptr();
 
-        run_with_obs!(
-            self.runtime(),
-            (data_ptr, key_ptr, value_ptr),
-            move || unsafe { libobs::obs_data_set_string(data_ptr, key_ptr, value_ptr) }
-        )?;
+        run_with_obs!(self.runtime(), (data_ptr, key, value), move || {
+            unsafe {
+                // Safety: The pointer is valid because we are using a smart pointer
+                libobs::obs_data_set_string(data_ptr.get_ptr(), key.as_ptr().0, value.as_ptr().0)
+            }
+        })?;
 
         Ok(self)
     }
@@ -36,12 +35,13 @@ pub trait ObsDataSetters: ObsDataPointers {
         value: i64,
     ) -> Result<&mut Self, ObsError> {
         let key = key.into();
-
-        let key_ptr = key.as_ptr();
         let data_ptr = self.as_ptr();
 
-        run_with_obs!(self.runtime(), (key_ptr, data_ptr), move || unsafe {
-            libobs::obs_data_set_int(data_ptr, key_ptr, value);
+        run_with_obs!(self.runtime(), (key, data_ptr), move || {
+            unsafe {
+                // Safety: The pointer is valid because we are using a smart pointer
+                libobs::obs_data_set_int(data_ptr.get_ptr(), key.as_ptr().0, value);
+            }
         })?;
 
         Ok(self)
@@ -56,10 +56,12 @@ pub trait ObsDataSetters: ObsDataPointers {
     ) -> Result<&mut Self, ObsError> {
         let key = key.into();
 
-        let key_ptr = key.as_ptr();
         let data_ptr = self.as_ptr();
-        run_with_obs!(self.runtime(), (key_ptr, data_ptr), move || unsafe {
-            libobs::obs_data_set_bool(data_ptr, key_ptr, value);
+        run_with_obs!(self.runtime(), (key, data_ptr), move || {
+            unsafe {
+                // Safety: The pointer is valid because we are using a smart pointer
+                libobs::obs_data_set_bool(data_ptr.get_ptr(), key.as_ptr().0, value);
+            }
         })?;
 
         Ok(self)
@@ -73,12 +75,13 @@ pub trait ObsDataSetters: ObsDataPointers {
         value: f64,
     ) -> Result<&mut Self, ObsError> {
         let key = key.into();
-
-        let key_ptr = key.as_ptr();
         let data_ptr = self.as_ptr();
 
-        run_with_obs!(self.runtime(), (key_ptr, data_ptr), move || unsafe {
-            libobs::obs_data_set_double(data_ptr, key_ptr, value);
+        run_with_obs!(self.runtime(), (key, data_ptr), move || {
+            unsafe {
+                // Safety: The pointer is valid because we are using a smart pointer
+                libobs::obs_data_set_double(data_ptr.get_ptr(), key.as_ptr().0, value);
+            }
         })?;
 
         Ok(self)

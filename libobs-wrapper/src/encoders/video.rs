@@ -9,22 +9,22 @@ use crate::{
         object::{inner_fn_update_settings, ObsObjectTrait, ObsObjectTraitSealed},
         ImmutableObsData, ObsData, ObsDataPointers,
     },
-    encoders::ObsEncoderTrait,
-    impl_obs_drop, run_with_obs,
+    encoders::{ObsEncoderTrait, _ObsEncoderDropGuard},
+    run_with_obs,
     runtime::ObsRuntime,
-    unsafe_send::Sendable,
+    unsafe_send::{Sendable, SmartPointerSendable},
     utils::{ObsError, ObsString, VideoEncoderInfo},
 };
 
 #[derive(Clone, Debug)]
 #[allow(dead_code)]
 pub struct ObsVideoEncoder {
-    pub(crate) encoder: Sendable<*mut obs_encoder>,
     pub(crate) id: ObsString,
     pub(crate) name: ObsString,
     pub(crate) settings: Arc<RwLock<ImmutableObsData>>,
     pub(crate) hotkey_data: Arc<RwLock<ImmutableObsData>>,
     pub(crate) runtime: ObsRuntime,
+    pub(crate) encoder: SmartPointerSendable<*mut obs_encoder>,
 }
 
 impl ObsVideoEncoder {
@@ -33,52 +33,76 @@ impl ObsVideoEncoder {
         info: VideoEncoderInfo,
         runtime: ObsRuntime,
     ) -> Result<Arc<Self>, ObsError> {
-        let settings_ptr = match &info.settings {
-            Some(x) => x.as_ptr(),
-            None => Sendable(ptr::null_mut()),
-        };
+        let VideoEncoderInfo {
+            id,
+            name,
+            settings,
+            hotkey_data,
+        } = info;
 
-        let hotkey_data_ptr = match &info.hotkey_data {
-            Some(x) => x.as_ptr(),
-            None => Sendable(ptr::null_mut()),
-        };
+        let settings_ptr = settings.as_ref().map(|s| s.as_ptr());
+        let hotkey_data_ptr = hotkey_data.as_ref().map(|h| h.as_ptr());
 
-        let id_ptr = info.id.as_ptr();
-        let name_ptr = info.name.as_ptr();
         let encoder_ptr = run_with_obs!(
             runtime,
-            (id_ptr, name_ptr, hotkey_data_ptr, settings_ptr),
-            move || unsafe {
-                let ptr = libobs::obs_video_encoder_create(
-                    id_ptr,
-                    name_ptr,
-                    settings_ptr,
-                    hotkey_data_ptr,
-                );
-                Sendable(ptr)
+            (id, name, hotkey_data_ptr, settings_ptr),
+            move || {
+                let settings_ptr_raw = match settings_ptr {
+                    Some(s) => s.get_ptr(),
+                    None => ptr::null_mut(),
+                };
+
+                let hotkey_data_ptr_raw = match hotkey_data_ptr {
+                    Some(h) => h.get_ptr(),
+                    None => ptr::null_mut(),
+                };
+
+                let ptr = unsafe {
+                    libobs::obs_video_encoder_create(
+                        id.as_ptr().0,
+                        name.as_ptr().0,
+                        settings_ptr_raw,
+                        hotkey_data_ptr_raw,
+                    )
+                };
+
+                if ptr.is_null() {
+                    Err(ObsError::NullPointer(None))
+                } else {
+                    Ok(Sendable(ptr))
+                }
             }
-        )?;
+        )??;
 
-        if encoder_ptr.0.is_null() {
-            return Err(ObsError::NullPointer(None));
-        }
+        let encoder_ptr = SmartPointerSendable::new(
+            encoder_ptr.0,
+            Arc::new(_ObsEncoderDropGuard {
+                encoder: encoder_ptr,
+                runtime: runtime.clone(),
+            }),
+        );
 
-        let hotkey_data = match info.hotkey_data {
+        let hotkey_data = match hotkey_data {
             Some(h) => h,
             None => ImmutableObsData::new(&runtime)?,
         };
 
         let settings = {
-            let settings_ptr = run_with_obs!(runtime, (encoder_ptr), move || unsafe {
-                Sendable(libobs::obs_encoder_get_settings(encoder_ptr))
+            let settings_ptr = run_with_obs!(runtime, (encoder_ptr), move || {
+                let ptr = unsafe {
+                    // Safety: encoder_ptr is valid because of the SmartPointer
+                    libobs::obs_encoder_get_settings(encoder_ptr.get_ptr())
+                };
+
+                Sendable(ptr)
             })?;
-            ImmutableObsData::from_raw(settings_ptr, runtime.clone())
+            ImmutableObsData::from_raw_pointer(settings_ptr, runtime.clone())
         };
 
         Ok(Arc::new(Self {
             encoder: encoder_ptr,
-            id: info.id,
-            name: info.name,
+            id,
+            name,
             settings: Arc::new(RwLock::new(settings)),
             hotkey_data: Arc::new(RwLock::new(hotkey_data)),
             runtime,
@@ -86,20 +110,21 @@ impl ObsVideoEncoder {
     }
 
     /// This is only needed once for global video context
-    pub fn set_video_context(
+    /// # Safety
+    /// The handler pointer must be a valid pointer to a video_output that lives as long as this function call.
+    pub unsafe fn set_video_context(
         &mut self,
         handler: Sendable<*mut video_output>,
     ) -> Result<(), ObsError> {
         let self_ptr = self.as_ptr();
-        run_with_obs!(self.runtime, (handler, self_ptr), move || unsafe {
-            libobs::obs_encoder_set_video(self_ptr, handler);
+        run_with_obs!(self.runtime, (handler, self_ptr), move || {
+            unsafe {
+                // Safety: Caller must make sure that the handler pointer is valid and the self pointer is a SmartPointer.
+                libobs::obs_encoder_set_video(self_ptr.get_ptr(), handler.0);
+            }
         })
     }
 }
-
-impl_obs_drop!(ObsVideoEncoder, (encoder), move || unsafe {
-    libobs::obs_encoder_release(encoder);
-});
 
 impl ObsObjectTraitSealed for ObsVideoEncoder {
     fn __internal_replace_settings(&self, settings: ImmutableObsData) -> Result<(), ObsError> {
@@ -132,7 +157,7 @@ impl ObsObjectTraitSealed for ObsVideoEncoder {
     }
 }
 
-impl ObsObjectTrait for ObsVideoEncoder {
+impl ObsObjectTrait<*mut libobs::obs_encoder> for ObsVideoEncoder {
     fn runtime(&self) -> &ObsRuntime {
         &self.runtime
     }
@@ -175,10 +200,10 @@ impl ObsObjectTrait for ObsVideoEncoder {
 
         inner_fn_update_settings!(self, libobs::obs_encoder_update, settings)
     }
-}
 
-impl ObsEncoderTrait for ObsVideoEncoder {
-    fn as_ptr(&self) -> Sendable<*mut obs_encoder> {
+    fn as_ptr(&self) -> SmartPointerSendable<*mut obs_encoder> {
         self.encoder.clone()
     }
 }
+
+impl ObsEncoderTrait for ObsVideoEncoder {}

@@ -27,10 +27,6 @@ macro_rules! forward_obs_output_impl {
             > {
                 self.$var_name.audio_encoders()
             }
-
-            fn as_ptr(&self) -> $crate::unsafe_send::Sendable<*mut libobs::obs_output> {
-                self.$var_name.as_ptr()
-            }
         }
 
         impl $struct_name {

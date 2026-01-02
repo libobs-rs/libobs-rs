@@ -1839,7 +1839,7 @@ const _: () = {
 };
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
-pub struct obs_data {
+pub struct data_ptr {
     _unused: [u8; 0],
 }
 #[repr(C)]
@@ -1852,7 +1852,7 @@ pub struct obs_data_item {
 pub struct obs_data_array {
     _unused: [u8; 0],
 }
-pub type obs_data_t = obs_data;
+pub type obs_data_t = data_ptr;
 pub type obs_data_item_t = obs_data_item;
 pub type obs_data_array_t = obs_data_array;
 pub const obs_data_type_OBS_DATA_NULL: obs_data_type = 0;

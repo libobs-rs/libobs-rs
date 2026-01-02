@@ -1,10 +1,7 @@
 use std::{fmt::Debug, hash::Hash, sync::Arc};
 
 use crate::{
-    data::object::ObsObjectTrait,
-    sources::ObsSourceSignals,
-    unsafe_send::{Sendable, SendableComp},
-    utils::ObsError,
+    data::object::ObsObjectTrait, macros::impl_eq_of_ptr, sources::ObsSourceSignals, unsafe_send::{Sendable, SendableComp}, utils::ObsError
 };
 
 #[doc(hidden)]
@@ -26,22 +23,10 @@ pub trait ObsSourceTraitSealed: Debug + Send + Sync {
     ) -> Result<Option<Sendable<*mut libobs::obs_scene_item>>, ObsError>;
 }
 
-impl PartialEq for dyn ObsSourceTrait {
-    fn eq(&self, other: &Self) -> bool {
-        self.as_ptr().0 == other.as_ptr().0
-    }
-}
+impl_eq_of_ptr!(dyn ObsSourceTrait);
 
-impl Eq for dyn ObsSourceTrait {}
-
-impl Hash for dyn ObsSourceTrait {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.as_ptr().0.hash(state);
-    }
-}
 
 #[allow(private_bounds)]
-pub trait ObsSourceTrait: ObsObjectTrait + ObsSourceTraitSealed {
-    fn as_ptr(&self) -> Sendable<*mut libobs::obs_source_t>;
+pub trait ObsSourceTrait: ObsObjectTrait<*mut libobs::obs_source_t> + ObsSourceTraitSealed {
     fn signals(&self) -> &Arc<ObsSourceSignals>;
 }

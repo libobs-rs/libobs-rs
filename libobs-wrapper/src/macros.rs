@@ -24,7 +24,7 @@ macro_rules! run_with_obs_impl {
                 $runtime.run_with_obs_result(move || {
                     $(let $var = $var;)*
                     let e = {
-                        $(let $var = $var.0;)*
+                        //$(let $var = $var.0;)*
                         $operation
                     };
                     return e()
@@ -81,11 +81,12 @@ macro_rules! impl_obs_drop {
     };
 }
 
+/// Implements PartialEq, Eq and Hash für a struct by comparing the inner pointer given by `as_ptr()`.
 macro_rules! impl_eq_of_ptr {
-    ($struct: ty, $ptr: ident) => {
+    ($struct: ty) => {
         impl PartialEq for $struct {
             fn eq(&self, other: &Self) -> bool {
-                self.$ptr.0 == other.$ptr.0
+                self.as_ptr().get_ptr() == other.as_ptr().get_ptr()
             }
         }
 
@@ -93,7 +94,7 @@ macro_rules! impl_eq_of_ptr {
 
         impl Hash for $struct {
             fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-                self.$ptr.0.hash(state);
+                self.as_ptr().get_ptr().hash(state);
             }
         }
     };

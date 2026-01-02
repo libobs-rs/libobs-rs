@@ -283,7 +283,7 @@ impl ObsContext {
         // anything tied to the OBS context.
         let vid_ptr = Sendable(ovi.as_ptr());
         let reset_video_status = run_with_obs!(self.runtime, (vid_ptr), move || unsafe {
-            libobs::obs_reset_video(vid_ptr)
+            libobs::obs_reset_video(vid_ptr.0)
         })?;
 
         let reset_video_status = num_traits::FromPrimitive::from_i32(reset_video_status);

@@ -5,11 +5,9 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use libobs::obs_output;
-
 use crate::{
     data::object::ObsObjectTrait,
-    encoders::{audio::ObsAudioEncoder, video::ObsVideoEncoder, ObsEncoderTrait},
+    encoders::{audio::ObsAudioEncoder, video::ObsVideoEncoder},
     enums::ObsOutputStopSignal,
     run_with_obs,
     runtime::ObsRuntime,
@@ -34,9 +32,8 @@ pub(crate) trait ObsOutputTraitSealed: Debug + Send + Sync {
 }
 
 #[allow(private_bounds)]
-pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsObjectTrait {
+pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsObjectTrait<*mut libobs::obs_output_t> {
     fn signals(&self) -> &Arc<ObsOutputSignals>;
-    fn as_ptr(&self) -> Sendable<*mut obs_output>;
 
     fn video_encoder(&self) -> &Arc<RwLock<Option<Arc<ObsVideoEncoder>>>>;
     fn audio_encoders(&self) -> &Arc<RwLock<HashMap<usize, Arc<ObsAudioEncoder>>>>;
