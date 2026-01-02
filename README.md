@@ -11,7 +11,7 @@ Documentation is available [here](https://libobs-rs.github.io/libobs-docs/libobs
 
 Simple and safe video recording through libobs.
 
-Currently only tested on Windows and Linux (Ubuntu Wayland / X11). MacOS doesn't work right now, but [we are working on that](https://github.com/libobs-rs/libobs-rs/pull/53).
+Currently only tested on Windows and Linux (Ubuntu Wayland / X11). MacOS doesn't work right now, but [we are working on that](https://github.com/libobs-rs/libobs-rs/pull/53). Currently the active contributors don't have a mac unfortunately. 
 The API is currently unstable and will definitely have breaking revisions in the future.
 
 > [!NOTE]
