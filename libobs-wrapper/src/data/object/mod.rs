@@ -44,6 +44,9 @@ pub trait ObsObjectTraitSealed: Debug + Send + Sync {
 }
 
 #[allow(private_bounds)]
+/// Trait representing an OBS object.
+///
+/// Hashing for this trait is automatically done by comparing the underlying raw pointer addresses.
 pub trait ObsObjectTrait<K: Clone>: ObsObjectClone<K> + ObsObjectTraitSealed {
     fn runtime(&self) -> &ObsRuntime;
     fn settings(&self) -> Result<ImmutableObsData, ObsError>;

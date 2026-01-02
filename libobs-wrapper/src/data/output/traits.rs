@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
+    ffi::CStr,
     fmt::Debug,
-    ptr,
     sync::{Arc, RwLock},
 };
 
@@ -11,7 +11,6 @@ use crate::{
     enums::ObsOutputStopSignal,
     run_with_obs,
     runtime::ObsRuntime,
-    unsafe_send::Sendable,
     utils::{AudioEncoderInfo, ObsError, OutputInfo, VideoEncoderInfo},
 };
 
@@ -67,12 +66,8 @@ pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsObjectTrait<*mut libobs::obs
 
     /// Attaches an existing video encoder to this output.
     ///
-    /// Fails if the output is active or encoder is null.
+    /// Fails if the output is active.
     fn set_video_encoder(&mut self, encoder: Arc<ObsVideoEncoder>) -> Result<(), ObsError> {
-        if encoder.as_ptr().0.is_null() {
-            return Err(ObsError::NullPointer(None));
-        }
-
         if self.is_active()? {
             return Err(ObsError::OutputAlreadyActive);
         }
@@ -81,8 +76,11 @@ pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsObjectTrait<*mut libobs::obs
         let encoder_ptr = encoder.as_ptr();
         let runtime = self.runtime().clone();
 
-        run_with_obs!(runtime, (output_ptr, encoder_ptr), move || unsafe {
-            libobs::obs_output_set_video_encoder(output_ptr, encoder_ptr);
+        run_with_obs!(runtime, (output_ptr, encoder_ptr), move || {
+            unsafe {
+                // Safety: This is safe because we are only using smart pointers.
+                libobs::obs_output_set_video_encoder(output_ptr.get_ptr(), encoder_ptr.get_ptr());
+            }
         })?;
 
         self.video_encoder()
@@ -110,16 +108,12 @@ pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsObjectTrait<*mut libobs::obs
 
     /// Attaches an existing audio encoder to this output at the mixer index.
     ///
-    /// Fails if the output is active or the encoder pointer is null.
+    /// Fails if the output is active.
     fn set_audio_encoder(
         &mut self,
         encoder: Arc<ObsAudioEncoder>,
         mixer_idx: usize,
     ) -> Result<(), ObsError> {
-        if encoder.as_ptr().0.is_null() {
-            return Err(ObsError::NullPointer(None));
-        }
-
         if self.is_active()? {
             return Err(ObsError::OutputAlreadyActive);
         }
@@ -127,8 +121,15 @@ pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsObjectTrait<*mut libobs::obs
         let encoder_ptr = encoder.as_ptr();
         let output_ptr = self.as_ptr();
         let runtime = self.runtime().clone();
-        run_with_obs!(runtime, (output_ptr, encoder_ptr), move || unsafe {
-            libobs::obs_output_set_audio_encoder(output_ptr, encoder_ptr, mixer_idx)
+        run_with_obs!(runtime, (output_ptr, encoder_ptr), move || {
+            unsafe {
+                // Safety: This is safe because we are only using smart pointers.
+                libobs::obs_output_set_audio_encoder(
+                    output_ptr.get_ptr(),
+                    encoder_ptr.get_ptr(),
+                    mixer_idx,
+                );
+            }
         })?;
 
         self.audio_encoders()
@@ -151,8 +152,7 @@ pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsObjectTrait<*mut libobs::obs
             .read()
             .map_err(|e| ObsError::LockError(e.to_string()))?
             .as_ref()
-            .map(|enc| enc.as_ptr())
-            .unwrap_or(Sendable(ptr::null_mut()));
+            .map(|enc| enc.as_ptr());
 
         let audio_encoder_pointers = self
             .audio_encoders()
@@ -162,20 +162,35 @@ pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsObjectTrait<*mut libobs::obs
             .map(|enc| enc.as_ptr())
             .collect::<Vec<_>>();
 
-        let audio_encoder_pointers = Sendable(audio_encoder_pointers);
-
         let output_ptr = self.as_ptr();
         let runtime = self.runtime().clone();
         let res = run_with_obs!(
             runtime,
             (output_ptr, vid_encoder_ptr, audio_encoder_pointers),
-            move || unsafe {
-                libobs::obs_encoder_set_video(vid_encoder_ptr, libobs::obs_get_video());
+            move || {
+                if let Some(vid_encoder_ptr) = vid_encoder_ptr {
+                    unsafe {
+                        // Safety: vid_encoder_ptr is valid because of SmartPointer
+                        libobs::obs_encoder_set_video(
+                            vid_encoder_ptr.get_ptr(),
+                            libobs::obs_get_video(),
+                        );
+                    }
+                }
                 for audio_encoder_ptr in audio_encoder_pointers {
-                    libobs::obs_encoder_set_audio(audio_encoder_ptr.0, libobs::obs_get_audio());
+                    unsafe {
+                        // Safety: audio_encoder_ptr is valid because of SmartPointer
+                        libobs::obs_encoder_set_audio(
+                            audio_encoder_ptr.get_ptr(),
+                            libobs::obs_get_audio(),
+                        );
+                    }
                 }
 
-                libobs::obs_output_start(output_ptr)
+                unsafe {
+                    // Safety: output_ptr is valid because of SmartPointer
+                    libobs::obs_output_start(output_ptr.get_ptr())
+                }
             }
         )?;
 
@@ -184,14 +199,20 @@ pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsObjectTrait<*mut libobs::obs
         }
 
         let runtime = self.runtime().clone();
-        let err = run_with_obs!(runtime, (output_ptr), move || unsafe {
-            Sendable(libobs::obs_output_get_last_error(output_ptr))
+        let err = run_with_obs!(runtime, (output_ptr), move || {
+            let err = unsafe { libobs::obs_output_get_last_error(output_ptr.get_ptr()) };
+
+            if err.is_null() {
+                return None;
+            }
+
+            let err = unsafe { CStr::from_ptr(err) };
+
+            let err = err.to_string_lossy().to_string();
+            Some(err)
         })?;
 
-        let c_str = unsafe { std::ffi::CStr::from_ptr(err.0) };
-        let err_str = c_str.to_str().ok().map(|x| x.to_string());
-
-        Err(ObsError::OutputStartFailure(err_str))
+        Err(ObsError::OutputStartFailure(err))
     }
 
     fn set_paused(&self, should_pause: bool) -> Result<(), ObsError> {
@@ -210,8 +231,11 @@ pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsObjectTrait<*mut libobs::obs
             self.signals().on_unpause()?
         };
 
-        let res = run_with_obs!(runtime, (output_ptr), move || unsafe {
-            libobs::obs_output_pause(output_ptr, should_pause)
+        let res = run_with_obs!(runtime, (output_ptr), move || {
+            unsafe {
+                // Safety: output_ptr is valid because of SmartPointer
+                libobs::obs_output_pause(output_ptr.get_ptr(), should_pause)
+            }
         })?;
 
         if res {
@@ -220,14 +244,23 @@ pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsObjectTrait<*mut libobs::obs
             Ok(())
         } else {
             let runtime = self.runtime().clone();
-            let err = run_with_obs!(runtime, (output_ptr), move || unsafe {
-                Sendable(libobs::obs_output_get_last_error(output_ptr))
+            let err = run_with_obs!(runtime, (output_ptr), move || {
+                let err = unsafe {
+                    // Safety: output_ptr is valid because of SmartPointer
+                    libobs::obs_output_get_last_error(output_ptr.get_ptr())
+                };
+
+                if err.is_null() {
+                    return None;
+                }
+
+                let err = unsafe { CStr::from_ptr(err) };
+                let err = err.to_string_lossy().to_string();
+
+                Some(err)
             })?;
 
-            let c_str = unsafe { std::ffi::CStr::from_ptr(err.0) };
-            let err_str = c_str.to_str().ok().map(|x| x.to_string());
-
-            Err(ObsError::OutputPauseFailure(err_str))
+            Err(ObsError::OutputPauseFailure(err))
         }
     }
 
@@ -244,8 +277,11 @@ pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsObjectTrait<*mut libobs::obs
     fn stop(&mut self) -> Result<(), ObsError> {
         let output_ptr = self.as_ptr();
         let runtime = self.runtime().clone();
-        let output_active = run_with_obs!(runtime, (output_ptr), move || unsafe {
-            libobs::obs_output_active(output_ptr)
+        let output_active = run_with_obs!(runtime, (output_ptr), move || {
+            unsafe {
+                // Safety: output_ptr is valid because of SmartPointer
+                libobs::obs_output_active(output_ptr.get_ptr())
+            }
         })?;
 
         if !output_active {
@@ -258,8 +294,11 @@ pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsObjectTrait<*mut libobs::obs
         let mut rx_deactivate = self.signals().on_deactivate()?;
 
         let runtime = self.runtime().clone();
-        run_with_obs!(runtime, (output_ptr), move || unsafe {
-            libobs::obs_output_stop(output_ptr)
+        run_with_obs!(runtime, (output_ptr), move || {
+            unsafe {
+                // Safety: output_ptr is valid because of SmartPointer
+                libobs::obs_output_stop(output_ptr.get_ptr())
+            }
         })?;
 
         let signal = rx.blocking_recv().map_err(|_| ObsError::NoSenderError)?;
@@ -280,8 +319,11 @@ pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsObjectTrait<*mut libobs::obs
     fn is_active(&self) -> Result<bool, ObsError> {
         let output_ptr = self.as_ptr();
         let runtime = self.runtime().clone();
-        let output_active = run_with_obs!(runtime, (output_ptr), move || unsafe {
-            libobs::obs_output_active(output_ptr)
+        let output_active = run_with_obs!(runtime, (output_ptr), move || {
+            unsafe {
+                // Safety: output_ptr is valid because of SmartPointer
+                libobs::obs_output_active(output_ptr.get_ptr())
+            }
         })?;
 
         Ok(output_active)

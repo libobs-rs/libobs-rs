@@ -17,7 +17,7 @@ mod modules;
 
 mod calldata;
 
-use std::fmt::Debug;
+use std::{collections::HashMap, fmt::Debug, sync::{Arc, RwLock}};
 
 pub use calldata::*;
 pub use error::*;
@@ -47,3 +47,5 @@ pub(crate) unsafe fn calldata_free(data: *mut libobs::calldata_t) {
 pub trait ObsDropGuard: Debug {
 
 }
+
+pub(crate) type GeneralTraitHashMap<T, K> = Arc<RwLock<HashMap<Arc<Box<T>>, K>>>;

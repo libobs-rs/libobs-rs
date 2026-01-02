@@ -3,7 +3,7 @@ macro_rules! is_of_type_result {
         {
             use crate::data::properties::ObsPropertyType;
 
-            let p_type = unsafe { libobs::obs_property_get_type($name) };
+            let p_type = unsafe { libobs::obs_property_get_type($name.get_ptr()) };
             let p_type = crate::macros::enum_from_number!(ObsPropertyType, p_type);
 
             if p_type.is_none_or(|e| !matches!(e, ObsPropertyType::$prop_type)) {
@@ -54,7 +54,7 @@ macro_rules! get_enum {
     ($pointer_name: ident, $name: ident, $enum_name: ident) => {
         paste::paste! {
             {
-                let v = unsafe { libobs::[<obs_property_ $name>]($pointer_name) };
+                let v = unsafe { libobs::[<obs_property_ $name>]($pointer_name.get_ptr()) };
 
                 crate::macros::enum_from_number!($enum_name, v)
                     .ok_or_else(|| {
@@ -72,7 +72,7 @@ macro_rules! get_enum {
 macro_rules! get_opt_str {
     ($pointer_name: ident, $name: ident) => {{
         paste::paste! {
-            let v = unsafe { libobs::[<obs_property_ $name>]($pointer_name) };
+            let v = unsafe { libobs::[<obs_property_ $name>]($pointer_name.get_ptr()) };
         }
         if v.is_null() {
             None

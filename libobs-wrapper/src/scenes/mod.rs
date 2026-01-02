@@ -1,62 +1,42 @@
 mod transform_info;
 pub use transform_info::*;
 
-use std::collections::{HashMap, HashSet};
+mod scene_drop_guards;
+mod scene_item;
+
+pub use scene_item::SceneItemRef;
+
+use std::collections::HashMap;
 use std::fmt::Debug;
-use std::hash::Hash;
-use std::ptr;
 use std::sync::{Arc, RwLock};
 
-use libobs::{obs_scene_item, obs_scene_t, obs_source_t, obs_transform_info, obs_video_info};
+use libobs::{obs_scene_t, obs_source_t, obs_transform_info, obs_video_info};
 
 use crate::data::object::ObsObjectTrait;
 use crate::enums::ObsBoundsType;
 use crate::macros::impl_eq_of_ptr;
-use crate::sources::{ObsSourceTrait, ObsSourceTraitSealed};
-use crate::unsafe_send::{SendableComp, SmartPointerSendable};
-use crate::utils::ObsDropGuard;
+use crate::scenes::scene_drop_guards::_SceneDropGuard;
+use crate::sources::{ObsFilterGuardPair, ObsSourceTrait, _ObsRemoveFilterOnDrop};
+use crate::unsafe_send::SmartPointerSendable;
+use crate::utils::GeneralTraitHashMap;
 use crate::{
     graphics::Vec2,
-    impl_obs_drop, impl_signal_manager, run_with_obs,
+    impl_signal_manager, run_with_obs,
     runtime::ObsRuntime,
     sources::{ObsFilterRef, ObsSourceRef},
     unsafe_send::Sendable,
     utils::{ObsError, ObsString, SourceInfo},
 };
 
-#[derive(Debug)]
-struct _SceneDropGuard {
-    scene: Sendable<*mut obs_scene_t>,
-    runtime: ObsRuntime,
-}
-
-impl ObsDropGuard for _SceneDropGuard {}
-
-impl_obs_drop!(_SceneDropGuard, (scene), move || unsafe {
-    let scene_source = libobs::obs_scene_get_source(scene.0);
-
-    for i in 0..libobs::MAX_CHANNELS {
-        let current_source = libobs::obs_get_output_source(i);
-        if current_source == scene_source {
-            libobs::obs_set_output_source(i, ptr::null_mut());
-        }
-
-        libobs::obs_source_release(current_source);
-    }
-
-    libobs::obs_source_release(scene_source);
-    libobs::obs_scene_release(scene.0);
-});
-
-type GeneralSetStorage<T> = Arc<RwLock<HashSet<Arc<Box<T>>>>>;
+struct _NoOpDropGuard;
+impl crate::utils::ObsDropGuard for _NoOpDropGuard {}
 
 #[derive(Debug, Clone)]
 pub struct ObsSceneRef {
     name: ObsString,
-    sources: GeneralSetStorage<dyn ObsSourceTrait>,
-    /// Maps the currently current active scenes by their channel (this is a shared reference between all scenes)
-    active_scenes: Arc<RwLock<HashMap<u32, ObsSceneRef>>>,
-
+    global_active_scenes: Arc<RwLock<HashMap<u32, ObsSceneRef>>>,
+    attached_scene_items: GeneralTraitHashMap<dyn ObsSourceTrait, Vec<SceneItemRef>>,
+    attached_filters: Arc<RwLock<Vec<ObsFilterGuardPair>>>,
     runtime: ObsRuntime,
     signals: Arc<ObsSceneSignals>,
     scene: SmartPointerSendable<*mut obs_scene_t>,
@@ -70,11 +50,22 @@ impl ObsSceneRef {
         active_scenes: Arc<RwLock<HashMap<u32, ObsSceneRef>>>,
         runtime: ObsRuntime,
     ) -> Result<Self, ObsError> {
-        let name_clone = name.clone();
-        let scene = run_with_obs!(runtime, (name_clone), move || unsafe {
-            let name_ptr = name_clone.as_ptr();
-            Sendable(libobs::obs_scene_create(name_ptr.0))
-        })?;
+        let scene = run_with_obs!(runtime, (name), move || unsafe {
+            let name_ptr = name.as_ptr();
+
+            let scene_ptr = libobs::obs_scene_create(name_ptr.0);
+            if scene_ptr.is_null() {
+                return Err(ObsError::NullPointer(None));
+            }
+
+            let source_ptr = libobs::obs_scene_get_source(scene_ptr);
+            if source_ptr.is_null() {
+                libobs::obs_scene_release(scene_ptr);
+                return Err(ObsError::NullPointer(None));
+            }
+
+            Ok(Sendable(scene_ptr))
+        })??;
 
         let drop_guard = Arc::new(_SceneDropGuard {
             scene: scene.clone(),
@@ -87,8 +78,9 @@ impl ObsSceneRef {
         Ok(Self {
             name,
             scene,
-            sources: Arc::new(RwLock::new(HashSet::new())),
-            active_scenes,
+            attached_scene_items: Arc::new(RwLock::new(HashMap::new())),
+            attached_filters: Arc::new(RwLock::new(Vec::new())),
+            global_active_scenes: active_scenes,
             runtime,
             signals,
         })
@@ -136,7 +128,7 @@ impl ObsSceneRef {
         }
 
         let mut s = self
-            .active_scenes
+            .global_active_scenes
             .write()
             .map_err(|e| ObsError::LockError(format!("{:?}", e)))?;
 
@@ -158,18 +150,12 @@ impl ObsSceneRef {
         })
     }
 
-    /// Adds and creates the specified source to this scene. Returns a reference to the created source. The source is also stored internally in this scene.
-    ///
-    /// If you need to remove the source later, use `remove_source`.
-    pub fn add_source(&mut self, info: SourceInfo) -> Result<ObsSourceRef, ObsError> {
-        let source = ObsSourceRef::new(
-            info.id,
-            info.name,
-            info.settings,
-            info.hotkey_data,
-            self.runtime.clone(),
-        )?;
-
+    /// Adds the specified source to this scene. Returns a reference to the created scene item.
+    /// You can use that SceneItemPtr to manipulate the source within this scene (position, scale, rotation, etc).
+    pub fn add_source<T: ObsSourceTrait + 'static>(
+        &mut self,
+        source: T,
+    ) -> Result<SceneItemRef, ObsError> {
         let scene_ptr = self.scene.clone();
         let source_ptr = source.as_ptr();
 
@@ -184,20 +170,44 @@ impl ObsSceneRef {
             } else {
                 Ok(Sendable(ptr))
             }
-        })?;
+        })??;
 
-        //TODO We should clear one reference because with this obs doesn't clean up properly
-        {
-            // Keep this as is, we want to make sure that IF the lock is poisoned, we don't add the source
-            let mut sources = self
-                .sources
-                .write()
-                .map_err(|e| ObsError::LockError(format!("{:?}", e)))?;
+        let scene_item_ptr = SmartPointerSendable::new(
+            ptr.0,
+            Arc::new(_ObsSceneItemDropGuard {
+                scene_item: ptr.clone(),
+                runtime: self.runtime.clone(),
+            }),
+        );
 
-            source.add_scene_item_ptr(SendableComp(self.scene.0), ptr.clone())?;
-            sources.insert(Arc::new(Box::new(source.clone())));
-        }
-        Ok(source)
+        self.attached_scene_items
+            .write()
+            .map_err(|e| ObsError::LockError(format!("{:?}", e)))?
+            .entry(Arc::new(Box::new(source)))
+            .or_insert_with(Vec::new)
+            .push(scene_item_ptr.clone());
+
+        Ok(scene_item_ptr)
+    }
+
+    /// Adds and creates the specified source to this scene. Returns a reference to the created source. The source is also stored internally in this scene.
+    ///
+    /// If you need to remove the source later, use `remove_source` or if you addded multiple of the same source ,call `remove_scene_item` by using the corresponding SceneItemPtr.
+    pub fn add_and_create_source(
+        &mut self,
+        info: SourceInfo,
+    ) -> Result<(ObsSourceRef, SceneItemPtr), ObsError> {
+        let source = ObsSourceRef::new(
+            info.id,
+            info.name,
+            info.settings,
+            info.hotkey_data,
+            self.runtime.clone(),
+        )?;
+
+        let scene_item = self.add_source(source.clone())?;
+
+        Ok((source, scene_item))
     }
 
     /// Gets a source by name from this scene. Returns None if no source with the given name exists in this scene.
@@ -206,10 +216,10 @@ impl ObsSceneRef {
         name: &str,
     ) -> Result<Option<Arc<Box<dyn ObsSourceTrait>>>, ObsError> {
         let r = self
-            .sources
+            .attached_scene_items
             .read()
             .map_err(|e| ObsError::LockError(format!("{:?}", e)))?
-            .iter()
+            .keys()
             .find(|s| s.name() == name)
             .cloned();
 
@@ -218,87 +228,81 @@ impl ObsSceneRef {
 
     /// Removes the given source from this scene. Removes the corresponding scene item as well. It may be possible that this source is still added to another scene.
     pub fn remove_source<T: ObsSourceTrait>(&mut self, source: T) -> Result<(), ObsError> {
-        let sendable_comp = SendableComp(self.scene.0);
-        {
-            let scene_item_ptr = source
-                .get_scene_item_ptr(&sendable_comp)?
-                .ok_or(ObsError::SourceNotFound)?;
+        let source_ptr = source.as_ptr().get_ptr();
 
-            run_with_obs!(self.runtime, (scene_item_ptr), move || unsafe {
-                // Remove the scene item
-                libobs::obs_sceneitem_remove(scene_item_ptr);
-                // Release the scene item reference
-                libobs::obs_sceneitem_release(scene_item_ptr);
-            })?;
-        }
-
-        // We need to make sure to remove references from both the scene and the source
-        self.sources
+        self.attached_scene_items
             .write()
             .map_err(|e| ObsError::LockError(format!("{:?}", e)))?
-            .retain(|s| s.as_ptr().0 != source.as_ptr().0);
-
-        source.remove_scene_item_ptr(sendable_comp)?;
+            .retain(|s, _| {
+                //TODO: Maybe find a better way to utilize the HashMap's capabilities here
+                s.as_ptr().get_ptr() != source_ptr
+            });
 
         Ok(())
     }
 
+    pub fn remove_scene_item(&mut self, scene_item: SceneItemPtr) -> Result<(), ObsError> {
+        let mut guard = self.attached_scene_items
+            .write()
+            .map_err(|e| ObsError::LockError(format!("{:?}", e)))?;
+
+        guard.iter_mut().for_each(|(_, items)| {
+            items.retain(|item| item.get_ptr() != scene_item.get_ptr());
+        });
+        Ok(())
+    }
+
     pub fn remove_all_sources(&mut self) -> Result<(), ObsError> {
-        let sendable_comp = SendableComp(self.scene.0);
-        let sources = {
-            let mut sources_guard = self
-                .sources
-                .write()
-                .map_err(|e| ObsError::LockError(format!("{:?}", e)))?;
-
-            let sources: Vec<Arc<Box<dyn ObsSourceTrait>>> = sources_guard.drain().collect();
-
-            sources
-        };
-
-        for source in sources {
-            let scene_item_ptr = source
-                .get_scene_item_ptr(&sendable_comp)?
-                .ok_or(ObsError::SourceNotFound)?;
-
-            run_with_obs!(self.runtime, (scene_item_ptr), move || unsafe {
-                // Remove the scene item
-                libobs::obs_sceneitem_remove(scene_item_ptr);
-                // Release the scene item reference
-                libobs::obs_sceneitem_release(scene_item_ptr);
-            })?;
-
-            source.remove_scene_item_ptr(sendable_comp.clone())?;
-        }
+        // Dropping the scene items is handled by the smart pointer drop guards
+        self.attached_scene_items
+            .write()
+            .map_err(|e| ObsError::LockError(format!("{:?}", e)))?
+            .clear();
 
         Ok(())
     }
 
     /// Adds a filter to the given source in this scene.
-    pub fn add_scene_filter<T: ObsSourceTrait>(
-        &self,
-        source: &T,
-        filter_ref: &ObsFilterRef,
-    ) -> Result<(), ObsError> {
-        let source_ptr = source.as_ptr();
-        let filter_ptr = filter_ref.source.clone();
-        run_with_obs!(self.runtime, (source_ptr, filter_ptr), move || unsafe {
-            libobs::obs_source_filter_add(source_ptr, filter_ptr);
+    pub fn add_scene_filter(&self, filter_ref: &ObsFilterRef) -> Result<(), ObsError> {
+        let source_ptr = self.get_scene_source_ptr()?;
+        let filter_ptr = filter_ref.as_ptr();
+
+        let mut guard = self.attached_filters.write().map_err(|_| {
+            ObsError::LockError("Failed to acquire write lock on attached filters".into())
         })?;
+
+        run_with_obs!(self.runtime, (source_ptr, filter_ptr), move || {
+            unsafe {
+                // Safety: Both source_ptr and filter_ptr are valid because of SmartPointers
+                libobs::obs_source_filter_add(source_ptr.0, filter_ptr.get_ptr());
+            };
+        })?;
+
+        guard.push(ObsFilterGuardPair {
+            filter: filter_ref.clone(),
+            guard: Arc::new(_ObsRemoveFilterOnDrop::new(
+                // We are using a no-op drop guard, because we are keeping the actual scene alive in the additional variable field
+                SmartPointerSendable::new(source_ptr.0, Arc::new(_NoOpDropGuard)),
+                filter_ref.as_ptr(),
+                self.as_ptr(),
+                self.runtime.clone(),
+            )),
+        });
+
         Ok(())
     }
 
     /// Removes a filter from the this scene (internally removes the filter to the scene's source).
-    pub fn remove_scene_filter<T: ObsSourceTrait>(
-        &self,
-        source: &T,
-        filter_ref: &ObsFilterRef,
-    ) -> Result<(), ObsError> {
-        let source_ptr = source.as_ptr();
-        let filter_ptr = filter_ref.source.clone();
-        run_with_obs!(self.runtime, (source_ptr, filter_ptr), move || unsafe {
-            libobs::obs_source_filter_remove(source_ptr, filter_ptr);
-        })?;
+    pub fn remove_scene_filter(&self, filter_ref: &ObsFilterRef) -> Result<(), ObsError> {
+        self.attached_filters
+            .write()
+            .map_err(|_| {
+                ObsError::LockError("Failed to acquire write lock on attached filters".into())
+            })?
+            .retain(|f| {
+                // Keep everything except this one filter
+                f.get_inner().as_ptr().get_ptr() != filter_ref.as_ptr().get_ptr()
+            });
         Ok(())
     }
 
@@ -308,23 +312,29 @@ impl ObsSceneRef {
     pub fn get_scene_item_ptr<T: ObsSourceTrait>(
         &self,
         source: &T,
-    ) -> Result<Sendable<*mut obs_scene_item>, ObsError> {
-        let sendable_comp = SendableComp(self.scene.0);
-        let scene_item_ptr = source
-            .get_scene_item_ptr(&sendable_comp)?
-            .ok_or(ObsError::SourceNotFound)?
-            .clone();
+    ) -> Result<Vec<SceneItemPtr>, ObsError> {
+        let guard = self.attached_scene_items
+            .read()
+            .map_err(|e| ObsError::LockError(format!("{:?}", e)))?;
 
-        Ok(scene_item_ptr)
+        let res = guard    .iter()
+            .find_map(|(s, scene_item_ptr)| {
+                if s.as_ptr().get_ptr() == source.as_ptr().get_ptr() {
+                    Some(scene_item_ptr.clone())
+                } else {
+                    None
+                }
+            })
+            .unwrap_or_else(Vec::new);
+
+        Ok(res)
     }
 
     /// Gets the transform info of the given source in this scene.
-    pub fn get_transform_info<T: ObsSourceTrait>(
+    pub fn get_transform_info(
         &self,
-        source: &T,
+        scene_item: SceneItemPtr,
     ) -> Result<ObsTransformInfo, ObsError> {
-        let scene_item_ptr = self.get_scene_item_ptr(source)?;
-
         let item_info = run_with_obs!(self.runtime, (scene_item_ptr), move || unsafe {
             let mut item_info: obs_transform_info = std::mem::zeroed();
             libobs::obs_sceneitem_get_info2(scene_item_ptr, &mut item_info);

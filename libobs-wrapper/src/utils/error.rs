@@ -74,6 +74,9 @@ pub enum ObsError {
     /// This error should NEVER occur. If you are not using the runtime manually or have the "enable_runtime" feature enabled
     /// then please report this to the crate maintainer as this indicates a bug in the crate.
     RuntimeOutsideThread,
+
+    /// A filter was already applied to a source
+    FilterAlreadyApplied
 }
 
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -117,6 +120,7 @@ impl Display for ObsError {
             ObsError::RuntimeOutsideThread => write!(f, "Attempted to call a OBS runtime function from outside the OBS thread. This is a bug in the crate!"),
             #[cfg(not(feature="enable_runtime"))]
             ObsError::RuntimeOutsideThread => write!(f, "Attempted to call a OBS runtime function from outside the OBS thread. Make sure that you do not use any OBS struct from a different thread than the one where the ObsContext was initialized. THIS BUG WILL CAUSE MEMORY CORRUPTION OR DEADLOCKS!"),
+            ObsError::FilterAlreadyApplied => write!(f, "Filter was applied already."),
         }
     }
 }

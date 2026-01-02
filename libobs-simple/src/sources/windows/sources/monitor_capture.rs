@@ -96,7 +96,7 @@ impl ObsSourceBuilder for MonitorCaptureSourceBuilder {
         let runtime = self.runtime.clone();
 
         let b = self.build()?;
-        let res = scene.add_source(b)?;
+        let res = scene.add_and_create_source(b)?;
         let mut res = MonitorCaptureSource::new(res)?;
 
         if let Some(method) = method_to_set {

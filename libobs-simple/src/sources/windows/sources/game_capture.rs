@@ -203,7 +203,7 @@ impl ObsSourceBuilder for GameCaptureSourceBuilder {
     {
         let s = self.build()?;
 
-        let source = scene.add_source(s)?;
+        let source = scene.add_and_create_source(s)?;
         let source = GameCaptureSource::new(source)?;
 
         Ok(source)

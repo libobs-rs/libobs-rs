@@ -2,40 +2,16 @@
 #[macro_export]
 macro_rules! forward_obs_source_impl {
     ($struct_name: ident, $var_name: ident) => {
-        impl $crate::sources::ObsSourceTraitSealed for $struct_name {
-            fn add_scene_item_ptr(
-                &self,
-                scene_ptr: $crate::unsafe_send::SendableComp<*mut libobs::obs_scene_t>,
-                item_ptr: $crate::unsafe_send::Sendable<*mut libobs::obs_scene_item>,
-            ) -> Result<(), $crate::utils::ObsError> {
-                self.$var_name.add_scene_item_ptr(scene_ptr, item_ptr)
-            }
-
-            fn remove_scene_item_ptr(
-                &self,
-                scene_ptr: $crate::unsafe_send::SendableComp<*mut libobs::obs_scene_t>,
-            ) -> Result<(), libobs_wrapper::utils::ObsError> {
-                self.$var_name.remove_scene_item_ptr(scene_ptr)
-            }
-
-            fn get_scene_item_ptr(
-                &self,
-                scene_ptr: &$crate::unsafe_send::SendableComp<*mut libobs::obs_scene_t>,
-            ) -> Result<
-                Option<$crate::unsafe_send::Sendable<*mut libobs::obs_scene_item>>,
-                $crate::utils::ObsError,
-            > {
-                self.$var_name.get_scene_item_ptr(scene_ptr)
-            }
-        }
-
         impl $crate::sources::ObsSourceTrait for $struct_name {
             fn signals(&self) -> &std::sync::Arc<$crate::sources::ObsSourceSignals> {
                 self.$var_name.signals()
             }
 
-            fn as_ptr(&self) -> $crate::unsafe_send::Sendable<*mut libobs::obs_source_t> {
-                self.$var_name.as_ptr()
+            fn get_active_filters(&self) -> Result<Vec<$crate::sources::ObsFilterGuardPair>, $crate::utils::ObsError> {
+                self.$var_name.get_active_filters()
+            }
+            fn apply_filter(&self, filter: &$crate::sources::ObsFilterRef) -> Result<(), $crate::utils::ObsError> {
+                self.$var_name.apply_filter(filter)
             }
         }
 

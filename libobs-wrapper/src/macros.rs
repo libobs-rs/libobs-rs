@@ -86,14 +86,16 @@ macro_rules! impl_eq_of_ptr {
     ($struct: ty) => {
         impl PartialEq for $struct {
             fn eq(&self, other: &Self) -> bool {
+                use crate::data::object::ObsObjectTrait;
                 self.as_ptr().get_ptr() == other.as_ptr().get_ptr()
             }
         }
 
         impl Eq for $struct {}
 
-        impl Hash for $struct {
+        impl std::hash::Hash for $struct {
             fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+                use crate::data::object::ObsObjectTrait;
                 self.as_ptr().get_ptr().hash(state);
             }
         }
