@@ -1,7 +1,7 @@
 use getters0::Getters;
 
 use crate::{
-    data::properties::{get_enum, macros::is_of_type_result, ObsTextInfoType, ObsTextType},
+    data::properties::{get_enum, macros::unsafe_is_of_type_result, ObsTextInfoType, ObsTextType},
     run_with_obs,
 };
 
@@ -30,13 +30,19 @@ impl TryFrom<PropertyCreationInfo> for ObsTextProperty {
         }: PropertyCreationInfo,
     ) -> Result<Self, Self::Error> {
         run_with_obs!(runtime, (pointer), move || {
-            is_of_type_result!(Text, pointer)?;
+            unsafe_is_of_type_result!(Text, pointer)?;
 
             let info_type = get_enum!(pointer, text_info_type, ObsTextInfoType)?;
             let text_type = get_enum!(pointer, text_type, ObsTextType)?;
 
-            let monospace = unsafe { libobs::obs_property_text_monospace(pointer) };
-            let word_wrap = unsafe { libobs::obs_property_text_info_word_wrap(pointer) };
+            let monospace = unsafe {
+                // Safety: The caller must have ensured that the pointer is valid
+                libobs::obs_property_text_monospace(pointer.0)
+            };
+            let word_wrap = unsafe {
+                // Safety: The caller must have ensured that the pointer is valid
+                libobs::obs_property_text_info_word_wrap(pointer.0)
+            };
 
             Ok(ObsTextProperty {
                 name,

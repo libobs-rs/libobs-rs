@@ -34,20 +34,43 @@ macro_rules! impl_from_property {
                     $crate::run_with_obs!(runtime, (pointer), move || {
                         use crate::data::properties::ObsNumberType;
 
-                        let min = unsafe { libobs::[<obs_property_ $obs_number_name _min>](pointer) };
-                        let max = unsafe { libobs::[<obs_property_ $obs_number_name _max>](pointer) };
-                        let step = unsafe { libobs::[<obs_property_ $obs_number_name _step>](pointer)};
+                        let min = unsafe {
+// Safety: The caller must have ensured that the pointer is valid
+                            libobs::[<obs_property_ $obs_number_name _min>](pointer.0)
+                        };
 
-                        let suffix = unsafe { libobs::[<obs_property_ $obs_number_name _suffix>](pointer) };
+                        let max = unsafe {
+                            // Safety: The caller must have ensured that the pointer is valid
+                            libobs::[<obs_property_ $obs_number_name _max>](pointer.0)
+                        };
+
+                        let step = unsafe {
+                            // Safety: The caller must have ensured that the pointer is valid
+                            libobs::[<obs_property_ $obs_number_name _step>](pointer.0)
+                        };
+
+                        let suffix = unsafe {
+                            // Safety: The caller must have ensured that the pointer is valid
+                            libobs::[<obs_property_ $obs_number_name _suffix>](pointer.0)
+                        };
+
                         let suffix = if suffix.is_null() {
                             String::new()
                         } else {
-                            let suffix = unsafe { std::ffi::CStr::from_ptr(suffix) };
+                            let suffix = unsafe {
+                                // Safety: Safe because of we did a null check
+                                std::ffi::CStr::from_ptr(suffix)
+                            };
+
                             let suffix = suffix.to_str().unwrap_or_default();
                             suffix.to_string()
                         };
 
-                        let number_type = unsafe { libobs::[<obs_property_ $obs_number_name _type >](pointer) };
+                        let number_type = unsafe {
+                            // Safety: The caller must have ensured that the pointer is valid
+                            libobs::[<obs_property_ $obs_number_name _type >](pointer.0)
+                        };
+
                         let number_type = crate::macros::enum_from_number!(ObsNumberType, number_type);
 
                         if number_type.is_none() {

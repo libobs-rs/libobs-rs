@@ -1,7 +1,7 @@
 use getters0::Getters;
 
 use crate::{
-    data::properties::{get_enum, get_opt_str, macros::is_of_type_result, ObsPathType},
+    data::properties::{get_enum, get_opt_str, macros::unsafe_is_of_type_result, ObsPathType},
     run_with_obs,
 };
 
@@ -29,7 +29,7 @@ impl TryFrom<PropertyCreationInfo> for ObsPathProperty {
         }: PropertyCreationInfo,
     ) -> Result<Self, Self::Error> {
         run_with_obs!(runtime, (pointer), move || {
-            is_of_type_result!(Path, pointer)?;
+            unsafe_is_of_type_result!(Path, pointer)?;
 
             let path_type = get_enum!(pointer, path_type, ObsPathType)?;
             let filter = get_opt_str!(pointer, path_filter).unwrap_or_default();

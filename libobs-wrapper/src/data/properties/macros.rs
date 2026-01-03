@@ -1,9 +1,12 @@
-macro_rules! is_of_type_result {
+macro_rules! unsafe_is_of_type_result {
     ($prop_type: ident, $name: ident) => {{
         {
             use crate::data::properties::ObsPropertyType;
 
-            let p_type = unsafe { libobs::obs_property_get_type($name.get_ptr()) };
+            let p_type = unsafe {
+                // Safety: The caller must have ensured that the pointer is valid
+                libobs::obs_property_get_type($name.0)
+            };
             let p_type = crate::macros::enum_from_number!(ObsPropertyType, p_type);
 
             if p_type.is_none_or(|e| !matches!(e, ObsPropertyType::$prop_type)) {
@@ -39,7 +42,7 @@ macro_rules! impl_general_property {
                     }: crate::data::properties::PropertyCreationInfo,
                 ) -> Result<Self, Self::Error> {
                     crate::run_with_obs!(runtime, (pointer), move || {
-                        crate::data::properties::is_of_type_result!($type, pointer)?;
+                        crate::data::properties::unsafe_is_of_type_result!($type, pointer)?;
                         Ok(())
                     })??;
 
@@ -54,7 +57,10 @@ macro_rules! get_enum {
     ($pointer_name: ident, $name: ident, $enum_name: ident) => {
         paste::paste! {
             {
-                let v = unsafe { libobs::[<obs_property_ $name>]($pointer_name.get_ptr()) };
+                let v = unsafe {
+                    // Safety: The caller must have ensured that the pointer is valid
+                    libobs::[<obs_property_ $name>]($pointer_name.0)
+                };
 
                 crate::macros::enum_from_number!($enum_name, v)
                     .ok_or_else(|| {
@@ -72,7 +78,7 @@ macro_rules! get_enum {
 macro_rules! get_opt_str {
     ($pointer_name: ident, $name: ident) => {{
         paste::paste! {
-            let v = unsafe { libobs::[<obs_property_ $name>]($pointer_name.get_ptr()) };
+            let v = unsafe { libobs::[<obs_property_ $name>]($pointer_name.0) };
         }
         if v.is_null() {
             None
@@ -91,4 +97,4 @@ macro_rules! get_opt_str {
 pub(super) use get_enum;
 pub(super) use get_opt_str;
 pub(super) use impl_general_property;
-pub(super) use is_of_type_result;
+pub(super) use unsafe_is_of_type_result;

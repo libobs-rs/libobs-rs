@@ -1,7 +1,7 @@
 use getters0::Getters;
 
 use crate::{
-    data::properties::{get_enum, get_opt_str, is_of_type_result, ObsEditableListType},
+    data::properties::{get_enum, get_opt_str, unsafe_is_of_type_result, ObsEditableListType},
     run_with_obs,
 };
 
@@ -29,7 +29,7 @@ impl TryFrom<PropertyCreationInfo> for ObsEditableListProperty {
         }: PropertyCreationInfo,
     ) -> Result<Self, Self::Error> {
         run_with_obs!(runtime, (pointer), move || {
-            is_of_type_result!(EditableList, pointer)?;
+            unsafe_is_of_type_result!(EditableList, pointer)?;
 
             let list_type = get_enum!(pointer, list_type, ObsEditableListType)?;
             let filter = get_opt_str!(pointer, path_filter).unwrap_or_default();

@@ -16,7 +16,7 @@ mod text;
 pub(crate) struct PropertyCreationInfo {
     pub name: String,
     pub description: Option<String>,
-    pub pointer: SmartPointerSendable<*mut libobs::obs_property>,
+    pub pointer: Sendable<*mut libobs::obs_property>,
     runtime: ObsRuntime,
 }
 
@@ -33,7 +33,7 @@ pub use text::*;
 use crate::{
     run_with_obs,
     runtime::ObsRuntime,
-    unsafe_send::SmartPointerSendable,
+    unsafe_send::Sendable,
     utils::ObsError,
 };
 
@@ -46,10 +46,10 @@ impl ObsPropertyType {
     unsafe fn inner_to_property_struct(
         &self,
         runtime: &ObsRuntime,
-        pointer: SmartPointerSendable<*mut obs_property>,
+        pointer: Sendable<*mut obs_property>,
     ) -> Result<ObsProperty, ObsError> {
         let (name, description) = run_with_obs!(runtime, (pointer), move || {
-            let name = unsafe { libobs::obs_property_name(pointer.get_ptr()) };
+            let name = unsafe { libobs::obs_property_name(pointer.0) };
             if name.is_null() {
                 return Err(ObsError::NullPointer(Some(
                     "Property name pointer is null".to_string(),
@@ -59,7 +59,7 @@ impl ObsPropertyType {
             let name = unsafe { CStr::from_ptr(name) };
             let name = name.to_string_lossy().to_string();
 
-            let description = unsafe { libobs::obs_property_description(pointer.get_ptr()) };
+            let description = unsafe { libobs::obs_property_description(pointer.0) };
             let description = if description.is_null() {
                 None
             } else {
@@ -103,12 +103,14 @@ impl ObsPropertyType {
         Ok(data)
     }
 
+    /// Note to future self: I've tried to refactor this to use SmartPointerSendable directly, but the pointer of the
+    /// iteration class shouldn't be freed, so its better to just use the raw pointer directly.
     /// # Safety
     /// You must make sure that `pointer` is a valid pointer to an `obs_property_t` struct.
-    pub unsafe fn to_property_struct(
+    pub(in crate::data::properties) unsafe fn to_property_struct(
         &self,
         runtime: &ObsRuntime,
-        pointer: SmartPointerSendable<*mut obs_property>,
+        pointer: Sendable<*mut obs_property>,
     ) -> Result<ObsProperty, ObsError> {
         self.inner_to_property_struct(runtime, pointer)
     }

@@ -1,6 +1,6 @@
 use super::PropertyCreationInfo;
 use crate::{
-    data::properties::{get_enum, is_of_type_result, ObsComboFormat, ObsComboType},
+    data::properties::{get_enum, unsafe_is_of_type_result, ObsComboFormat, ObsComboType},
     run_with_obs,
 };
 use getters0::Getters;
@@ -55,55 +55,76 @@ impl TryFrom<PropertyCreationInfo> for ObsListProperty {
         }: PropertyCreationInfo,
     ) -> Result<Self, Self::Error> {
         run_with_obs!(runtime, (pointer), move || {
-            is_of_type_result!(List, pointer)?;
+            unsafe_is_of_type_result!(List, pointer)?;
 
             let list_type = get_enum!(pointer, list_type, ObsComboType)?;
             let format = get_enum!(pointer, list_format, ObsComboFormat)?;
 
-            let count = unsafe { libobs::obs_property_list_item_count(pointer) };
+            let count = unsafe {
+                // Safety: Safe because of smart pointer
+                libobs::obs_property_list_item_count(pointer.0)
+            };
             let mut items = Vec::with_capacity(count);
 
             for i in 0..count {
-                let list_item_name = unsafe { libobs::obs_property_list_item_name(pointer, i) };
+                let list_item_name = unsafe {
+                    // Safety: The caller must have ensured that the pointer is valid
+                    libobs::obs_property_list_item_name(pointer.0, i)
+                };
+
                 if list_item_name.is_null() {
                     continue;
                 }
 
                 let list_name = unsafe {
+                    // Safety: Safe because we did a null check
                     CStr::from_ptr(list_item_name)
                         .to_str()
                         .unwrap_or_default()
                         .to_string()
                 };
 
-                let is_disabled = unsafe { libobs::obs_property_list_item_disabled(pointer, i) };
+                let is_disabled = unsafe {
+                    // Safety: Safe because of smart pointer
+                    libobs::obs_property_list_item_disabled(pointer.0, i)
+                };
                 let value = match format {
                     ObsComboFormat::Invalid => ObsListItemValue::Invalid,
                     ObsComboFormat::Int => {
-                        let int_val = unsafe { libobs::obs_property_list_item_int(pointer, i) };
+                        let int_val = unsafe {
+                            // Safety: The caller must have ensured that the pointer is valid
+                            libobs::obs_property_list_item_int(pointer.0, i)
+                        };
                         ObsListItemValue::Int(int_val)
                     }
                     ObsComboFormat::Float => {
-                        let float_val = unsafe { libobs::obs_property_list_item_float(pointer, i) };
+                        let float_val = unsafe {
+                            // Safety: The caller must have ensured that the pointer is valid
+                            libobs::obs_property_list_item_float(pointer.0, i)
+                        };
                         ObsListItemValue::Float(float_val)
                     }
                     ObsComboFormat::String => {
-                        let item_string =
-                            unsafe { libobs::obs_property_list_item_string(pointer, i) };
+                        let item_string = unsafe {
+                            // Safety: The caller must have ensured that the pointer is valid
+                            libobs::obs_property_list_item_string(pointer.0, i)
+                        };
 
                         if item_string.is_null() {
                             ObsListItemValue::String(String::new())
                         } else {
                             let string_val = unsafe {
-                                CStr::from_ptr(item_string)
-                                    .to_string_lossy()
-                                    .to_string()
+                                // Safety: Safe because of null check
+                                CStr::from_ptr(item_string).to_string_lossy().to_string()
                             };
                             ObsListItemValue::String(string_val)
                         }
                     }
                     ObsComboFormat::Bool => {
-                        let bool_val = unsafe { libobs::obs_property_list_item_bool(pointer, i) };
+                        let bool_val = unsafe {
+                            // Safety: The caller must have ensured that the pointer is valid
+                            libobs::obs_property_list_item_bool(pointer.0, i)
+                        };
                         ObsListItemValue::Bool(bool_val)
                     }
                 };

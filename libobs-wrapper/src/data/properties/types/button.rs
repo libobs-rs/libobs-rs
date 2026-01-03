@@ -1,7 +1,7 @@
 use getters0::Getters;
 
 use crate::{
-    data::properties::{get_enum, get_opt_str, macros::is_of_type_result, ObsButtonType},
+    data::properties::{get_enum, get_opt_str, macros::unsafe_is_of_type_result, ObsButtonType},
     run_with_obs,
 };
 
@@ -28,7 +28,7 @@ impl TryFrom<PropertyCreationInfo> for ObsButtonProperty {
         }: PropertyCreationInfo,
     ) -> Result<Self, Self::Error> {
         run_with_obs!(runtime, (pointer), move || {
-            is_of_type_result!(Button, pointer)?;
+            unsafe_is_of_type_result!(Button, pointer)?;
 
             let url = get_opt_str!(pointer, button_url);
             let button_type = get_enum!(pointer, button_type, ObsButtonType)?;
