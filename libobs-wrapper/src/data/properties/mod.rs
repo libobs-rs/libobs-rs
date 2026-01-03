@@ -147,7 +147,7 @@ pub(crate) fn property_ptr_to_struct(
 pub trait ObsPropertyObject: ObsPropertyObjectPrivate {
     /// Returns the properties of the object
     fn get_properties(&self) -> Result<HashMap<String, ObsProperty>, ObsError>;
-    fn get_properties_by_id<T: Into<ObsString> + Sync + Send>(
+    fn get_properties_by_source_id<T: Into<ObsString> + Sync + Send>(
         id: T,
         runtime: &ObsRuntime,
     ) -> Result<HashMap<String, ObsProperty>, ObsError> {

@@ -4,6 +4,7 @@ use libobs_simple::{
 };
 use libobs_wrapper::{
     data::output::ObsOutputTrait,
+    scenes::SceneItemTrait,
     utils::{ObsPath, StartupInfo},
 };
 
@@ -18,18 +19,12 @@ pub fn main() -> anyhow::Result<()> {
         .build()?;
 
     let mut scene = ctx.scene("Test Scene", Some(0))?;
-    let monitor_source = ctx
+    let (_, monitor_item) = ctx
         .source_builder::<MonitorCaptureSourceBuilder, _>("Test Monitor Capture")?
         .set_monitor(&MonitorCaptureSourceBuilder::get_monitors()?[0])
         .add_to_scene(&mut scene)?;
 
-    scene.fit_source_to_screen(&monitor_source)?;
-
-    scene.remove_all_sources()?;
-    ctx.scenes_mut().write().unwrap().remove(0);
-
-    drop(scene);
-
+    monitor_item.fit_source_to_screen()?;
     replay_output.start()?;
 
     println!("Replay buffer started. Press Enter to save a 10s replay...");

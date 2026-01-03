@@ -102,11 +102,13 @@ impl SceneItemExtSceneTrait for ObsSceneRef {
             .write()
             .map_err(|e| ObsError::LockError(format!("{:?}", e)))?;
 
-        guard.iter_mut().for_each(|(_, items)| {
+        guard.retain(|_, items| {
             items.retain(|item| {
-                // Keep everything except this one scene item
-                item.as_ptr().get_ptr() != scene_item.as_ptr().get_ptr()
+            // Keep everything except this one scene item
+            item.as_ptr().get_ptr() != scene_item.as_ptr().get_ptr()
             });
+            // Remove the entry if no items remain
+            !items.is_empty()
         });
         Ok(())
     }

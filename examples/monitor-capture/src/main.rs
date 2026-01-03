@@ -2,6 +2,8 @@ use libobs_simple::output::simple::ObsContextSimpleExt;
 use libobs_wrapper::data::output::ObsOutputTrait;
 #[cfg(target_os = "linux")]
 use libobs_wrapper::logger::ObsLogger;
+#[cfg(windows)]
+use libobs_wrapper::scenes::SceneItemTrait;
 use libobs_wrapper::utils::StartupInfo;
 use libobs_wrapper::{context::ObsContext, utils::ObsPath};
 
@@ -41,11 +43,14 @@ fn main() -> anyhow::Result<()> {
     let monitors = MonitorCaptureSourceBuilder::get_monitors()?;
 
     #[cfg(windows)]
-    let mut monitor_capture = context
+    let (mut monitor_capture, monitor_item) = context
         .source_builder::<MonitorCaptureSourceBuilder, _>("Monitor Capture")?
         .set_monitor(&monitors[0])
         .set_capture_method(libobs_simple::sources::windows::ObsDisplayCaptureMethod::MethodDXGI)
         .add_to_scene(&mut scene)?;
+
+    #[cfg(windows)]
+    monitor_item.fit_source_to_screen()?;
 
     #[cfg(target_os = "linux")]
     {
