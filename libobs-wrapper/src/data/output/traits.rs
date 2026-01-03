@@ -203,16 +203,16 @@ pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsObjectTrait<*mut libobs::obs
             let err = unsafe { libobs::obs_output_get_last_error(output_ptr.get_ptr()) };
 
             if err.is_null() {
-                return None;
+                return "Unknown error".to_string();
             }
 
             let err = unsafe { CStr::from_ptr(err) };
 
             let err = err.to_string_lossy().to_string();
-            Some(err)
+            err
         })?;
 
-        Err(ObsError::OutputStartFailure(err))
+        Err(ObsError::OutputStartFailure(Some(err)))
     }
 
     fn set_paused(&self, should_pause: bool) -> Result<(), ObsError> {
