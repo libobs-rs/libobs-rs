@@ -1,10 +1,10 @@
-use std::sync::Arc;
 use crate::{
     data::object::ObsObjectTrait,
     macros::impl_eq_of_ptr,
     sources::{ObsFilterRef, ObsSourceSignals, _ObsRemoveFilterOnDrop},
     utils::ObsError,
 };
+use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub struct ObsFilterGuardPair {
@@ -13,6 +13,10 @@ pub struct ObsFilterGuardPair {
 }
 
 impl ObsFilterGuardPair {
+    pub(crate) fn new(filter: ObsFilterRef, guard: Arc<_ObsRemoveFilterOnDrop>) -> Self {
+        Self { filter, guard }
+    }
+
     pub fn get_inner(&self) -> &ObsFilterRef {
         &self.filter
     }

@@ -230,12 +230,12 @@ impl ObsSourceTrait for ObsSourceRef {
         })??;
 
         let runtime = self.runtime().clone();
-        let drop_guard = _ObsRemoveFilterOnDrop::new(self.as_ptr(), filter.as_ptr(), runtime);
+        let drop_guard = _ObsRemoveFilterOnDrop::new(self.as_ptr(), filter.as_ptr(), None, runtime);
 
-        guard.push(ObsFilterGuardPair {
-            filter: filter.clone(),
-            guard: Arc::new(drop_guard),
-        });
+        guard.push(ObsFilterGuardPair::new(
+            filter.clone(),
+            Arc::new(drop_guard),
+        ));
 
         Ok(())
     }

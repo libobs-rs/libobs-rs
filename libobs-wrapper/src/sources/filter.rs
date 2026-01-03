@@ -1,4 +1,4 @@
-use libobs::obs_source_t;
+use libobs::{obs_scene_t, obs_source_t};
 
 use crate::{
     data::ImmutableObsData,
@@ -31,24 +31,25 @@ impl ObsFilterRef {
 }
 
 #[derive(Debug)]
-pub(crate) struct _ObsRemoveFilterOnDrop<K> {
+pub(crate) struct _ObsRemoveFilterOnDrop {
     source: SmartPointerSendable<*mut obs_source_t>,
     filter: SmartPointerSendable<*mut obs_source_t>,
-    additional: K,
+    // This could be generic as well but I don't want to bother implementing generics for the impl_obs_drop for now
+    additional_ptr: Option<SmartPointerSendable<*mut obs_scene_t>>,
     runtime: ObsRuntime,
 }
 
-impl <K> _ObsRemoveFilterOnDrop<K> {
+impl _ObsRemoveFilterOnDrop {
     pub fn new(
         source: SmartPointerSendable<*mut obs_source_t>,
         filter: SmartPointerSendable<*mut obs_source_t>,
-        additional: K,
+        additional_ptr: Option<SmartPointerSendable<*mut obs_scene_t>>,
         runtime: ObsRuntime,
     ) -> Self {
         Self {
             source,
             filter,
-            additional,
+            additional_ptr,
             runtime,
         }
     }

@@ -20,6 +20,3 @@ pub use libobs as sys;
 pub mod graphics;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod macros;
-
-#[deprecated = "Use graphics::Vec2 instead."]
-pub type Vec2 = graphics::Vec2;

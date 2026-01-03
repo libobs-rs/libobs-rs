@@ -1,12 +1,18 @@
-use libobs::{obs_scene_item, obs_scene_t};
+use libobs::obs_scene_t;
 
-use std::ptr;
 use crate::{impl_obs_drop, runtime::ObsRuntime, unsafe_send::Sendable, utils::ObsDropGuard};
- 
+use std::ptr;
+
 #[derive(Debug)]
 pub(super) struct _SceneDropGuard {
     scene: Sendable<*mut obs_scene_t>,
     runtime: ObsRuntime,
+}
+
+impl _SceneDropGuard {
+    pub(super) fn new(scene: Sendable<*mut obs_scene_t>, runtime: ObsRuntime) -> Self {
+        Self { scene, runtime }
+    }
 }
 
 impl ObsDropGuard for _SceneDropGuard {}
