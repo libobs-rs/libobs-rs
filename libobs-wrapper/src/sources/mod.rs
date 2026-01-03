@@ -13,7 +13,8 @@ use libobs::obs_source_t;
 
 use crate::{
     data::{
-        ImmutableObsData, ObsDataPointers, object::{ObsObjectTrait, ObsObjectTraitSealed, inner_fn_update_settings}
+        object::{inner_fn_update_settings, ObsObjectTrait, ObsObjectTraitSealed},
+        ImmutableObsData, ObsDataPointers,
     },
     impl_obs_drop, impl_signal_manager, run_with_obs,
     runtime::ObsRuntime,

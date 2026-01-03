@@ -8,8 +8,7 @@ use libobs::{obs_scene_item, obs_transform_info, obs_video_info};
 use crate::{
     enums::ObsBoundsType,
     graphics::Vec2,
-    impl_obs_drop,
-    run_with_obs,
+    impl_obs_drop, run_with_obs,
     runtime::ObsRuntime,
     scenes::{ObsSceneRef, ObsTransformInfo, ObsTransformInfoBuilder},
     sources::ObsSourceTrait,

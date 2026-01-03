@@ -39,7 +39,7 @@ use winit::window::{Window, WindowId};
 #[derive(Clone)]
 struct ObsInner {
     context: ObsContext,
-    display: ObsDisplayRef
+    display: ObsDisplayRef,
 }
 
 impl ObsInner {
@@ -164,7 +164,7 @@ impl ObsInner {
         Ok(Self {
             context,
             #[cfg_attr(not(target_os = "linux"), allow(unused_unsafe))]
-            display
+            display,
         })
     }
 }

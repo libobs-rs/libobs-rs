@@ -11,11 +11,16 @@ use libobs_simple::sources::{
     ObsSourceBuilder,
 };
 use libobs_wrapper::{
-    context::ObsContext, data::{
-        ObsDataSetters, object::ObsObjectTrait, output::ObsOutputTrait, video::ObsVideoInfoBuilder
-    }, encoders::{
-        ObsContextEncoders, ObsVideoEncoderType, audio::ObsAudioEncoder, video::ObsVideoEncoder
-    }, enums::ObsScaleType, scenes::SceneItemRef, utils::{AudioEncoderInfo, ObsPath, OutputInfo, VideoEncoderInfo}
+    context::ObsContext,
+    data::{
+        object::ObsObjectTrait, output::ObsOutputTrait, video::ObsVideoInfoBuilder, ObsDataSetters,
+    },
+    encoders::{
+        audio::ObsAudioEncoder, video::ObsVideoEncoder, ObsContextEncoders, ObsVideoEncoderType,
+    },
+    enums::ObsScaleType,
+    scenes::SceneItemRef,
+    utils::{AudioEncoderInfo, ObsPath, OutputInfo, VideoEncoderInfo},
 };
 
 const ROUNDS: usize = 6;

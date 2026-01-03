@@ -47,7 +47,6 @@ impl SceneItemExtSceneTrait for ObsSceneRef {
     ) -> Result<SceneItemRef<T>, ObsError> {
         let scene_item = SceneItemRef::new(self, source.clone(), self.runtime.clone())?;
 
-
         let scene_clone = scene_item.clone();
         self.attached_scene_items
             .write()

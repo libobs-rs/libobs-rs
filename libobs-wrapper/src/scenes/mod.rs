@@ -35,7 +35,8 @@ impl ObsDropGuard for _NoOpDropGuard {}
 pub struct ObsSceneRef {
     name: ObsString,
     global_active_scenes: Arc<RwLock<HashMap<u32, ObsSceneRef>>>,
-    attached_scene_items: GeneralTraitHashMap<dyn ObsSourceTrait, Vec<Arc<Box<dyn SceneItemTrait + 'static>>>>,
+    attached_scene_items:
+        GeneralTraitHashMap<dyn ObsSourceTrait, Vec<Arc<Box<dyn SceneItemTrait + 'static>>>>,
     attached_filters: Arc<RwLock<Vec<ObsFilterGuardPair>>>,
     runtime: ObsRuntime,
     signals: Arc<ObsSceneSignals>,

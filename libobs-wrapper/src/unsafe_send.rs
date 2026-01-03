@@ -77,7 +77,10 @@ impl<T> Eq for SmartPointerSendableComp<T> where T: Clone + Eq {}
 
 impl<T: Clone> SmartPointerSendableComp<T> {
     pub fn new(ptr: T, drop_guard: Arc<dyn ObsDropGuard>) -> Self {
-        Self { ptr, _drop_guard: drop_guard }
+        Self {
+            ptr,
+            _drop_guard: drop_guard,
+        }
     }
 
     pub fn get_ptr(&self) -> T {

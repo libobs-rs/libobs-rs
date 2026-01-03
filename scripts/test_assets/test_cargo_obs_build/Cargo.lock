@@ -574,7 +574,7 @@ dependencies = [
 
 [[package]]
 name = "libobs"
-version = "4.0.4+32.0.2"
+version = "5.0.0+32.0.2"
 dependencies = [
  "bindgen",
  "pkg-config",
