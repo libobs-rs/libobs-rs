@@ -31,7 +31,7 @@ define_object_manager!(
     ///
     /// This source captures video from V4L2 compatible devices such as webcams,
     /// capture cards, and other video input devices on Linux.
-    struct V4L2InputSource("v4l2_input") for ObsSourceRef {
+    struct V4L2InputSource("v4l2_input", *mut libobs::obs_source) for ObsSourceRef {
         /// Device ID/path (e.g., "/dev/video0")
         #[obs_property(type_t = "string")]
         device_id: String,

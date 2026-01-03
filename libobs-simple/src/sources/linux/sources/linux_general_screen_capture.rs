@@ -1,13 +1,14 @@
 use libobs_wrapper::{
     data::ObsObjectBuilder,
     runtime::ObsRuntime,
+    scenes::{SceneItemExtSceneTrait, SceneItemRef},
     sources::ObsSourceRef,
     utils::{ObsError, SourceInfo},
 };
 use std::env;
 
 use crate::sources::linux::{
-    sources::x11_capture::X11CaptureSourceBuilder, PipeWireDesktopCaptureSourceBuilder,
+    pipewire::PipeWireDesktopCaptureSourceBuilder, sources::x11_capture::X11CaptureSourceBuilder
 };
 
 /// Display server type detection
@@ -156,7 +157,7 @@ impl LinuxGeneralScreenCapture {
             builder
         };
 
-        let info = builder.build()?;
+        let info = builder.object_build()?;
         Ok(LinuxGeneralScreenCapture {
             info,
             capture_type: CaptureType::PipeWire,
@@ -166,7 +167,7 @@ impl LinuxGeneralScreenCapture {
     /// Create an X11-based screen capture source.
     pub fn new_x11(runtime: ObsRuntime, name: &str) -> Result<Self, Box<dyn std::error::Error>> {
         let builder = X11CaptureSourceBuilder::new(name, runtime.clone())?;
-        let info = builder.set_show_cursor(true).set_screen(0).build()?;
+        let info = builder.set_show_cursor(true).set_screen(0).object_build()?;
         Ok(LinuxGeneralScreenCapture {
             info,
             capture_type: CaptureType::X11,
@@ -176,8 +177,8 @@ impl LinuxGeneralScreenCapture {
     pub fn add_to_scene(
         self,
         scene: &mut libobs_wrapper::scenes::ObsSceneRef,
-    ) -> Result<ObsSourceRef, ObsError> {
-        scene.add_source(self.info)
+    ) -> Result<SceneItemRef<ObsSourceRef>, ObsError> {
+        scene.add_and_create_source(self.info)
     }
 
     /// Get the type of capture being used.
@@ -194,3 +195,5 @@ impl AsRef<SourceInfo> for LinuxGeneralScreenCapture {
         &self.info
     }
 }
+
+//TODO implement a linux general capture builder, implement an either type for either sessions and make it deref to ObsSourceRef for easy access.

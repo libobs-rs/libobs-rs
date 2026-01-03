@@ -10,7 +10,7 @@ define_object_manager!(
     /// This source captures audio from PulseAudio devices on Linux systems.
     /// PulseAudio is a higher-level sound server that sits on top of ALSA
     /// and provides more advanced audio routing and mixing capabilities.
-    struct PulseInputSource("pulse_input_capture") for ObsSourceRef {
+    struct PulseInputSource("pulse_input_capture", *mut libobs::obs_source) for ObsSourceRef {
         /// PulseAudio device name/ID
         #[obs_property(type_t = "string")]
         device_id: String,
@@ -24,7 +24,7 @@ define_object_manager!(
     /// This source captures audio from PulseAudio devices on Linux systems.
     /// PulseAudio is a higher-level sound server that sits on top of ALSA
     /// and provides more advanced audio routing and mixing capabilities.
-    struct PulseOutputSource("pulse_output_capture") for ObsSourceRef {
+    struct PulseOutputSource("pulse_output_capture", *mut libobs::obs_source) for ObsSourceRef {
         /// PulseAudio device name/ID
         #[obs_property(type_t = "string")]
         device_id: String,

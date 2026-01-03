@@ -3,7 +3,7 @@ use libobs_wrapper::sources::ObsSourceRef;
 
 define_object_manager!(
     #[derive(Debug)]
-    struct JackOutputSource("jack_output_capture") for ObsSourceRef {
+    struct JackOutputSource("jack_output_capture", *mut libobs::obs_source) for ObsSourceRef {
         /// Whether the JACK server should start when the source is created
         #[obs_property(type_t = "string", settings_key="startjack")]
         start_jack: String,

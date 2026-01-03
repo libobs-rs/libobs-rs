@@ -8,7 +8,7 @@ define_object_manager!(
     ///
     /// This source captures audio from ALSA-compatible devices on Linux systems.
     /// It provides low-level access to audio hardware through the ALSA subsystem.
-    struct AlsaInputSource("alsa_input_capture") for ObsSourceRef {
+    struct AlsaInputSource("alsa_input_capture", *mut libobs::obs_source) for ObsSourceRef {
         /// ALSA device ID (e.g., "default", "hw:0,0", or custom PCM device)
         #[obs_property(type_t = "string")]
         device_id: String,

@@ -2,9 +2,9 @@ use std::sync::{Arc, RwLock};
 
 #[cfg(target_os = "linux")]
 use libobs_simple::sources::linux::LinuxGeneralScreenCapture;
-#[cfg(target_os = "linux")]
-use libobs_simple::sources::linux::PipeWireSourceExtTrait;
 use libobs_wrapper::graphics::Vec2;
+#[cfg(target_os = "linux")]
+use libobs_wrapper::scenes::SceneItemRef;
 use libobs_wrapper::scenes::SceneItemTrait;
 #[cfg(target_os = "linux")]
 use libobs_wrapper::sources::ObsSourceRef;
@@ -40,6 +40,8 @@ use winit::window::{Window, WindowId};
 struct ObsInner {
     context: ObsContext,
     display: ObsDisplayRef,
+    #[cfg(target_os = "linux")]
+    _source: SceneItemRef<ObsSourceRef>,
 }
 
 impl ObsInner {
@@ -82,7 +84,7 @@ impl ObsInner {
             .add_to_scene(&mut scene)?;
 
         #[cfg(target_os = "linux")]
-        let monitor_src = {
+        let monitor_item = {
             use std::path::PathBuf;
 
             let restore_token_path = std::env::current_exe()
@@ -165,6 +167,8 @@ impl ObsInner {
             context,
             #[cfg_attr(not(target_os = "linux"), allow(unused_unsafe))]
             display,
+            #[cfg(target_os = "linux")]
+            _source: monitor_item,
         })
     }
 }

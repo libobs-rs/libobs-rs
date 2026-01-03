@@ -26,7 +26,7 @@ define_object_manager!(
     ///
     /// This source provides screen capture functionality on Linux systems running X11.
     /// It can capture the entire screen or specific areas with cropping options.
-    struct X11CaptureSource("xshm_input") for ObsSourceRef {
+    struct X11CaptureSource("xshm_input", *mut libobs::obs_source) for ObsSourceRef {
         /// Screen/Display to capture
         #[obs_property(type_t = "int")]
         screen: i64,

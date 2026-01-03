@@ -7,7 +7,7 @@ use crate::{
     utils::{ObsDropGuard, ObsError},
 };
 pub use immutable::ImmutableObsData;
-use libobs::data_ptr;
+use libobs::obs_data;
 
 pub mod audio;
 mod immutable;
@@ -24,7 +24,7 @@ pub use traits::*;
 
 #[derive(Debug)]
 pub(super) struct _ObsDataDropGuard {
-    data_ptr: Sendable<*mut data_ptr>,
+    data_ptr: Sendable<*mut obs_data>,
     runtime: ObsRuntime,
 }
 
@@ -44,7 +44,7 @@ impl ObsDropGuard for _ObsDataDropGuard {}
 #[derive(Debug)]
 pub struct ObsData {
     pub(crate) runtime: ObsRuntime,
-    ptr: SmartPointerSendable<*mut data_ptr>,
+    ptr: SmartPointerSendable<*mut obs_data>,
 }
 
 impl ObsData {
@@ -113,7 +113,7 @@ impl ObsDataPointers for ObsData {
         &self.runtime
     }
 
-    fn as_ptr(&self) -> SmartPointerSendable<*mut data_ptr> {
+    fn as_ptr(&self) -> SmartPointerSendable<*mut obs_data> {
         self.ptr.clone()
     }
 }

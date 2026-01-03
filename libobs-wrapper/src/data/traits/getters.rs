@@ -10,7 +10,7 @@ use crate::{
 /// # Safety
 /// This function must be called on the OBS runtime.
 unsafe fn has_value(
-    data_ptr: SmartPointerSendable<*mut libobs::data_ptr>,
+    data_ptr: SmartPointerSendable<*mut libobs::obs_data>,
     key: &ObsString,
 ) -> bool {
     libobs::obs_data_has_user_value(data_ptr.get_ptr(), key.as_ptr().0)

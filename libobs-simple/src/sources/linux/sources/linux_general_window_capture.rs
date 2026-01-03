@@ -1,13 +1,14 @@
 use libobs_wrapper::{
     data::ObsObjectBuilder,
     runtime::ObsRuntime,
+    scenes::{SceneItemExtSceneTrait, SceneItemRef},
     sources::ObsSourceRef,
     utils::{ObsError, SourceInfo},
 };
 
 use super::DisplayServerType;
 use crate::sources::linux::{
-    sources::xcomposite_input::XCompositeInputSourceBuilder, PipeWireWindowCaptureSourceBuilder,
+    pipewire::PipeWireWindowCaptureSourceBuilder, sources::xcomposite_input::XCompositeInputSourceBuilder
 };
 
 /// General Linux window capture source that automatically selects the best capture method.
@@ -93,7 +94,7 @@ impl LinuxGeneralWindowCapture {
         name: &str,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let builder = PipeWireWindowCaptureSourceBuilder::new(name, runtime.clone())?;
-        let info = builder.set_show_cursor(true).build()?;
+        let info = builder.set_show_cursor(true).object_build()?;
         Ok(LinuxGeneralWindowCapture {
             info,
             capture_type: CaptureType::PipeWire,
@@ -111,7 +112,7 @@ impl LinuxGeneralWindowCapture {
         name: &str,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let builder = XCompositeInputSourceBuilder::new(name, runtime.clone())?;
-        let info = builder.set_show_cursor(true).build()?;
+        let info = builder.set_show_cursor(true).object_build()?;
         Ok(LinuxGeneralWindowCapture {
             info,
             capture_type: CaptureType::XComposite,
@@ -134,7 +135,7 @@ impl LinuxGeneralWindowCapture {
         let info = builder
             .set_capture_window(window_id.to_string())
             .set_show_cursor(true)
-            .build()?;
+            .object_build()?;
         Ok(LinuxGeneralWindowCapture {
             info,
             capture_type: CaptureType::XComposite,
@@ -144,8 +145,8 @@ impl LinuxGeneralWindowCapture {
     pub fn add_to_scene(
         self,
         scene: &mut libobs_wrapper::scenes::ObsSceneRef,
-    ) -> Result<ObsSourceRef, ObsError> {
-        scene.add_source(self.info)
+    ) -> Result<SceneItemRef<ObsSourceRef>, ObsError> {
+        scene.add_and_create_source(self.info)
     }
 
     /// Get the type of capture being used.

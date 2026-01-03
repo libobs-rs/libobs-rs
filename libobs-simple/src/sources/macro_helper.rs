@@ -92,15 +92,13 @@ macro_rules! impl_default_builder {
         impl libobs_wrapper::sources::ObsSourceBuilder for $name {
             type T = libobs_wrapper::sources::ObsSourceRef;
 
-            fn add_to_scene(
-                self,
-                scene: &mut libobs_wrapper::scenes::ObsSceneRef,
-            ) -> Result<Self::T, libobs_wrapper::utils::ObsError>
+            fn build(self) -> Result<Self::T, libobs_wrapper::utils::ObsError>
             where
                 Self: Sized,
             {
                 use libobs_wrapper::data::ObsObjectBuilder;
-                scene.add_source(self.build()?)
+                let runtime = self.runtime.clone();
+                libobs_wrapper::sources::ObsSourceRef::new_from_info(self.object_build()?, runtime)
             }
         }
     };

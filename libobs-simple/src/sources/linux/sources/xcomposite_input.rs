@@ -12,7 +12,7 @@ define_object_manager!(
     /// This source provides window capture functionality on Linux systems running X11
     /// using the XComposite extension. It can capture individual windows with their
     /// transparency and effects intact.
-    struct XCompositeInputSource("xcomposite_input") for ObsSourceRef {
+    struct XCompositeInputSource("xcomposite_input", *mut libobs::obs_source) for ObsSourceRef {
         /// Window to capture (window ID as string)
         #[obs_property(type_t = "string")]
         capture_window: String,
@@ -67,14 +67,13 @@ impl_custom_source!(XCompositeInputSource, [
 impl ObsSourceBuilder for XCompositeInputSourceBuilder {
     type T = XCompositeInputSource;
 
-    fn add_to_scene(
-        self,
-        scene: &mut libobs_wrapper::scenes::ObsSceneRef,
-    ) -> Result<Self::T, libobs_wrapper::utils::ObsError>
+    fn build(self) -> Result<Self::T, libobs_wrapper::utils::ObsError>
     where
         Self: Sized,
     {
-        let source = scene.add_source(self.build()?)?;
+        let runtime = self.runtime.clone();
+        let info = self.object_build()?;
+        let source = ObsSourceRef::new_from_info(info, runtime)?;
 
         XCompositeInputSource::new(source)
     }
