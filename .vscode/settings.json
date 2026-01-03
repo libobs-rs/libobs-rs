@@ -12,7 +12,7 @@
     },
     "rust-analyzer.cargo.targetDir": true,
     "rust-analyzer.check.overrideCommand": [
-        "python",
+        "python3",
         "scripts/lint.py"
     ],
     //"rust-analyzer.check.command": "clippy",
