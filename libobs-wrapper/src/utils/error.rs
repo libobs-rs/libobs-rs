@@ -76,7 +76,7 @@ pub enum ObsError {
     RuntimeOutsideThread,
 
     /// A filter was already applied to a source
-    FilterAlreadyApplied
+    FilterAlreadyApplied,
 }
 
 #[cfg_attr(coverage_nightly, coverage(off))]

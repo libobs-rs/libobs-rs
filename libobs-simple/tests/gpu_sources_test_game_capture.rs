@@ -33,7 +33,7 @@ pub fn record() {
 
     println!("Using window: {:?}", game);
 
-    let capture_source = context
+    let (capture_source, _) = context
         .source_builder::<GameCaptureSourceBuilder, _>("game_capture")
         .unwrap()
         .set_capture_mode(ObsGameCaptureMode::Any)

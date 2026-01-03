@@ -4,6 +4,9 @@ pub use transform_info::*;
 mod scene_drop_guards;
 mod scene_item;
 
+mod filter_traits;
+pub use filter_traits::*;
+
 pub use scene_item::*;
 
 use std::collections::HashMap;
@@ -12,16 +15,14 @@ use std::sync::{Arc, RwLock};
 
 use libobs::{obs_scene_t, obs_source_t};
 
-use crate::data::object::ObsObjectTrait;
 use crate::macros::impl_eq_of_ptr;
 use crate::scenes::scene_drop_guards::_SceneDropGuard;
-use crate::sources::{ObsFilterGuardPair, ObsSourceTrait, _ObsRemoveFilterOnDrop};
+use crate::sources::{ObsFilterGuardPair, ObsSourceTrait};
 use crate::unsafe_send::SmartPointerSendable;
 use crate::utils::{GeneralTraitHashMap, ObsDropGuard};
 use crate::{
     impl_signal_manager, run_with_obs,
     runtime::ObsRuntime,
-    sources::ObsFilterRef,
     unsafe_send::Sendable,
     utils::{ObsError, ObsString},
 };
@@ -145,54 +146,16 @@ impl ObsSceneRef {
         })
     }
 
-    /// Adds a filter to the given source in this scene.
-    pub fn add_scene_filter(&self, filter_ref: &ObsFilterRef) -> Result<(), ObsError> {
-        let source_ptr = self.get_scene_source_ptr()?;
-        let filter_ptr = filter_ref.as_ptr();
-
-        let mut guard = self.attached_filters.write().map_err(|_| {
-            ObsError::LockError("Failed to acquire write lock on attached filters".into())
-        })?;
-
-        run_with_obs!(self.runtime, (source_ptr, filter_ptr), move || {
-            unsafe {
-                // Safety: Both source_ptr and filter_ptr are valid because of SmartPointers
-                libobs::obs_source_filter_add(source_ptr.0, filter_ptr.get_ptr());
-            };
-        })?;
-
-        let drop_guard = _ObsRemoveFilterOnDrop::new(
-            // We are using a no-op drop guard, because we are keeping the actual scene alive in the additional variable field
-            SmartPointerSendable::new(source_ptr.0, Arc::new(_NoOpDropGuard)),
-            filter_ref.as_ptr(),
-            Some(self.as_ptr()),
-            self.runtime.clone(),
-        );
-
-        guard.push(ObsFilterGuardPair::new(
-            filter_ref.clone(),
-            Arc::new(drop_guard),
-        ));
-
-        Ok(())
-    }
-
-    /// Removes a filter from the this scene (internally removes the filter to the scene's source).
-    pub fn remove_scene_filter(&self, filter_ref: &ObsFilterRef) -> Result<(), ObsError> {
-        self.attached_filters
-            .write()
-            .map_err(|_| {
-                ObsError::LockError("Failed to acquire write lock on attached filters".into())
-            })?
-            .retain(|f| {
-                // Keep everything except this one filter
-                f.get_inner().as_ptr().get_ptr() != filter_ref.as_ptr().get_ptr()
-            });
-        Ok(())
-    }
-
     pub fn as_ptr(&self) -> SmartPointerSendable<*mut obs_scene_t> {
         self.scene.clone()
+    }
+
+    pub fn name(&self) -> ObsString {
+        self.name.clone()
+    }
+
+    pub fn signals(&self) -> Arc<ObsSceneSignals> {
+        self.signals.clone()
     }
 }
 

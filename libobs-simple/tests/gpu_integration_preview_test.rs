@@ -7,6 +7,7 @@ use libobs_simple::sources::linux::PipeWireSourceExtTrait;
 #[cfg(windows)]
 use libobs_simple::sources::windows::monitor_capture::MonitorCaptureSource;
 use libobs_wrapper::graphics::Vec2;
+use libobs_wrapper::scenes::SceneItemTrait;
 #[cfg(target_os = "linux")]
 use libobs_wrapper::sources::ObsSourceRef;
 #[cfg(target_os = "linux")]
@@ -79,7 +80,7 @@ impl ObsInner {
             .find(|e| e.title.is_some() && e.title.as_ref().unwrap().contains("Apex"));
 
         #[cfg(windows)]
-        let monitor_src = context
+        let (monitor_src, monitor_item) = context
             .source_builder::<MonitorCaptureSourceBuilder, _>("Monitor capture")?
             .set_monitor(
                 &MonitorCaptureSourceBuilder::get_monitors().expect("Couldn't get monitors")[0],
@@ -110,11 +111,9 @@ impl ObsInner {
             .add_to_scene(&mut scene)?
         };
 
-        scene.set_source_position(&monitor_src, Vec2::new(0.0, 0.0))?;
-        scene.set_source_scale(&monitor_src, Vec2::new(1.0, 1.0))?;
+        monitor_item.set_source_position(Vec2::new(0.0, 0.0))?;
+        monitor_item.set_source_scale(Vec2::new(1.0, 1.0))?;
 
-        #[cfg(windows)]
-        let mut _apex_source = None;
         #[cfg(windows)]
         if let Some(apex) = apex {
             use libobs_simple::sources::windows::game_capture::ObsGameCaptureMode;
@@ -123,15 +122,14 @@ impl ObsInner {
                 "Is used by other instance: {}",
                 GameCaptureSourceBuilder::is_window_in_use_by_other_instance(apex.pid)?
             );
-            let source = context
+            let (_source, item) = context
                 .source_builder::<GameCaptureSourceBuilder, _>("Game capture")?
                 .set_capture_mode(ObsGameCaptureMode::CaptureSpecificWindow)
                 .set_window(apex)
                 .add_to_scene(&mut scene)?;
 
-            scene.set_source_position(&source, Vec2::new(0.0, 0.0))?;
-            scene.set_source_scale(&source, Vec2::new(1.0, 1.0))?;
-            _apex_source = Some(source);
+            item.set_source_position(Vec2::new(0.0, 0.0))?;
+            item.set_source_scale(Vec2::new(1.0, 1.0))?;
         } else {
             println!("No Apex window found for game capture");
         }

@@ -9,12 +9,15 @@ use std::sync::Arc;
 #[derive(Debug, Clone)]
 pub struct ObsFilterGuardPair {
     filter: ObsFilterRef,
-    pub(crate) guard: Arc<_ObsRemoveFilterOnDrop>,
+    pub(crate) _guard: Arc<_ObsRemoveFilterOnDrop>,
 }
 
 impl ObsFilterGuardPair {
     pub(crate) fn new(filter: ObsFilterRef, guard: Arc<_ObsRemoveFilterOnDrop>) -> Self {
-        Self { filter, guard }
+        Self {
+            filter,
+            _guard: guard,
+        }
     }
 
     pub fn get_inner(&self) -> &ObsFilterRef {

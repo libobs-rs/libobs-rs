@@ -3,7 +3,6 @@ use libobs_simple_macro::obs_object_impl;
 use libobs_window_helper::{get_all_windows, WindowInfo, WindowSearchMode};
 use libobs_wrapper::{
     data::{ObsObjectBuilder, ObsObjectUpdater, StringEnum},
-    scenes::ObsSceneRef,
     sources::{ObsSourceBuilder, ObsSourceRef},
     utils::ObsError,
 };
@@ -61,7 +60,7 @@ define_object_manager!(
     /// ## Important Notice
     /// This source fails to capture if another instance (OBS studio, another instance of your program, etc.) has a game capture source for the same game/application active.
     /// If the window can be captured can be checked using `GameCaptureSourceBuilder::is_window_in_use_by_other_instance` (feature `window-list` needs to be enabled).
-    struct GameCaptureSource("game_capture") for ObsSourceRef {
+    struct GameCaptureSource("game_capture", *mut libobs::obs_source) for ObsSourceRef {
         /// Sets the capture mode for the game capture source. Look at doc for `ObsGameCaptureMode`
         #[obs_property(type_t = "enum_string")]
         capture_mode: ObsGameCaptureMode,
@@ -197,15 +196,14 @@ impl_custom_source!(GameCaptureSource, [
 impl ObsSourceBuilder for GameCaptureSourceBuilder {
     type T = GameCaptureSource;
 
-    fn add_to_scene(self, scene: &mut ObsSceneRef) -> Result<Self::T, ObsError>
+    fn build(self) -> Result<Self::T, ObsError>
     where
         Self: Sized,
     {
-        let s = self.build()?;
+        let runtime = self.runtime.clone();
+        let s = self.object_build()?;
 
-        let source = scene.add_and_create_source(s)?;
-        let source = GameCaptureSource::new(source)?;
-
-        Ok(source)
+        let source = ObsSourceRef::new_from_info(s, runtime)?;
+        GameCaptureSource::new(source)
     }
 }

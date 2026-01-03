@@ -30,12 +30,7 @@ pub use number::*;
 pub use path::*;
 pub use text::*;
 
-use crate::{
-    run_with_obs,
-    runtime::ObsRuntime,
-    unsafe_send::Sendable,
-    utils::ObsError,
-};
+use crate::{run_with_obs, runtime::ObsRuntime, unsafe_send::Sendable, utils::ObsError};
 
 use super::{macros::impl_general_property, ObsProperty, ObsPropertyType};
 
@@ -107,7 +102,7 @@ impl ObsPropertyType {
     /// iteration class shouldn't be freed, so its better to just use the raw pointer directly.
     /// # Safety
     /// You must make sure that `pointer` is a valid pointer to an `obs_property_t` struct.
-    pub(in crate::data::properties) unsafe fn to_property_struct(
+    pub(in crate::data::properties) unsafe fn get_property_struct(
         &self,
         runtime: &ObsRuntime,
         pointer: Sendable<*mut obs_property>,

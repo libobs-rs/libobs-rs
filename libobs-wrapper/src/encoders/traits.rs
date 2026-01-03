@@ -8,9 +8,7 @@ pub trait ObsEncoderTrait: ObsObjectTrait<*mut obs_encoder> {
 
         run_with_obs!(self.runtime(), (encoder_ptr), move || {
             // Safety: The pointer is valid because we are using a smart pointer
-            unsafe {
-                libobs::obs_encoder_active(encoder_ptr.get_ptr())
-            }
+            unsafe { libobs::obs_encoder_active(encoder_ptr.get_ptr()) }
         })
     }
 }

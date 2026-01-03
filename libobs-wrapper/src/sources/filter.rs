@@ -35,7 +35,7 @@ pub(crate) struct _ObsRemoveFilterOnDrop {
     source: SmartPointerSendable<*mut obs_source_t>,
     filter: SmartPointerSendable<*mut obs_source_t>,
     // This could be generic as well but I don't want to bother implementing generics for the impl_obs_drop for now
-    additional_ptr: Option<SmartPointerSendable<*mut obs_scene_t>>,
+    _additional_ptr: Option<SmartPointerSendable<*mut obs_scene_t>>,
     runtime: ObsRuntime,
 }
 
@@ -49,7 +49,7 @@ impl _ObsRemoveFilterOnDrop {
         Self {
             source,
             filter,
-            additional_ptr,
+            _additional_ptr: additional_ptr,
             runtime,
         }
     }

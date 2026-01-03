@@ -7,6 +7,7 @@ use std::time::Duration;
 use libobs_simple::sources::linux::LinuxGeneralScreenCapture;
 #[cfg(windows)]
 use libobs_simple::sources::windows::monitor_capture::MonitorCaptureSource;
+use libobs_wrapper::scenes::SceneItemTrait;
 #[cfg(target_os = "linux")]
 use libobs_wrapper::sources::ObsSourceRef;
 #[cfg(target_os = "linux")]
@@ -97,7 +98,7 @@ impl ObsInner {
             .find(|e| e.title.is_some() && e.title.as_ref().unwrap().contains("Apex"));
 
         #[cfg(windows)]
-        let monitor_src = context
+        let (monitor_src, monitor_item) = context
             .source_builder::<MonitorCaptureSourceBuilder, _>("Monitor capture")?
             .set_monitor(
                 &MonitorCaptureSourceBuilder::get_monitors().expect("Couldn't get monitors")[0],
@@ -114,24 +115,21 @@ impl ObsInner {
         .unwrap()
         .add_to_scene(&mut scene)?;
 
-        scene.fit_source_to_screen(&monitor_src)?;
+        monitor_item.fit_source_to_screen()?;
 
-        #[cfg(windows)]
-        let mut _apex_source = None;
         #[cfg(windows)]
         if let Some(apex) = apex {
             println!(
                 "Is used by other instance: {}",
                 GameCaptureSourceBuilder::is_window_in_use_by_other_instance(apex.pid)?
             );
-            let source = context
+            let (_, game_capture_item) = context
                 .source_builder::<GameCaptureSourceBuilder, _>("Game capture")?
                 .set_capture_mode(ObsGameCaptureMode::CaptureSpecificWindow)
                 .set_window(apex)
                 .add_to_scene(&mut scene)?;
 
-            scene.fit_source_to_screen(&source)?;
-            _apex_source = Some(source);
+            game_capture_item.fit_source_to_screen()?;
         } else {
             println!("No Apex window found for game capture");
         }

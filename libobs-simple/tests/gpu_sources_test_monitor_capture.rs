@@ -32,7 +32,7 @@ pub fn record() {
     let monitor = MonitorCaptureSourceBuilder::get_monitors().unwrap()[0].clone();
     println!("Using monitor {:?}", monitor);
 
-    let mut capture_source = context
+    let (mut capture_source, _) = context
         .source_builder::<MonitorCaptureSourceBuilder, _>("monitor_capture")
         .unwrap()
         .set_monitor(&monitor)

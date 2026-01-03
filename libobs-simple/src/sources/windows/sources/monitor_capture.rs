@@ -10,6 +10,7 @@ use crate::{define_object_manager, sources::macro_helper::impl_custom_source};
 /// stored in the struct. The capture method is being set to WGC at first, then the source is created and then the capture method is updated to the desired method.
 use display_info::DisplayInfo;
 use libobs_simple_macro::obs_object_impl;
+use libobs_wrapper::scenes::{SceneItemExtSceneTrait, SceneItemRef};
 use libobs_wrapper::{
     data::{ObsObjectBuilder, ObsObjectUpdater},
     scenes::ObsSceneRef,
@@ -23,7 +24,7 @@ use num_traits::ToPrimitive;
 define_object_manager!(
     /// Provides an easy-to-use builder for the monitor capture source.
     #[derive(Debug)]
-    struct MonitorCaptureSource("monitor_capture") for ObsSourceRef {
+    struct MonitorCaptureSource("monitor_capture", *mut libobs::obs_source) for ObsSourceRef {
         #[obs_property(type_t = "string", settings_key = "monitor_id")]
         monitor_id_raw: String,
 
@@ -82,7 +83,18 @@ pub type GeneralSourceRef = Arc<Box<dyn ObsSourceTrait>>;
 impl ObsSourceBuilder for MonitorCaptureSourceBuilder {
     type T = MonitorCaptureSource;
 
-    fn add_to_scene(mut self, scene: &mut ObsSceneRef) -> Result<Self::T, ObsError>
+    fn build(self) -> Result<Self::T, ObsError>
+    where
+        Self: Sized,
+    {
+        let runtime = self.runtime.clone();
+        let obj_info = self.object_build()?;
+
+        let res = ObsSourceRef::new_from_info(obj_info, runtime)?;
+        MonitorCaptureSource::new(res)
+    }
+
+    fn add_to_scene(mut self, scene: &mut ObsSceneRef) -> Result<(Self::T, SceneItemRef), ObsError>
     where
         Self: Sized,
     {
@@ -93,19 +105,17 @@ impl ObsSourceBuilder for MonitorCaptureSourceBuilder {
         );
 
         let method_to_set = self.capture_method;
-        let runtime = self.runtime.clone();
 
-        let b = self.build()?;
-        let res = scene.add_and_create_source(b)?;
-        let mut res = MonitorCaptureSource::new(res)?;
+        let mut res = self.build()?;
+        let scene_item = scene.add_source(res.clone())?;
 
         if let Some(method) = method_to_set {
-            MonitorCaptureSourceUpdater::create_update(runtime, res.inner_source_mut())?
-                .set_capture_method(method)
+            res.create_updater()?
+                .set_capture_method(method) //
                 .update()?;
         }
 
-        Ok(res)
+        Ok((res, scene_item))
     }
 }
 

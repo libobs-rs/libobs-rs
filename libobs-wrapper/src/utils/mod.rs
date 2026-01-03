@@ -17,7 +17,11 @@ mod modules;
 
 mod calldata;
 
-use std::{collections::HashMap, fmt::Debug, sync::{Arc, RwLock}};
+use std::{
+    collections::HashMap,
+    fmt::Debug,
+    sync::{Arc, RwLock},
+};
 
 pub use calldata::*;
 pub use error::*;
@@ -44,8 +48,6 @@ pub(crate) unsafe fn calldata_free(data: *mut libobs::calldata_t) {
 }
 
 /// This should be implemented for any struct that releases OBS resources when dropped
-pub trait ObsDropGuard: Debug {
-
-}
+pub trait ObsDropGuard: Debug {}
 
 pub(crate) type GeneralTraitHashMap<T, K> = Arc<RwLock<HashMap<Arc<Box<T>>, K>>>;

@@ -7,10 +7,15 @@ macro_rules! forward_obs_source_impl {
                 self.$var_name.signals()
             }
 
-            fn get_active_filters(&self) -> Result<Vec<$crate::sources::ObsFilterGuardPair>, $crate::utils::ObsError> {
+            fn get_active_filters(
+                &self,
+            ) -> Result<Vec<$crate::sources::ObsFilterGuardPair>, $crate::utils::ObsError> {
                 self.$var_name.get_active_filters()
             }
-            fn apply_filter(&self, filter: &$crate::sources::ObsFilterRef) -> Result<(), $crate::utils::ObsError> {
+            fn apply_filter(
+                &self,
+                filter: &$crate::sources::ObsFilterRef,
+            ) -> Result<(), $crate::utils::ObsError> {
                 self.$var_name.apply_filter(filter)
             }
         }

@@ -13,13 +13,12 @@ use libobs::obs_source_t;
 
 use crate::{
     data::{
-        object::{inner_fn_update_settings, ObsObjectTrait, ObsObjectTraitSealed},
-        ImmutableObsData, ObsDataPointers,
+        ImmutableObsData, ObsDataPointers, object::{ObsObjectTrait, ObsObjectTraitSealed, inner_fn_update_settings}
     },
     impl_obs_drop, impl_signal_manager, run_with_obs,
     runtime::ObsRuntime,
     unsafe_send::{Sendable, SmartPointerSendable},
-    utils::{ObsDropGuard, ObsError, ObsString},
+    utils::{ObsDropGuard, ObsError, ObsString, SourceInfo},
 };
 
 use std::sync::{Arc, RwLock};
@@ -42,6 +41,17 @@ pub struct ObsSourceRef {
 }
 
 impl ObsSourceRef {
+    pub fn new_from_info(info: SourceInfo, runtime: ObsRuntime) -> Result<Self, ObsError> {
+        let SourceInfo {
+            id,
+            name,
+            settings,
+            hotkey_data,
+        } = info;
+
+        Self::new(id, name, settings, hotkey_data, runtime)
+    }
+
     pub fn new<T: Into<ObsString> + Sync + Send, K: Into<ObsString> + Sync + Send>(
         id: T,
         name: K,
@@ -59,10 +69,7 @@ impl ObsSourceRef {
         };
 
         let hotkey_data_ptr = hotkey_data.as_ptr();
-        let settings_ptr = match settings {
-            Some(x) => Some(x.as_ptr()),
-            None => None,
-        };
+        let settings_ptr = settings.map(|x| x.as_ptr());
 
         let source_ptr = run_with_obs!(
             runtime,

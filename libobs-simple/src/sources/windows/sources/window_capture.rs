@@ -7,7 +7,7 @@ use libobs_simple_macro::obs_object_impl;
 use libobs_window_helper::{get_all_windows, WindowInfo, WindowSearchMode};
 use libobs_wrapper::{
     data::{ObsObjectBuilder, ObsObjectUpdater},
-    scenes::ObsSceneRef,
+    scenes::{ObsSceneRef, SceneItemExtSceneTrait, SceneItemRef},
     sources::{ObsSourceBuilder, ObsSourceRef},
     utils::ObsError,
 };
@@ -16,7 +16,7 @@ use num_traits::ToPrimitive;
 define_object_manager!(
     /// Provides an easy-to-use builder for the window capture source.
     #[derive(Debug)]
-    struct WindowCaptureSource("window_capture") for ObsSourceRef {
+    struct WindowCaptureSource("window_capture", *mut libobs::obs_source) for ObsSourceRef {
 
     /// Sets the priority of the window capture source.
     /// Used to determine in which order windows are searched for.
@@ -148,7 +148,16 @@ impl_custom_source!(WindowCaptureSource, [
 impl ObsSourceBuilder for WindowCaptureSourceBuilder {
     type T = WindowCaptureSource;
 
-    fn add_to_scene(mut self, scene: &mut ObsSceneRef) -> Result<Self::T, ObsError>
+    fn build(self) -> Result<Self::T, ObsError> {
+        let runtime = self.runtime.clone();
+
+        let b = self.object_build()?;
+
+        let source = ObsSourceRef::new_from_info(b, runtime)?;
+        WindowCaptureSource::new(source)
+    }
+
+    fn add_to_scene(mut self, scene: &mut ObsSceneRef) -> Result<(Self::T, SceneItemRef), ObsError>
     where
         Self: Sized,
     {
@@ -159,18 +168,16 @@ impl ObsSourceBuilder for WindowCaptureSourceBuilder {
         );
 
         let method_to_set = self.capture_method;
-        let runtime = self.runtime.clone();
-
-        let b = self.build()?;
-        let res = scene.add_and_create_source(b)?;
-        let mut res = WindowCaptureSource::new(res)?;
+        let mut source = self.build()?;
+        let scene_item = scene.add_source(source.clone())?;
 
         if let Some(method) = method_to_set {
-            WindowCaptureSourceUpdater::create_update(runtime, res.inner_source_mut())?
+            source
+                .create_updater()?
                 .set_capture_method(method)
                 .update()?;
         }
 
-        Ok(res)
+        Ok((source, scene_item))
     }
 }

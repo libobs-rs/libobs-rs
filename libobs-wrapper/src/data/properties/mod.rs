@@ -124,7 +124,7 @@ pub(crate) fn property_ptr_to_struct(
                 Some(p_type) => {
                     let prop_struct = unsafe {
                         // Safety: Safe because we just got the property pointer
-                        p_type.to_property_struct(&runtime_clone, Sendable(property))
+                        p_type.get_property_struct(&runtime_clone, Sendable(property))
                     };
                     if let Ok(r) = prop_struct {
                         result.insert(name, r);

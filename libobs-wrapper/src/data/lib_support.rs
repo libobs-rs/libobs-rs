@@ -25,7 +25,7 @@ pub trait ObsObjectBuilder {
     /// Returns the name of the source.
     fn get_name(&self) -> ObsString;
 
-    fn build(self) -> Result<ObjectInfo, ObsError>
+    fn object_build(self) -> Result<ObjectInfo, ObsError>
     where
         Self: Sized;
 

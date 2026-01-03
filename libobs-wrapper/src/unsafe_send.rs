@@ -39,7 +39,6 @@ impl<T: Clone> SmartPointerSendable<T> {
         SmartPointerSendableComp::new(self.ptr, self.drop_guard)
     }
 
-
     /// # Safety
     /// This exposes the drop guard, which may lead to misuse. Make sure to only use it when you need it.
     pub unsafe fn drop_guard(&self) -> Arc<dyn ObsDropGuard> {
@@ -53,7 +52,7 @@ unsafe impl<T: Clone> Sync for SmartPointerSendable<T> {}
 #[derive(Debug, Clone)]
 pub struct SmartPointerSendableComp<T: Clone> {
     ptr: T,
-    drop_guard: Arc<dyn ObsDropGuard>,
+    _drop_guard: Arc<dyn ObsDropGuard>,
 }
 
 impl<T> Hash for SmartPointerSendableComp<T>
@@ -78,7 +77,7 @@ impl<T> Eq for SmartPointerSendableComp<T> where T: Clone + Eq {}
 
 impl<T: Clone> SmartPointerSendableComp<T> {
     pub fn new(ptr: T, drop_guard: Arc<dyn ObsDropGuard>) -> Self {
-        Self { ptr, drop_guard }
+        Self { ptr, _drop_guard: drop_guard }
     }
 
     pub fn get_ptr(&self) -> T {

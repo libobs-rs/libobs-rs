@@ -42,8 +42,7 @@ impl ObsOutputTraitSealed for ObsReplayBufferOutputRef {
         output.id = ObsString::new("replay_buffer");
         let output = ObsOutputRef::new(output, runtime.clone())?;
 
-        let replay_signal_manager =
-            ObsReplayOutputSignals::new(&output.as_ptr(), runtime)?;
+        let replay_signal_manager = ObsReplayOutputSignals::new(&output.as_ptr(), runtime)?;
         Ok(Self {
             replay_signal_manager: Arc::new(replay_signal_manager),
             output,

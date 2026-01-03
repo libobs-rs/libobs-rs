@@ -16,16 +16,11 @@ pub trait SceneItemExtSceneTrait {
     fn add_and_create_source(&mut self, info: SourceInfo) -> Result<SceneItemRef, ObsError>;
 
     /// Gets a source by name from this scene. Returns None if no source with the given name exists in this scene.
-    fn get_source_mut(
-        &self,
-        name: &str,
-    ) -> Result<Option<Arc<Box<dyn ObsSourceTrait>>>, ObsError>;
+    fn get_source_mut(&self, name: &str) -> Result<Option<Arc<Box<dyn ObsSourceTrait>>>, ObsError>;
 
     /// Removes the given source from this scene. Removes the corresponding scene item as well. It may be possible that this source is still added to another scene.
-    fn remove_every_item_of_source<T: ObsSourceTrait>(
-        &mut self,
-        source: T,
-    ) -> Result<(), ObsError>;
+    fn remove_every_item_of_source<T: ObsSourceTrait>(&mut self, source: T)
+        -> Result<(), ObsError>;
 
     /// Removes a specific scene item from this scene.
     fn remove_scene_item(&mut self, scene_item: SceneItemRef) -> Result<(), ObsError>;
@@ -72,10 +67,7 @@ impl SceneItemExtSceneTrait for ObsSceneRef {
         Ok(scene_item)
     }
 
-    fn get_source_mut(
-        &self,
-        name: &str,
-    ) -> Result<Option<Arc<Box<dyn ObsSourceTrait>>>, ObsError> {
+    fn get_source_mut(&self, name: &str) -> Result<Option<Arc<Box<dyn ObsSourceTrait>>>, ObsError> {
         let r = self
             .attached_scene_items
             .read()

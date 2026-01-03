@@ -39,7 +39,7 @@ pub fn record() {
     let mut scene = context.scene("main", Some(0)).unwrap();
 
     let source_name = "test_capture";
-    let mut source = context
+    let (mut source, _) = context
         .source_builder::<WindowCaptureSourceBuilder, _>(source_name)
         .unwrap()
         .set_capture_method(ObsWindowCaptureMethod::MethodAuto)

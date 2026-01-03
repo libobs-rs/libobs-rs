@@ -90,10 +90,7 @@ pub trait SceneItemTrait {
 
     /// Sets the transform info of the given source in this scene.
     /// The `ObsTransformInfo` can be built by using the `ObsTransformInfoBuilder`.
-    fn set_transform_info(
-        &self,
-        info: &ObsTransformInfo,
-    ) -> Result<(), ObsError>;
+    fn set_transform_info(&self, info: &ObsTransformInfo) -> Result<(), ObsError>;
 
     /// Fits the given source to the screen size.
     /// If the source is locked, no action is taken.
@@ -194,10 +191,7 @@ impl SceneItemTrait for SceneItemRef {
         Ok(())
     }
 
-    fn set_transform_info(
-        &self,
-        info: &ObsTransformInfo,
-    ) -> Result<(), ObsError> {
+    fn set_transform_info(&self, info: &ObsTransformInfo) -> Result<(), ObsError> {
         let item_info = Sendable(info.clone());
         let self_ptr = self.as_ptr();
 

@@ -12,7 +12,7 @@ use crate::{
     impl_obs_drop, run_with_obs,
     runtime::ObsRuntime,
     unsafe_send::Sendable,
-    utils::{ObsError, ObsString, calldata_free},
+    utils::{calldata_free, ObsError, ObsString},
 };
 
 /// RAII wrapper for libobs `calldata_t` ensuring stable address and proper free.
@@ -38,35 +38,39 @@ impl CalldataWrapper {
         let self_ptr = self.as_mut_ptr();
 
         let _drop_guard = self._drop_guard.clone(); // Ensure runtime is valid during the call
-        let value = run_with_obs!(self.runtime.clone(), (_drop_guard, self_ptr, key), move || unsafe {
-            let key_ptr = key.as_ptr().0;
+        let value = run_with_obs!(
+            self.runtime.clone(),
+            (_drop_guard, self_ptr, key),
+            move || unsafe {
+                let key_ptr = key.as_ptr().0;
 
-            let mut data = MaybeUninit::<*const c_char>::uninit();
-            let ok = libobs::calldata_get_string(self_ptr.0, key_ptr, data.as_mut_ptr());
-            if !ok {
-                return Err(ObsError::Unexpected(format!(
-                    "Calldata String {key} not found."
-                )));
+                let mut data = MaybeUninit::<*const c_char>::uninit();
+                let ok = libobs::calldata_get_string(self_ptr.0, key_ptr, data.as_mut_ptr());
+                if !ok {
+                    return Err(ObsError::Unexpected(format!(
+                        "Calldata String {key} not found."
+                    )));
+                }
+
+                let data_ptr = data.assume_init();
+                if data_ptr.is_null() {
+                    return Err(ObsError::Unexpected(format!(
+                        "Calldata String {key} is null."
+                    )));
+                }
+
+                let data = CStr::from_ptr(data_ptr);
+                let data = data.to_str();
+                if let Err(_e) = data {
+                    return Err(ObsError::Unexpected(format!(
+                        "Calldata String {key} is not valid UTF-8."
+                    )));
+                }
+
+                let data = data.unwrap();
+                Ok(data.to_string())
             }
-
-            let data_ptr = data.assume_init();
-            if data_ptr.is_null() {
-                return Err(ObsError::Unexpected(format!(
-                    "Calldata String {key} is null."
-                )));
-            }
-
-            let data = CStr::from_ptr(data_ptr);
-            let data = data.to_str();
-            if let Err(_e) = data {
-                return Err(ObsError::Unexpected(format!(
-                    "Calldata String {key} is not valid UTF-8."
-                )));
-            }
-
-            let data = data.unwrap();
-            Ok(data.to_string())
-        })??;
+        )??;
 
         Ok(value)
     }
@@ -108,17 +112,13 @@ impl ObsCalldataExt for ObsRuntime {
         let name: ObsString = name.into();
         let mut calldata = run_with_obs!(self.clone(), (proc_handler, name), move || {
             // Safety: calldata will be properly freed by the drop guard and we are using a struct for the `zeroed` call.
-            let data: calldata_t = unsafe { std::mem::zeroed()};
+            let data: calldata_t = unsafe { std::mem::zeroed() };
             let mut data = Box::pin(data);
             // Safety: Data will not get moved out of the pinned box, only the proc handler call will use the pointer and not move it.
-            let raw_ptr = unsafe {
-                Pin::as_mut(&mut data).get_unchecked_mut()
-            };
+            let raw_ptr = unsafe { Pin::as_mut(&mut data).get_unchecked_mut() };
 
             // Safety: the caller must have made sure that the proc handler is valid, the name pointer and the raw_ptr of the calldata is valid.
-            let ok = unsafe {
-                libobs::proc_handler_call(proc_handler.0, name.as_ptr().0, raw_ptr)
-            };
+            let ok = unsafe { libobs::proc_handler_call(proc_handler.0, name.as_ptr().0, raw_ptr) };
             if !ok {
                 return Err(ObsError::Unexpected(
                     "Couldn't call proc handler".to_string(),

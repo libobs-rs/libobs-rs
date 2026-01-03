@@ -1,7 +1,7 @@
 #[allow(unused)]
 #[macro_export]
 macro_rules! define_object_manager {
-    ($(#[$parent_meta:meta])* struct $struct_name:ident($obs_id:literal) for $updatable_name:ident {
+    ($(#[$parent_meta:meta])* struct $struct_name:ident($obs_id:literal, $underlying_ptr_type: ty) for $updatable_name:ident {
         $(
             $(#[$meta:meta])*
             $field:ident: $ty:ty,
@@ -17,7 +17,7 @@ macro_rules! define_object_manager {
                 )*
             }
 
-            #[libobs_simple_macro::obs_object_updater($obs_id, $updatable_name)]
+            #[libobs_simple_macro::obs_object_updater($obs_id, $updatable_name, $underlying_ptr_type)]
             /// Used to update the source this updater was created from. For more details look
             /// at docs for the corresponding builder.
             pub struct [<$struct_name Updater>] {
@@ -56,7 +56,6 @@ macro_rules! impl_custom_source {
     impl $new_source_struct {
         fn new(source: ObsSourceRef) -> Result<Self, libobs_wrapper::utils::ObsError> {
             use libobs_wrapper::data::object::ObsObjectTrait;
-            use libobs_wrapper::sources::ObsSourceTrait;
             let source_specific_signals =
                 [<$new_source_struct Signals>]::new(&source.as_ptr(), source.runtime().clone())?;
 
@@ -80,7 +79,7 @@ macro_rules! impl_custom_source {
         }
     }
 
-    libobs_wrapper::forward_obs_object_impl!($new_source_struct, source);
+    libobs_wrapper::forward_obs_object_impl!($new_source_struct, source, *mut libobs::obs_source);
     libobs_wrapper::forward_obs_source_impl!($new_source_struct, source);
 
         }

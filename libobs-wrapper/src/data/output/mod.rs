@@ -85,46 +85,43 @@ impl ObsOutputTraitSealed for ObsOutputRef {
             hotkey_data,
         } = output;
 
-        let settings_ptr = match settings.as_ref() {
-            Some(x) => Some(x.as_ptr()),
-            None => None,
-        };
+        let settings_ptr = settings.as_ref().map(|x| x.as_ptr());
+        let hotkey_data_ptr = hotkey_data.as_ref().map(|x| x.as_ptr());
 
-        let hotkey_data_ptr = match hotkey_data.as_ref() {
-            Some(x) => Some(x.as_ptr()),
-            None => None,
-        };
+        let output = run_with_obs!(
+            runtime,
+            (id, name, settings_ptr, hotkey_data_ptr),
+            move || {
+                let settings_raw_ptr = match settings_ptr {
+                    Some(s) => s.get_ptr(),
+                    None => ptr::null_mut(),
+                };
 
-        let output = run_with_obs!(runtime, (id, name, settings_ptr, hotkey_data_ptr), move || {
-            let settings_raw_ptr = match settings_ptr {
-                Some(s) => s.get_ptr(),
-                None => ptr::null_mut(),
-            };
+                let hotkey_data_raw_ptr = match hotkey_data_ptr {
+                    Some(h) => h.get_ptr(),
+                    None => ptr::null_mut(),
+                };
 
-            let hotkey_data_raw_ptr = match hotkey_data_ptr {
-                Some(h) => h.get_ptr(),
-                None => ptr::null_mut(),
-            };
+                let id_ptr = id.as_ptr().0;
+                let name_ptr = name.as_ptr().0;
 
-            let id_ptr = id.as_ptr().0;
-            let name_ptr = name.as_ptr().0;
+                let output = unsafe {
+                    // Safety: All pointers are valid because we are keeping them in this scope and because we are using smart pointers for ObsData
+                    libobs::obs_output_create(
+                        id_ptr,
+                        name_ptr,
+                        settings_raw_ptr,
+                        hotkey_data_raw_ptr,
+                    )
+                };
 
-            let output = unsafe {
-                // Safety: All pointers are valid because we are keeping them in this scope and because we are using smart pointers for ObsData
-                libobs::obs_output_create(
-                    id_ptr,
-                    name_ptr,
-                    settings_raw_ptr,
-                    hotkey_data_raw_ptr,
-                )
-            };
+                if output.is_null() {
+                    return Err(ObsError::NullPointer(None));
+                }
 
-            if output.is_null() {
-                return Err(ObsError::NullPointer(None));
+                Ok(Sendable(output))
             }
-
-            Ok(Sendable(output))
-        })??;
+        )??;
 
         let output = SmartPointerSendable::new(
             output.0,
@@ -133,7 +130,6 @@ impl ObsOutputTraitSealed for ObsOutputRef {
                 runtime: runtime.clone(),
             }),
         );
-
 
         // We are getting the settings from OBS because OBS will have updated it with default values.
         let new_settings_ptr = run_with_obs!(runtime, (output), move || {
