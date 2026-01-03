@@ -14,13 +14,12 @@ pub trait ObsSourceBuilder: ObsObjectBuilder {
 
     /// Both items are returned: the source and the scene item it was added as.
     /// You can safely drop these items, they are stored within the scene if you don't need them.
-    fn add_to_scene(self, scene: &mut ObsSceneRef) -> Result<(Self::T, SceneItemRef), ObsError>
+    fn add_to_scene(self, scene: &mut ObsSceneRef) -> Result<SceneItemRef<Self::T>, ObsError>
     where
         Self: Sized,
     {
         let source = self.build()?;
 
-        let scene_item = scene.add_source(source.clone())?;
-        Ok((source, scene_item))
+        scene.add_source(source.clone())
     }
 }

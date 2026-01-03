@@ -33,7 +33,7 @@ pub fn record() {
 
     println!("Using window: {:?}", game);
 
-    let (capture_source, _) = context
+    let scene_item = context
         .source_builder::<GameCaptureSourceBuilder, _>("game_capture")
         .unwrap()
         .set_capture_mode(ObsGameCaptureMode::Any)
@@ -47,7 +47,7 @@ pub fn record() {
     println!("Recording stop");
 
     // This is just so the capture source is not dropped before stopping the output
-    let _x = capture_source.id();
+    let _x = scene_item.inner_source().id();
     output.stop().unwrap();
 
     assert_not_black(&path_out, 1.0);

@@ -32,7 +32,7 @@ pub fn record() {
     let monitor = MonitorCaptureSourceBuilder::get_monitors().unwrap()[0].clone();
     println!("Using monitor {:?}", monitor);
 
-    let (mut capture_source, _) = context
+    let mut scene_item = context
         .source_builder::<MonitorCaptureSourceBuilder, _>("monitor_capture")
         .unwrap()
         .set_monitor(&monitor)
@@ -45,7 +45,8 @@ pub fn record() {
     std::thread::sleep(Duration::from_secs(5));
     if ENABLE_DXGI_TEST {
         println!("Testing DXGI capture method");
-        capture_source
+        scene_item
+            .inner_source_mut()
             .create_updater()
             .unwrap()
             .set_capture_method(ObsDisplayCaptureMethod::MethodDXGI)

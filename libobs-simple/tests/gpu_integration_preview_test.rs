@@ -4,8 +4,6 @@ use std::sync::{Arc, RwLock};
 use libobs_simple::sources::linux::LinuxGeneralScreenCapture;
 #[cfg(target_os = "linux")]
 use libobs_simple::sources::linux::PipeWireSourceExtTrait;
-#[cfg(windows)]
-use libobs_simple::sources::windows::monitor_capture::MonitorCaptureSource;
 use libobs_wrapper::graphics::Vec2;
 use libobs_wrapper::scenes::SceneItemTrait;
 #[cfg(target_os = "linux")]
@@ -41,11 +39,7 @@ use winit::window::{Window, WindowId};
 #[derive(Clone)]
 struct ObsInner {
     context: ObsContext,
-    display: ObsDisplayRef,
-    #[cfg(windows)]
-    _source: MonitorCaptureSource,
-    #[cfg(target_os = "linux")]
-    _source: ObsSourceRef,
+    display: ObsDisplayRef
 }
 
 impl ObsInner {
@@ -80,7 +74,7 @@ impl ObsInner {
             .find(|e| e.title.is_some() && e.title.as_ref().unwrap().contains("Apex"));
 
         #[cfg(windows)]
-        let (monitor_src, monitor_item) = context
+        let monitor_item = context
             .source_builder::<MonitorCaptureSourceBuilder, _>("Monitor capture")?
             .set_monitor(
                 &MonitorCaptureSourceBuilder::get_monitors().expect("Couldn't get monitors")[0],
@@ -122,7 +116,7 @@ impl ObsInner {
                 "Is used by other instance: {}",
                 GameCaptureSourceBuilder::is_window_in_use_by_other_instance(apex.pid)?
             );
-            let (_source, item) = context
+            let item = context
                 .source_builder::<GameCaptureSourceBuilder, _>("Game capture")?
                 .set_capture_mode(ObsGameCaptureMode::CaptureSpecificWindow)
                 .set_window(apex)
@@ -170,8 +164,7 @@ impl ObsInner {
         Ok(Self {
             context,
             #[cfg_attr(not(target_os = "linux"), allow(unused_unsafe))]
-            display,
-            _source: monitor_src,
+            display
         })
     }
 }

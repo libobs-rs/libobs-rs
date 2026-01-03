@@ -57,7 +57,7 @@ struct ReproState {
     // Key point: storing encoders by type to reuse them (like production code)
     video_encoders: HashMap<EncoderType, Arc<ObsVideoEncoder>>,
     _scene: libobs_wrapper::scenes::ObsSceneRef,
-    _monitor_capture: (MonitorCaptureSource, SceneItemRef),
+    _monitor_capture: SceneItemRef<MonitorCaptureSource>,
 }
 
 impl ReproState {

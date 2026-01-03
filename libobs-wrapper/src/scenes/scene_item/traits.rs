@@ -1,5 +1,5 @@
 use crate::scenes::{ObsSceneRef, SceneItemRef, SceneItemTrait};
-use crate::sources::ObsSourceTrait;
+use crate::sources::{ObsSourceRef, ObsSourceTrait};
 use crate::utils::{ObsError, SourceInfo};
 use std::sync::Arc;
 
@@ -9,11 +9,14 @@ pub trait SceneItemExtSceneTrait {
     fn add_source<T: ObsSourceTrait + Clone + 'static>(
         &mut self,
         source: T,
-    ) -> Result<SceneItemRef, ObsError>;
+    ) -> Result<SceneItemRef<T>, ObsError>;
 
     /// Creates and adds a source to this scene based on the given `SourceInfo`.
     /// Returns a reference to the created scene item, which internally holds the created source.
-    fn add_and_create_source(&mut self, info: SourceInfo) -> Result<SceneItemRef, ObsError>;
+    fn add_and_create_source(
+        &mut self,
+        info: SourceInfo,
+    ) -> Result<SceneItemRef<ObsSourceRef>, ObsError>;
 
     /// Gets a source by name from this scene. Returns None if no source with the given name exists in this scene.
     fn get_source_mut(&self, name: &str) -> Result<Option<Arc<Box<dyn ObsSourceTrait>>>, ObsError>;
@@ -23,7 +26,7 @@ pub trait SceneItemExtSceneTrait {
         -> Result<(), ObsError>;
 
     /// Removes a specific scene item from this scene.
-    fn remove_scene_item(&mut self, scene_item: SceneItemRef) -> Result<(), ObsError>;
+    fn remove_scene_item<K: SceneItemTrait>(&mut self, scene_item: K) -> Result<(), ObsError>;
 
     /// Removes all sources from this scene.
     fn remove_all_sources(&mut self) -> Result<(), ObsError>;
@@ -31,30 +34,35 @@ pub trait SceneItemExtSceneTrait {
     /// Gets the underlying scene item pointers for the given source in this scene.
     ///
     /// A scene item is basically the representation of a source within this scene. It holds information about the position, scale, rotation, etc.
-    fn get_scene_item_ptr<T: ObsSourceTrait>(
+    fn get_scene_item_ptr<T: ObsSourceTrait + Clone>(
         &self,
         source: &T,
-    ) -> Result<Vec<SceneItemRef>, ObsError>;
+    ) -> Result<Vec<Arc<Box<dyn SceneItemTrait>>>, ObsError>;
 }
 
 impl SceneItemExtSceneTrait for ObsSceneRef {
     fn add_source<T: ObsSourceTrait + Clone + 'static>(
         &mut self,
         source: T,
-    ) -> Result<SceneItemRef, ObsError> {
+    ) -> Result<SceneItemRef<T>, ObsError> {
         let scene_item = SceneItemRef::new(self, source.clone(), self.runtime.clone())?;
 
+
+        let scene_clone = scene_item.clone();
         self.attached_scene_items
             .write()
             .map_err(|e| ObsError::LockError(format!("{:?}", e)))?
             .entry(Arc::new(Box::new(source)))
             .or_insert_with(Vec::new)
-            .push(scene_item.clone());
+            .push(Arc::new(Box::new(scene_clone)));
 
         Ok(scene_item)
     }
 
-    fn add_and_create_source(&mut self, info: SourceInfo) -> Result<SceneItemRef, ObsError> {
+    fn add_and_create_source(
+        &mut self,
+        info: SourceInfo,
+    ) -> Result<SceneItemRef<ObsSourceRef>, ObsError> {
         let source = crate::sources::ObsSourceRef::new(
             info.id,
             info.name,
@@ -96,7 +104,7 @@ impl SceneItemExtSceneTrait for ObsSceneRef {
         Ok(())
     }
 
-    fn remove_scene_item(&mut self, scene_item: SceneItemRef) -> Result<(), ObsError> {
+    fn remove_scene_item<K: SceneItemTrait>(&mut self, scene_item: K) -> Result<(), ObsError> {
         let mut guard = self
             .attached_scene_items
             .write()
@@ -104,8 +112,8 @@ impl SceneItemExtSceneTrait for ObsSceneRef {
 
         guard.retain(|_, items| {
             items.retain(|item| {
-            // Keep everything except this one scene item
-            item.as_ptr().get_ptr() != scene_item.as_ptr().get_ptr()
+                // Keep everything except this one scene item
+                item.as_ptr().get_ptr() != scene_item.as_ptr().get_ptr()
             });
             // Remove the entry if no items remain
             !items.is_empty()
@@ -123,10 +131,10 @@ impl SceneItemExtSceneTrait for ObsSceneRef {
         Ok(())
     }
 
-    fn get_scene_item_ptr<T: ObsSourceTrait>(
+    fn get_scene_item_ptr<T: ObsSourceTrait + Clone>(
         &self,
         source: &T,
-    ) -> Result<Vec<SceneItemRef>, ObsError> {
+    ) -> Result<Vec<Arc<Box<dyn SceneItemTrait>>>, ObsError> {
         let guard = self
             .attached_scene_items
             .read()

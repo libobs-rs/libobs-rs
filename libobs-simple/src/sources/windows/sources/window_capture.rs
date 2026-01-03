@@ -157,7 +157,7 @@ impl ObsSourceBuilder for WindowCaptureSourceBuilder {
         WindowCaptureSource::new(source)
     }
 
-    fn add_to_scene(mut self, scene: &mut ObsSceneRef) -> Result<(Self::T, SceneItemRef), ObsError>
+    fn add_to_scene(mut self, scene: &mut ObsSceneRef) -> Result<SceneItemRef<Self::T>, ObsError>
     where
         Self: Sized,
     {
@@ -178,6 +178,6 @@ impl ObsSourceBuilder for WindowCaptureSourceBuilder {
                 .update()?;
         }
 
-        Ok((source, scene_item))
+        Ok(scene_item)
     }
 }
