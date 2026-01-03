@@ -19,7 +19,7 @@ pub fn main() -> anyhow::Result<()> {
         .build()?;
 
     let mut scene = ctx.scene("Test Scene", Some(0))?;
-    let (_, monitor_item) = ctx
+    let monitor_item = ctx
         .source_builder::<MonitorCaptureSourceBuilder, _>("Test Monitor Capture")?
         .set_monitor(&MonitorCaptureSourceBuilder::get_monitors()?[0])
         .add_to_scene(&mut scene)?;

@@ -43,7 +43,7 @@ fn main() -> anyhow::Result<()> {
     let monitors = MonitorCaptureSourceBuilder::get_monitors()?;
 
     #[cfg(windows)]
-    let (mut monitor_capture, monitor_item) = context
+    let mut monitor_item = context
         .source_builder::<MonitorCaptureSourceBuilder, _>("Monitor Capture")?
         .set_monitor(&monitors[0])
         .set_capture_method(libobs_simple::sources::windows::ObsDisplayCaptureMethod::MethodDXGI)
@@ -86,7 +86,8 @@ fn main() -> anyhow::Result<()> {
         thread::sleep(Duration::from_secs(5));
 
         // Switching monitor
-        monitor_capture
+        monitor_item
+            .inner_source_mut()
             .create_updater()?
             .set_monitor(&monitors[1 % monitors.len()])
             .update()?;

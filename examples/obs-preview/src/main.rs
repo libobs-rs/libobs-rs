@@ -7,6 +7,8 @@ use std::time::Duration;
 use libobs_simple::sources::linux::LinuxGeneralScreenCapture;
 #[cfg(windows)]
 use libobs_simple::sources::windows::monitor_capture::MonitorCaptureSource;
+#[cfg(windows)]
+use libobs_wrapper::scenes::SceneItemRef;
 use libobs_wrapper::scenes::SceneItemTrait;
 #[cfg(target_os = "linux")]
 use libobs_wrapper::sources::ObsSourceRef;
@@ -55,9 +57,9 @@ struct ObsInner {
     context: ObsContext,
     display: ObsDisplayRef,
     #[cfg(windows)]
-    _source: MonitorCaptureSource,
+    _scene_item: SceneItemRef<MonitorCaptureSource>,
     #[cfg(target_os = "linux")]
-    _source: ObsSourceRef,
+    _scene_item: ObsSourceRef,
     _guard: SignalThreadGuard,
 }
 
@@ -98,7 +100,7 @@ impl ObsInner {
             .find(|e| e.title.is_some() && e.title.as_ref().unwrap().contains("Apex"));
 
         #[cfg(windows)]
-        let (monitor_src, monitor_item) = context
+        let monitor_item = context
             .source_builder::<MonitorCaptureSourceBuilder, _>("Monitor capture")?
             .set_monitor(
                 &MonitorCaptureSourceBuilder::get_monitors().expect("Couldn't get monitors")[0],
@@ -123,7 +125,7 @@ impl ObsInner {
                 "Is used by other instance: {}",
                 GameCaptureSourceBuilder::is_window_in_use_by_other_instance(apex.pid)?
             );
-            let (_, game_capture_item) = context
+            let game_capture_item = context
                 .source_builder::<GameCaptureSourceBuilder, _>("Game capture")?
                 .set_capture_mode(ObsGameCaptureMode::CaptureSpecificWindow)
                 .set_window(apex)
@@ -166,7 +168,7 @@ impl ObsInner {
             ObsDisplayCreationData::new(obs_handle, 0, 0, width, height);
 
         // Example for signals and events with libobs
-        let tmp = monitor_src.clone();
+        let tmp = monitor_item.inner_source().clone();
         let should_exit = Arc::new(AtomicBool::new(false));
         let thread_exit = should_exit.clone();
         let handle = std::thread::spawn(move || {
@@ -189,7 +191,7 @@ impl ObsInner {
             context,
             #[cfg_attr(not(target_os = "linux"), allow(unused_unsafe))]
             display,
-            _source: monitor_src,
+            _scene_item: monitor_item,
             _guard: SignalThreadGuard {
                 should_exit,
                 handle: Some(handle),
@@ -284,7 +286,7 @@ impl ApplicationHandler for App {
                         if let Some(inner) = inner {
                             let monitor_index = self.monitor_index.clone();
 
-                            let source = &mut inner._source;
+                            let scene_item = &mut inner._scene_item;
                             let monitors = MonitorCaptureSourceBuilder::get_monitors().unwrap();
 
                             let monitor_index = monitor_index
@@ -292,7 +294,8 @@ impl ApplicationHandler for App {
                                 % monitors.len();
                             let monitor = &monitors[monitor_index];
 
-                            source
+                            scene_item
+                                .inner_source_mut()
                                 .create_updater()
                                 .unwrap()
                                 .set_monitor(monitor)

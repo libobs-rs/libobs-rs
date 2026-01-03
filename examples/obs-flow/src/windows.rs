@@ -41,7 +41,7 @@ pub fn main() -> anyhow::Result<()> {
     // Read all the properties of source type or encoders
     {
         // You can also just create a source and remove it instantly again
-        let (_source, scene_item) = context
+        let scene_item = context
             .source_builder::<MonitorCaptureSourceBuilder, _>("Display name")?
             .add_to_scene(&mut scene)?;
 
@@ -62,7 +62,7 @@ pub fn main() -> anyhow::Result<()> {
     output.update_settings(settings)?;
 
     // method 2 is WGC
-    let (_, scene_item) = context
+    let scene_item = context
         .source_builder::<MonitorCaptureSourceBuilder, _>("Test Monitor Capture 2")?
         .set_monitor(&MonitorCaptureSourceBuilder::get_monitors()?[0])
         .set_capture_method(ObsDisplayCaptureMethod::MethodWgc)
