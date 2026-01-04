@@ -2,11 +2,10 @@ use libobs_wrapper::{
     data::ObsObjectBuilder,
     runtime::ObsRuntime,
     sources::ObsSourceBuilder,
-    utils::{ObjectInfo, ObsError, ObsString},
+    utils::{ObjectInfo, ObsError, ObsString, PlatformType},
 };
 
 use crate::sources::linux::{
-    display_server::DisplayServerType,
     pipewire::{ObsPipeWireSourceRef, PipeWireWindowCaptureSourceBuilder},
     Either, EitherSource, XCompositeInputSource, XCompositeInputSourceBuilder,
 };
@@ -20,12 +19,15 @@ impl ObsObjectBuilder for LinuxGeneralWindowCaptureBuilder {
     where
         Self: Sized,
     {
-        let underlying_builder = match DisplayServerType::detect() {
-            DisplayServerType::X11 => {
-                Either::Left(XCompositeInputSourceBuilder::new(name, runtime)?)
-            }
-            DisplayServerType::Wayland | DisplayServerType::Unknown => {
+        let underlying_builder = match runtime.get_platform()? {
+            PlatformType::X11 => Either::Left(XCompositeInputSourceBuilder::new(name, runtime)?),
+            PlatformType::Wayland => {
                 Either::Right(PipeWireWindowCaptureSourceBuilder::new(name, runtime)?)
+            }
+            PlatformType::Invalid => {
+                return Err(ObsError::PlatformInitError(
+                    "No platform could be found to create the source on.".to_string(),
+                ))
             }
         };
 

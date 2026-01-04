@@ -27,6 +27,8 @@ pub use calldata::*;
 pub use error::*;
 pub use info::*;
 pub use initialization::NixDisplay;
+#[cfg(target_os = "linux")]
+pub use initialization::PlatformType;
 pub use modules::ObsModules;
 pub use obs_string::*;
 pub use path::*;

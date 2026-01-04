@@ -332,5 +332,6 @@ struct _ObsSourceGuard {
 impl ObsDropGuard for _ObsSourceGuard {}
 
 impl_obs_drop!(_ObsSourceGuard, (source), move || unsafe {
+    // Safety: We are in the runtime and the pointer is valid because of the drop guard
     libobs::obs_source_release(source.0);
 });

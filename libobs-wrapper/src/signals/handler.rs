@@ -117,9 +117,10 @@ macro_rules! __signals_impl_signal {
                 static ref [<$signal_name:snake:upper _SENDERS>]: std::sync::Arc<std::sync::RwLock<std::collections::HashMap<$crate::unsafe_send::SendableComp<$ptr>, tokio::sync::broadcast::Sender<$gen_type>>>> = std::sync::Arc::new(std::sync::RwLock::new(std::collections::HashMap::new()));
             }
 
-            /// Safety: This will always be called within the OBS runtime.
             #[allow(unknown_lints)]
             #[allow(ensure_obs_call_in_runtime)]
+            /// # Safety
+            /// You must make sure that the calldata pointer is valid and this is running on the OBS
             unsafe fn [< $signal_name:snake _handler_inner>](cd: *mut libobs::calldata_t) -> Result<$gen_type, $crate::utils::ObsError> {
                 let e = $crate::__signals_impl_primitive_handler!($field_name, $gen_type)(cd);
 
@@ -135,6 +136,8 @@ macro_rules! __signals_impl_signal {
                 static ref [<$signal_name:snake:upper _SENDERS>]: std::sync::Arc<std::sync::RwLock<std::collections::HashMap<$crate::unsafe_send::SendableComp<$ptr>, tokio::sync::broadcast::Sender<()>>>> = std::sync::Arc::new(std::sync::RwLock::new(std::collections::HashMap::new()));
             }
 
+            /// # Safety
+            /// You must make sure that the calldata pointer is valid and this is running on the OBS runtime.
             unsafe fn [< $signal_name:snake _handler_inner>](_cd: *mut libobs::calldata_t) -> Result<(), $crate::utils::ObsError> {
                 Ok(())
             }
@@ -176,7 +179,8 @@ macro_rules! __signals_impl_signal {
 
             #[allow(unknown_lints)]
             #[allow(ensure_obs_call_in_runtime)]
-            /// Safety: This will always be called within the OBS runtime.
+            /// # Safety
+            /// You must make sure that the calldata pointer is valid and this is running on the OBS runtime.
             unsafe fn [< $signal_name:snake _handler_inner>](cd: *mut libobs::calldata_t) -> Result<$name, $crate::utils::ObsError> {
                 $(
                     let $field_name = $crate::__signals_impl_primitive_handler!($field_name, $field_type)(cd)?;

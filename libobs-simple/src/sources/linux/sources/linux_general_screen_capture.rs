@@ -2,11 +2,10 @@ use libobs_wrapper::{
     data::ObsObjectBuilder,
     runtime::ObsRuntime,
     sources::{ObsSourceBuilder, ObsSourceRef},
-    utils::{ObjectInfo, ObsError, ObsString},
+    utils::{ObjectInfo, ObsError, ObsString, PlatformType},
 };
 
 use crate::sources::linux::{
-    display_server::DisplayServerType,
     pipewire::{ObsPipeWireSourceRef, PipeWireScreenCaptureSourceBuilder},
     Either, EitherSource, X11CaptureSourceBuilder,
 };
@@ -20,10 +19,16 @@ impl ObsObjectBuilder for LinuxGeneralScreenCaptureBuilder {
     where
         Self: Sized,
     {
-        let underlying_builder = match DisplayServerType::detect() {
-            DisplayServerType::X11 => Either::Left(X11CaptureSourceBuilder::new(name, runtime)?),
-            DisplayServerType::Wayland | DisplayServerType::Unknown => {
+        let platform = runtime.get_platform()?;
+        let underlying_builder = match platform {
+            PlatformType::X11 => Either::Left(X11CaptureSourceBuilder::new(name, runtime)?),
+            PlatformType::Wayland => {
                 Either::Right(PipeWireScreenCaptureSourceBuilder::new(name, runtime)?)
+            }
+            PlatformType::Invalid => {
+                return Err(ObsError::PlatformInitError(
+                    "No platform could be found to create the source on.".to_string(),
+                ))
             }
         };
 
@@ -211,10 +216,10 @@ impl LinuxGeneralScreenCaptureBuilder {
         self
     }
 
-    pub fn capture_type_name(&self) -> DisplayServerType {
+    pub fn capture_type_name(&self) -> PlatformType {
         match &self.underlying_builder {
-            Either::Left(_) => DisplayServerType::X11,
-            Either::Right(_) => DisplayServerType::Wayland,
+            Either::Left(_) => PlatformType::X11,
+            Either::Right(_) => PlatformType::Wayland,
         }
     }
 }

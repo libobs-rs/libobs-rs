@@ -44,7 +44,8 @@ use crate::context::ObsContext;
 use crate::crash_handler::main_crash_handler;
 use crate::enums::{ObsLogLevel, ObsResetVideoStatus};
 use crate::logger::{extern_log_callback, internal_log_global, LOGGER};
-use crate::utils::initialization::{platform_specific_setup, PlatformSpecificGuard};
+use crate::run_with_obs;
+use crate::utils::initialization::{platform_specific_setup, PlatformSpecificGuard, PlatformType};
 use crate::utils::{ObsError, ObsModules, ObsString};
 use crate::{context::OBS_THREAD_ID, utils::StartupInfo};
 
@@ -192,8 +193,9 @@ impl ObsRuntime {
                 };
 
                 match res {
-                    Ok((info, modules, _platform_specific)) => {
+                    Ok((info, modules, _platform_specific_guard)) => {
                         log::trace!("OBS context initialized successfully");
+
                         let e = init_tx.send(Ok((Sendable(modules), info)));
                         if let Err(err) = e {
                             log::error!("Failed to send initialization signal: {:?}", err);
@@ -470,7 +472,10 @@ impl ObsRuntime {
             libobs::base_set_crash_handler(Some(main_crash_handler), std::ptr::null_mut());
         }
 
-        let native = platform_specific_setup(info.nix_display.clone())?;
+        let native = unsafe {
+            // Safety: We are in the OBS thread and the nix_display can only be set
+            platform_specific_setup(info.nix_display.clone())?
+        };
         unsafe {
             // Safety: We are in the OBS thread, so it's safe to call this here.
             libobs::base_set_log_handler(Some(extern_log_callback), std::ptr::null_mut());
@@ -644,6 +649,21 @@ impl ObsRuntime {
 
         *mutex_value = None;
         Ok(())
+    }
+
+    pub fn get_platform(&self) -> Result<PlatformType, ObsError> {
+        run_with_obs!(self, || {
+            let raw_platform = unsafe {
+                // Safety: This is safe to call as long as OBS is initialized.
+                libobs::obs_get_nix_platform()
+            };
+
+            match raw_platform {
+                libobs::obs_nix_platform_type_OBS_NIX_PLATFORM_X11_EGL => PlatformType::X11,
+                libobs::obs_nix_platform_type_OBS_NIX_PLATFORM_WAYLAND => PlatformType::Wayland,
+                _ => PlatformType::Invalid,
+            }
+        })
     }
 }
 

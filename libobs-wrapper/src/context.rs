@@ -43,6 +43,8 @@ use std::{
     thread::ThreadId,
 };
 
+#[cfg(target_os = "linux")]
+use crate::utils::initialization::PlatformType;
 use crate::{
     data::{
         object::ObsObjectTrait,
@@ -200,6 +202,11 @@ impl ObsContext {
             #[cfg(target_os = "linux")]
             glib_loop: Arc::new(RwLock::new(linux_opt)),
         })
+    }
+
+    #[cfg(target_os = "linux")]
+    pub fn get_platform(&self) -> Result<PlatformType, ObsError> {
+        self.runtime.get_platform()
     }
 
     pub fn get_version(&self) -> Result<String, ObsError> {

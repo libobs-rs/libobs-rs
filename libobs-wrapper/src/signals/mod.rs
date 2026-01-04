@@ -14,7 +14,10 @@ macro_rules! impl_signal_manager {
             $(
             extern "C" fn [< $signal_name:snake _handler>](obj_ptr: *mut std::ffi::c_void, __internal_calldata: *mut libobs::calldata_t) {
                 #[allow(unused_unsafe)]
-                let res = unsafe { [< $signal_name:snake _handler_inner>](__internal_calldata) };
+                let res = unsafe {
+                    // Safety: We are in the runtime and the calldata pointer is valid because OBS is calling this function
+                    [< $signal_name:snake _handler_inner>](__internal_calldata)
+                };
                 if res.is_err() {
                     log::warn!("Error processing signal {}: {:?}", stringify!($signal_name), res.err());
                     return;

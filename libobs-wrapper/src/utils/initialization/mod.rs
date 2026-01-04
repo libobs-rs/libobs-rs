@@ -8,6 +8,8 @@ pub(crate) use windows::*;
 mod other;
 
 #[cfg(not(windows))]
+pub use other::PlatformType;
+#[cfg(not(windows))]
 pub(crate) use other::*;
 
 use crate::unsafe_send::Sendable;
