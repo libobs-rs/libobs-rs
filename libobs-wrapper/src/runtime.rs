@@ -279,52 +279,64 @@ impl ObsRuntime {
     ///     }).await.unwrap();
     /// }
     /// ```
+    #[cfg(feature = "enable_runtime")]
     pub fn run_with_obs_no_block<F>(&self, operation: F) -> Result<(), ObsError>
     where
         F: FnOnce() + Send + 'static,
     {
         let is_within_runtime = std::thread::current().id() == self.thread_id;
 
-        #[cfg(not(feature = "enable_runtime"))]
-        {
-            if !is_within_runtime {
-                return Err(ObsError::RuntimeOutsideThread);
-            }
-
+        if is_within_runtime {
             operation();
+
             return Ok(());
         }
-        #[cfg(feature = "enable_runtime")]
-        {
-            if is_within_runtime {
-                operation();
 
-                return Ok(());
-            }
-
-            #[cfg(feature = "enable_runtime")]
-            {
-                let val = self.queued_commands.fetch_add(1, Ordering::SeqCst);
-                if val > 50 {
-                    log::warn!("More than 50 queued commands. Try to batch them together.");
-                }
-
-                let wrapper = move || -> Box<dyn std::any::Any + Send> {
-                    operation();
-                    Box::new(())
-                };
-
-                self.command_sender
-                    .send(ObsCommand::Execute(Box::new(wrapper), None))
-                    .map_err(|_| {
-                        ObsError::RuntimeChannelError(
-                            "Failed to send command to OBS thread".to_string(),
-                        )
-                    })?;
-
-                Ok(())
-            }
+        let val = self.queued_commands.fetch_add(1, Ordering::SeqCst);
+        if val > 50 {
+            log::warn!("More than 50 queued commands. Try to batch them together.");
         }
+
+        let wrapper = move || -> Box<dyn std::any::Any + Send> {
+            operation();
+            Box::new(())
+        };
+
+        self.command_sender
+            .send(ObsCommand::Execute(Box::new(wrapper), None))
+            .map_err(|_| {
+                ObsError::RuntimeChannelError("Failed to send command to OBS thread".to_string())
+            })?;
+
+        Ok(())
+    }
+
+    /// Because you have the `enable_runtime` feature disabled, this is a no-op function and will still block. This is just so the run_with_obs macro works.
+    #[cfg(not(feature = "enable_runtime"))]
+    pub fn run_with_obs_no_block<F>(&self, operation: F) -> Result<(), ObsError>
+    where
+        F: FnOnce() + 'static,
+    {
+        if !is_within_runtime {
+            return Err(ObsError::RuntimeOutsideThread);
+        }
+
+        operation();
+        return Ok(());
+    }
+
+    /// No-Op function, as you have the runtime disabled. This is just so the run_with_obs macro still works
+    #[cfg(not(feature = "enable_runtime"))]
+    pub fn run_with_obs_result<F, T>(&self, operation: F) -> Result<T, ObsError>
+    where
+        F: FnOnce() -> T,
+    {
+        let is_within_runtime = std::thread::current().id() == self.thread_id;
+        if !is_within_runtime {
+            return Err(ObsError::RuntimeOutsideThread);
+        }
+
+        Ok(operation())
     }
 
     /// Executes an operation on the OBS thread, waits for the call to finish and returns a result
@@ -349,66 +361,52 @@ impl ObsRuntime {
     ///         // This code runs on the OBS thread
     ///         unsafe { libobs::obs_get_version_string() }
     ///     }).await.unwrap();
-    ///     
+    ///
     ///     println!("OBS Version: {:?}", version);
     /// }
     /// ```
+    #[cfg(feature = "enable_runtime")]
     pub fn run_with_obs_result<F, T>(&self, operation: F) -> Result<T, ObsError>
     where
         F: FnOnce() -> T + Send + 'static,
         T: Send + 'static,
     {
-        #[cfg(feature = "enable_runtime")]
-        {
-            let is_within_runtime = std::thread::current().id() == self.thread_id;
-            if is_within_runtime {
-                let result = operation();
-                return Ok(result);
-            }
-        }
-
-        #[cfg(not(feature = "enable_runtime"))]
-        {
+        let is_within_runtime = std::thread::current().id() == self.thread_id;
+        if is_within_runtime {
             let result = operation();
             return Ok(result);
         }
+        let (tx, rx) = oneshot::channel();
 
-        #[cfg(feature = "enable_runtime")]
-        {
-            let (tx, rx) = oneshot::channel();
+        // Create a wrapper closure that boxes the result as Any
+        let wrapper = move || -> Box<dyn std::any::Any + Send> {
+            let result = operation();
+            Box::new(result)
+        };
 
-            // Create a wrapper closure that boxes the result as Any
-            let wrapper = move || -> Box<dyn std::any::Any + Send> {
-                let result = operation();
-                Box::new(result)
-            };
-
-            let val = self.queued_commands.fetch_add(1, Ordering::SeqCst);
-            if val > 50 {
-                log::warn!("More than 50 queued commands. Try to batch them together.");
-            }
-
-            self.command_sender
-                .send(ObsCommand::Execute(Box::new(wrapper), Some(tx)))
-                .map_err(|_| {
-                    ObsError::RuntimeChannelError(
-                        "Failed to send command to OBS thread".to_string(),
-                    )
-                })?;
-
-            let result = rx.recv().map_err(|_| {
-                ObsError::RuntimeChannelError("OBS thread dropped the response channel".to_string())
-            })?;
-
-            // Downcast the Any type back to T
-            let res = result.downcast::<T>().map(|boxed| *boxed).map_err(|_| {
-                ObsError::RuntimeChannelError(
-                    "Failed to downcast result to the expected type".to_string(),
-                )
-            })?;
-
-            Ok(res)
+        let val = self.queued_commands.fetch_add(1, Ordering::SeqCst);
+        if val > 50 {
+            log::warn!("More than 50 queued commands. Try to batch them together.");
         }
+
+        self.command_sender
+            .send(ObsCommand::Execute(Box::new(wrapper), Some(tx)))
+            .map_err(|_| {
+                ObsError::RuntimeChannelError("Failed to send command to OBS thread".to_string())
+            })?;
+
+        let result = rx.recv().map_err(|_| {
+            ObsError::RuntimeChannelError("OBS thread dropped the response channel".to_string())
+        })?;
+
+        // Downcast the Any type back to T
+        let res = result.downcast::<T>().map(|boxed| *boxed).map_err(|_| {
+            ObsError::RuntimeChannelError(
+                "Failed to downcast result to the expected type".to_string(),
+            )
+        })?;
+
+        Ok(res)
     }
 
     /// Initializes the libobs context and prepares it for recording.

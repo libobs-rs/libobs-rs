@@ -50,6 +50,7 @@ pub fn record() {
             .create_updater()
             .unwrap()
             .set_capture_method(ObsDisplayCaptureMethod::MethodDXGI)
+            .unwrap()
             .update()
             .unwrap();
 
