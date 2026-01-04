@@ -191,7 +191,8 @@ impl Drop for ObsModules {
         #[cfg(any(
             not(feature = "no_blocking_drops"),
             test,
-            feature = "__test_environment"
+            feature = "__test_environment",
+            not(feature = "enable_runtime")
         ))]
         {
             let data_path = paths.libobs_data_path().clone();
@@ -210,7 +211,8 @@ impl Drop for ObsModules {
         #[cfg(all(
             feature = "no_blocking_drops",
             not(test),
-            not(feature = "__test_environment")
+            not(feature = "__test_environment"),
+            feature = "enable_runtime"
         ))]
         {
             let _ = tokio::task::spawn_blocking(move || {

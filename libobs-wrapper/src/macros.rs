@@ -61,7 +61,12 @@ macro_rules! impl_obs_drop {
                 log::trace!("Dropping {}...", stringify!($struct_name));
 
                 $(let $var = self.$var.clone();)*
-                #[cfg(any(not(feature = "no_blocking_drops"), test, feature="__test_environment"))]
+                #[cfg(any(
+                    not(feature = "no_blocking_drops"),
+                    test,
+                    feature="__test_environment",
+                    not(feature="enable_runtime")
+                ))]
                 {
                     let run_with_obs_result = $crate::run_with_obs!(self.runtime, ($($var),*), $operation);
                     if std::thread::panicking() {
@@ -71,7 +76,12 @@ macro_rules! impl_obs_drop {
                     run_with_obs_result.unwrap();
                 }
 
-                #[cfg(all(feature = "no_blocking_drops", not(test), not(feature="__test_environment")))]
+                #[cfg(all(
+                    feature = "no_blocking_drops",
+                    not(test),
+                    not(feature="__test_environment"),
+                    feature="enable_runtime"
+                ))]
                 {
                     let __runtime = self.runtime.clone();
                     $crate::run_with_obs_impl!(SEPARATE_THREAD, __runtime, ($($var),*), $operation);
