@@ -29,6 +29,8 @@ libobs-window-helper = { workspace = true, optional = true }
 paste = { workspace = true }
 tokio = { workspace = true, features = ["sync"], default-features = false }
 lazy_static.workspace = true
+
+[target.'cfg(windows)'.dependencies]
 windows.workspace = true
 
 [features]

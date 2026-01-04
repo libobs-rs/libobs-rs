@@ -51,6 +51,10 @@ impl<'a> ObsObjectUpdater<'a, *mut libobs::obs_source> for ObsPipeWireGeneralUpd
 
         updatable.update_settings(settings)
     }
+
+    fn runtime(&self) -> &ObsRuntime {
+        self.updatable.runtime()
+    }
 }
 
 impl<'a> ObsPipeWireGeneralUpdater<'a> {
