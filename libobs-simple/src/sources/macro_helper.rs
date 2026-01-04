@@ -39,7 +39,10 @@ macro_rules! impl_custom_source {
         $($(#[$attr:meta])* $signal_name: literal: { $($inner_def:tt)* }),* $(,)*
     ]) => {
         paste::paste! {
-                libobs_wrapper::impl_signal_manager!(|ptr| unsafe { libobs::obs_source_get_signal_handler(ptr) }, [<$new_source_struct Signals>] for $new_source_struct<*mut libobs::obs_source>, [
+                libobs_wrapper::impl_signal_manager!(|ptr: libobs_wrapper::unsafe_send::SmartPointerSendable<*mut libobs::obs_source>| unsafe {
+                    // Safety: This is a smart pointer, so it is fine
+                    libobs::obs_source_get_signal_handler(ptr.get_ptr())
+                }, [<$new_source_struct Signals>] for $new_source_struct<*mut libobs::obs_source>, [
             $($(#[$attr])* $signal_name: { $($inner_def)* }),*
             ]);
 
