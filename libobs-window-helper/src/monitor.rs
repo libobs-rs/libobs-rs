@@ -7,6 +7,8 @@ pub fn get_monitor_id(monitor: HMONITOR) -> Result<String, WindowHelperError> {
     let mut monitor_info = MONITORINFOEXW::default();
     monitor_info.monitorInfo.cbSize = std::mem::size_of::<MONITORINFOEXW>() as u32;
 
+    // Safety: `monitor` is supplied by Win32 APIs, `monitor_info` is a valid, writable buffer with a
+    // correct `cbSize`, and the call does not outlive the buffer.
     unsafe {
         GetMonitorInfoW(monitor, &mut monitor_info as *mut _ as _).ok()?;
     }

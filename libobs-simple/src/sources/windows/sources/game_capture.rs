@@ -160,7 +160,7 @@ impl GameCaptureSource {
     pub fn set_capture_audio(mut self, capture_audio: bool) -> Result<Self, ObsSimpleError> {
         use crate::sources::windows::audio_capture_available;
 
-        if capture_audio && !audio_capture_available() {
+        if capture_audio && !audio_capture_available(self.runtime())? {
             return Err(ObsSimpleError::FeatureNotAvailable(
                 "Game Audio Capture is not available on this system",
             ));

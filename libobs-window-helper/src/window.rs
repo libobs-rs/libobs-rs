@@ -53,6 +53,8 @@ pub fn get_exe(handle: HWND) -> Result<(u32, PathBuf), WindowHelperError> {
         process_id: proc_id,
         ..
     } = get_thread_proc_id(handle)?;
+    // Safety: Opening a process handle requires a valid PID retrieved from `get_thread_proc_id`; the
+    // desired access flags match read/query semantics used below.
     let h_proc = unsafe {
         OpenProcess(
             PROCESS_QUERY_INFORMATION | PROCESS_VM_READ | PROCESS_TERMINATE,
@@ -61,6 +63,8 @@ pub fn get_exe(handle: HWND) -> Result<(u32, PathBuf), WindowHelperError> {
         )?
     };
 
+    // Safety: `h_proc` is a live process handle; `path` is a sufficiently sized buffer, and the call
+    // does not outlive the buffer.
     let exe = unsafe {
         let mut path = [0_u16; MAX_PATH as usize];
         // HMODULE should be null, not default
@@ -72,6 +76,7 @@ pub fn get_exe(handle: HWND) -> Result<(u32, PathBuf), WindowHelperError> {
         }
     }?;
 
+    // Safety: `h_proc` is a valid process handle and must be released exactly once.
     unsafe {
         CloseHandle(h_proc)?;
     }
@@ -80,6 +85,7 @@ pub fn get_exe(handle: HWND) -> Result<(u32, PathBuf), WindowHelperError> {
 }
 
 pub fn get_title(handle: HWND) -> Result<String, WindowHelperError> {
+    // Safety: `handle` is a valid HWND; querying its title length does not require extra invariants.
     let len = unsafe { GetWindowTextLengthW(handle) };
     if len == 0 {
         return Err(Error::from_thread().into());
@@ -88,6 +94,7 @@ pub fn get_title(handle: HWND) -> Result<String, WindowHelperError> {
     let len = TryInto::<usize>::try_into(len)?;
 
     let mut title = vec![0_u16; len + 1];
+    // Safety: `title` is a writable buffer sized from the length query; `handle` is valid.
     let get_title_res = unsafe { GetWindowTextW(handle, &mut title) };
     if get_title_res == 0 {
         return Err(Error::from_thread().into());
@@ -99,6 +106,8 @@ pub fn get_title(handle: HWND) -> Result<String, WindowHelperError> {
 pub fn get_window_class(handle: HWND) -> Result<String, WindowHelperError> {
     let mut class = [0_u16; MAX_PATH as usize + 1];
 
+    // Safety: `class` is a writable buffer and `handle` is a valid HWND; Win32 writes at most
+    // `class.len()` characters.
     let len = unsafe { GetClassNameW(handle, &mut class) };
     if len == 0 {
         return Err(Error::from_thread().into());
@@ -111,6 +120,7 @@ pub fn get_product_name(full_exe: &Path) -> Result<String, WindowHelperError> {
     let exe_wide = HSTRING::from(full_exe.as_os_str());
 
     let mut dummy = 0;
+    // Safety: `exe_wide` points to a valid string buffer; `dummy` is a valid out pointer for the size.
     let required_buffer_size =
         unsafe { GetFileVersionInfoSizeExW(FILE_VER_GET_NEUTRAL, &exe_wide, &mut dummy) };
     if required_buffer_size == 0 {
@@ -118,6 +128,8 @@ pub fn get_product_name(full_exe: &Path) -> Result<String, WindowHelperError> {
     }
 
     let mut buffer: Vec<u16> = vec![0; required_buffer_size as usize];
+    // Safety: `buffer` is allocated with the required size, and `exe_wide`/`dummy` remain valid for the
+    // duration of the call.
     unsafe {
         GetFileVersionInfoExW(
             FILE_VER_GET_NEUTRAL,
@@ -128,6 +140,7 @@ pub fn get_product_name(full_exe: &Path) -> Result<String, WindowHelperError> {
         )?;
     }
 
+    // Safety: This query reads process-global locale information and requires no additional invariants.
     let lang_id = unsafe { GetSystemDefaultLangID() };
     let query_key: Vec<u16> = OsString::from(format!(
         "\\{}\\{}{}\\{}",
@@ -140,6 +153,8 @@ pub fn get_product_name(full_exe: &Path) -> Result<String, WindowHelperError> {
     let mut pages_ptr: *mut u16 = std::ptr::null_mut();
     let mut pages_length = 0;
 
+    // Safety: `buffer` lives for the duration of the call; `pages_ptr` and `pages_length` are valid out
+    // parameters for the version query.
     unsafe {
         VerQueryValueW(
             buffer.as_mut_ptr() as _,
@@ -157,6 +172,7 @@ pub fn get_product_name(full_exe: &Path) -> Result<String, WindowHelperError> {
         ));
     }
 
+    // Safety: `pages_ptr` and `pages_length` are validated above; the buffer remains alive in `buffer`.
     let product_name = unsafe { std::slice::from_raw_parts(pages_ptr, pages_length as usize - 1) };
     let product_name = String::from_utf16_lossy(product_name);
 
@@ -164,6 +180,8 @@ pub fn get_product_name(full_exe: &Path) -> Result<String, WindowHelperError> {
 }
 
 pub fn hwnd_to_monitor(handle: HWND) -> Result<HMONITOR, WindowHelperError> {
+    // Safety: `handle` is a valid HWND; querying its nearest monitor returns either a valid handle or an
+    // error which we propagate.
     unsafe {
         let res = MonitorFromWindow(handle, MONITOR_DEFAULTTONEAREST);
         if res.is_invalid() {
@@ -175,6 +193,8 @@ pub fn hwnd_to_monitor(handle: HWND) -> Result<HMONITOR, WindowHelperError> {
 }
 
 pub fn intersects_with_multiple_monitors(handle: HWND) -> Result<bool, WindowHelperError> {
+    // Safety: `handle` is a valid HWND; querying for a monitor handle is safe and the result is checked
+    // for validity before use.
     unsafe {
         let res = MonitorFromWindow(handle, MONITOR_DEFAULTTONULL);
 
@@ -188,6 +208,8 @@ pub fn get_command_line_args(wnd: HWND) -> Result<String, WindowHelperError> {
         ..
     } = get_thread_proc_id(wnd)?;
 
+    // Safety: `proc_id` originates from `get_thread_proc_id`; requested access is limited to read/query
+    // operations needed for command line extraction.
     let handle = unsafe {
         OpenProcess(
             PROCESS_VM_READ | PROCESS_QUERY_INFORMATION, //
@@ -200,7 +222,10 @@ pub fn get_command_line_args(wnd: HWND) -> Result<String, WindowHelperError> {
         return Err(Error::from_thread().into());
     }
 
+    // Safety: `handle` is a valid process handle for the target window; the helper function only reads
+    // from the process using that handle.
     let res = unsafe { get_command_line_args_priv(handle) };
+    // Safety: `handle` is a valid process handle and must be closed once.
     unsafe {
         CloseHandle(handle)?;
     }
@@ -208,6 +233,11 @@ pub fn get_command_line_args(wnd: HWND) -> Result<String, WindowHelperError> {
     res
 }
 
+/// # Safety
+///
+/// `handle` must be a valid process handle with read/query permissions that remains open for the
+/// duration of this call. The caller is responsible for ensuring the referenced process outlives the
+/// reads performed here.
 unsafe fn get_command_line_args_priv(handle: HANDLE) -> Result<String, WindowHelperError> {
     let mut pbi = PROCESS_BASIC_INFORMATION::default();
     // get process information

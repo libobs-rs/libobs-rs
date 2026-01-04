@@ -1,5 +1,3 @@
-use libobs::obs_data;
-
 use crate::{
     run_with_obs,
     runtime::ObsRuntime,
@@ -22,11 +20,14 @@ pub enum ObsDataChange {
 pub struct ObsDataUpdater {
     changes: Vec<ObsDataChange>,
     runtime: ObsRuntime,
-    data_ptr: SmartPointerSendable<*mut obs_data>,
+    data_ptr: SmartPointerSendable<*mut libobs::obs_data_t>,
 }
 
 impl ObsDataUpdater {
-    pub(super) fn new(data_ptr: SmartPointerSendable<*mut obs_data>, runtime: ObsRuntime) -> Self {
+    pub(super) fn new(
+        data_ptr: SmartPointerSendable<*mut libobs::obs_data_t>,
+        runtime: ObsRuntime,
+    ) -> Self {
         ObsDataUpdater {
             changes: Vec::new(),
             data_ptr,

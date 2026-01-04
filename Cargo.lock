@@ -1852,6 +1852,7 @@ dependencies = [
  "paste",
  "serde_json",
  "tokio",
+ "windows",
  "winit",
 ]
 

@@ -19,7 +19,8 @@ use libobs_wrapper::utils::NixDisplay;
 
 #[cfg(windows)]
 use libobs_simple::sources::windows::{
-    GameCaptureSourceBuilder, MonitorCaptureSourceBuilder, ObsGameCaptureMode, WindowSearchMode,
+    GameCaptureSourceBuilder, MonitorCaptureSourceBuilder, ObsDisplayCaptureMethod,
+    ObsGameCaptureMode, WindowSearchMode,
 };
 #[cfg(windows)]
 use libobs_simple::sources::ObsObjectUpdater;
@@ -104,6 +105,8 @@ impl ObsInner {
         #[cfg(windows)]
         let monitor_item = context
             .source_builder::<MonitorCaptureSourceBuilder, _>("Monitor capture")?
+            // You can also set a capture method if you want to
+            .set_capture_method(ObsDisplayCaptureMethod::MethodDXGI)
             .set_monitor(
                 &MonitorCaptureSourceBuilder::get_monitors().expect("Couldn't get monitors")[0],
             )

@@ -29,6 +29,7 @@ libobs-window-helper = { workspace = true, optional = true }
 paste = { workspace = true }
 tokio = { workspace = true, features = ["sync"], default-features = false }
 lazy_static.workspace = true
+windows.workspace = true
 
 [features]
 default = ["window-list", "enable_runtime"]

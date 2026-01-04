@@ -63,6 +63,8 @@ impl WindowPositionTrait for ObsDisplayRef {
             m.y = y;
 
             unsafe {
+                // SAFETY: The window handle is valid because it was created and stored in the struct during initialization.
+                // SetWindowPos is a safe Windows API call when provided with a valid window handle and valid parameters.
                 let flags = SWP_NOCOPYBITS | SWP_NOSIZE | SWP_NOACTIVATE;
                 // Just use dummy values as size is not changed
                 SetWindowPos(
@@ -111,6 +113,8 @@ impl WindowPositionTrait for ObsDisplayRef {
             m.height = height;
 
             unsafe {
+                // SAFETY: The window handle is valid because it was created and stored in the struct during initialization.
+                // SetWindowPos is a Windows API call that is safe when provided with a valid window handle and valid parameters.
                 SetWindowPos(
                     m.window_handle.get_hwnd(),
                     None,

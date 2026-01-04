@@ -12,7 +12,7 @@ use crate::{
 #[allow(unknown_lints)]
 #[allow(ensure_obs_call_in_runtime)]
 unsafe fn has_value(
-    data_ptr: SmartPointerSendable<*mut libobs::obs_data>,
+    data_ptr: SmartPointerSendable<*mut libobs::obs_data_t>,
     key: &ObsString,
 ) -> bool {
     libobs::obs_data_has_user_value(data_ptr.get_ptr(), key.as_ptr().0)

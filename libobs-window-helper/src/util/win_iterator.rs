@@ -16,7 +16,7 @@ use crate::{
     ProcessInfo,
 };
 
-pub unsafe fn is_uwp_window(hwnd: HWND) -> Result<bool, WindowHelperError> {
+pub fn is_uwp_window(hwnd: HWND) -> Result<bool, WindowHelperError> {
     if hwnd.is_invalid() {
         return Ok(false);
     }
@@ -25,13 +25,17 @@ pub unsafe fn is_uwp_window(hwnd: HWND) -> Result<bool, WindowHelperError> {
     Ok(class == "ApplicationFrameWindow")
 }
 
-pub unsafe fn get_uwp_actual_window(parent: HWND) -> Result<Option<HWND>, WindowHelperError> {
+pub fn get_uwp_actual_window(parent: HWND) -> Result<Option<HWND>, WindowHelperError> {
     let ProcessInfo {
         process_id: parent_id,
         ..
     } = get_thread_proc_id(parent)?;
 
-    let mut child = FindWindowExW(Some(parent), None, PWSTR::null(), PWSTR::null())?;
+    let mut child = unsafe {
+        // Safety: `parent` comes from the caller and is treated as a trusted HWND; null class/title pointers
+        // request the next child window and are permitted by the Win32 API.
+        FindWindowExW(Some(parent), None, PWSTR::null(), PWSTR::null())?
+    };
 
     while !child.is_invalid() {
         let ProcessInfo {
@@ -43,14 +47,18 @@ pub unsafe fn get_uwp_actual_window(parent: HWND) -> Result<Option<HWND>, Window
             return Ok(Some(child));
         }
 
-        child = FindWindowExW(Some(parent), Some(child), PWSTR::null(), PWSTR::null())
-            .unwrap_or(HWND::default());
+        child = unsafe {
+            // Safety: `parent` and `child` were obtained from Win32 enumeration and remain valid for
+            // iteration; passing null class/title continues enumeration per Win32 docs.
+            FindWindowExW(Some(parent), Some(child), PWSTR::null(), PWSTR::null())
+                .unwrap_or(HWND::default())
+        };
     }
 
     Ok(None)
 }
 
-pub unsafe fn next_window(
+pub fn next_window(
     window: Option<HWND>,
     mode: WindowSearchMode,
     parent: &mut Option<HWND>,
@@ -66,14 +74,22 @@ pub unsafe fn next_window(
 
     loop {
         window = if use_find_window_ex {
-            FindWindowExW(
-                Some(GetDesktopWindow()),
-                Some(window),
-                PWSTR::null(),
-                PWSTR::null(),
-            )
+            let desktop = unsafe {
+                // Safety: `GetDesktopWindow` returns a process-wide pseudo-handle that is always valid.
+                GetDesktopWindow()
+            };
+
+            unsafe {
+                // Safety: `desktop` and `window` originate from Win32; null class/title values are allowed
+                // to iterate the top-level window list via FindWindowExW.
+                FindWindowExW(Some(desktop), Some(window), PWSTR::null(), PWSTR::null())
+            }
         } else {
-            GetWindow(window, GW_HWNDNEXT)
+            unsafe {
+                // Safety: `window` is sourced from Win32 enumeration, making it valid for GW_HWNDNEXT
+                // traversal via `GetWindow`.
+                GetWindow(window, GW_HWNDNEXT)
+            }
         }
         .unwrap_or(HWND::default());
 
@@ -104,17 +120,28 @@ pub unsafe fn next_window(
     Ok(window_opt)
 }
 
-pub unsafe fn first_window(
+pub fn first_window(
     mode: WindowSearchMode,
     parent: &mut Option<HWND>,
     use_find_window_ex: &mut bool,
 ) -> Result<HWND, WindowHelperError> {
-    let mut window =
-        FindWindowExW(Some(GetDesktopWindow()), None, PWSTR::null(), PWSTR::null()).ok();
+    let desktop = unsafe {
+        // Safety: `GetDesktopWindow` returns a valid pseudo-handle for the desktop window.
+        GetDesktopWindow()
+    };
+
+    let mut window = unsafe {
+        // Safety: Enumerating the first top-level window from the desktop is allowed with null class/title
+        // pointers per Win32 API.
+        FindWindowExW(Some(desktop), None, PWSTR::null(), PWSTR::null()).ok()
+    };
 
     if window.is_none() {
         *use_find_window_ex = false;
-        window = GetWindow(GetDesktopWindow(), GW_CHILD).ok();
+        window = unsafe {
+            // Safety: `desktop` is a valid pseudo-handle; GW_CHILD fetches its first child.
+            GetWindow(desktop, GW_CHILD).ok()
+        };
     } else {
         *use_find_window_ex = true;
     }
@@ -129,7 +156,10 @@ pub unsafe fn first_window(
         if window.is_none() && *use_find_window_ex {
             *use_find_window_ex = false;
 
-            window = GetWindow(GetDesktopWindow(), GW_CHILD).ok();
+            window = unsafe {
+                // Safety: `desktop` is valid; fetching its first child window is permitted.
+                GetWindow(desktop, GW_CHILD).ok()
+            };
             let valid = window.is_some_and(|e| is_window_valid(e, mode).unwrap_or(false));
 
             if !valid {

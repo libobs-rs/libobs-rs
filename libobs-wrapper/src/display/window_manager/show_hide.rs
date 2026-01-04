@@ -22,6 +22,7 @@ impl ShowHideTrait for ObsDisplayRef {
                 .read()
                 .map_err(|e| ObsError::LockError(format!("{:?}", e)))?;
             unsafe {
+                // Safety: The window handle is valid as long as the ObsDisplayRef exists
                 let _ = ShowWindow(m.window_handle.get_hwnd(), SW_SHOWNA);
             }
 
@@ -48,6 +49,7 @@ impl ShowHideTrait for ObsDisplayRef {
                 .map_err(|e| ObsError::LockError(format!("{:?}", e)))?;
 
             unsafe {
+                // Safety: The window handle is valid as long as the ObsDisplayRef exists
                 let _ = ShowWindow(m.window_handle.get_hwnd(), SW_HIDE);
             }
 

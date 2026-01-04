@@ -10,6 +10,8 @@ use crate::{define_object_manager, sources::macro_helper::impl_custom_source};
 /// stored in the struct. The capture method is being set to WGC at first, then the source is created and then the capture method is updated to the desired method.
 use display_info::DisplayInfo;
 use libobs_simple_macro::obs_object_impl;
+use libobs_wrapper::run_with_obs;
+use libobs_wrapper::runtime::ObsRuntime;
 use libobs_wrapper::scenes::{SceneItemExtSceneTrait, SceneItemRef};
 use libobs_wrapper::{
     data::{ObsObjectBuilder, ObsObjectUpdater},
@@ -19,6 +21,9 @@ use libobs_wrapper::{
     utils::ObsError,
 };
 use num_traits::ToPrimitive;
+use windows::Win32::UI::HiDpi::{
+    GetAwarenessFromDpiAwarenessContext, GetThreadDpiAwarenessContext, DPI_AWARENESS_UNAWARE,
+};
 
 // Usage example
 define_object_manager!(
@@ -60,21 +65,37 @@ impl MonitorCaptureSource {
     }
 }
 
+fn is_thread_dpi_unaware(runtime: &ObsRuntime) -> Result<bool, ObsError> {
+    run_with_obs!(runtime, (), move || {
+        unsafe {
+            // Safety: This function can be called from any thread.
+            let ctx = GetThreadDpiAwarenessContext();
+            GetAwarenessFromDpiAwarenessContext(ctx) == DPI_AWARENESS_UNAWARE
+        }
+    })
+}
+
 impl<'a> MonitorCaptureSourceUpdater<'a> {
-    pub fn set_capture_method(mut self, method: ObsDisplayCaptureMethod) -> Self {
+    pub fn set_capture_method(mut self, method: ObsDisplayCaptureMethod) -> Result<Self, ObsError> {
+        if is_thread_dpi_unaware(self.runtime())? && method == ObsDisplayCaptureMethod::MethodDXGI {
+            log::warn!("You are trying to capture the monitor using the DXGI capture method while the current thread is DPI unaware. This will lead to a black screen being captured. Please ensure that your application is DPI aware before using the DXGI capture method.");
+            return Err(ObsError::InvalidOperation(
+                "Cannot use DXGI capture method when the current thread is DPI unaware.".into(),
+            ));
+        }
         self.get_settings_updater()
             .set_int_ref("method", method.to_i32().unwrap() as i64);
 
-        self
+        Ok(self)
     }
 }
 
 impl MonitorCaptureSourceBuilder {
     /// Sets the capture method for the monitor capture source.
-    /// Only MethodWgc works for now as the other DXGI method does not work and only records a black screen (Failed to DuplicateOutput1)
-    /// Workaround for black screen bug: [issue](https://github.com/libobs-rs/libobs-rs/issues/5)
+    /// If you want to use DXGI, it is required for your application to be DPI aware.
     pub fn set_capture_method(mut self, method: ObsDisplayCaptureMethod) -> Self {
         self.capture_method = Some(method);
+
         self
     }
 }
@@ -87,6 +108,15 @@ impl ObsSourceBuilder for MonitorCaptureSourceBuilder {
     where
         Self: Sized,
     {
+        if is_thread_dpi_unaware(self.runtime())?
+            && self.capture_method == Some(ObsDisplayCaptureMethod::MethodDXGI)
+        {
+            log::warn!("You are trying to capture the monitor using the DXGI capture method while the current thread is DPI unaware. This will lead to a black screen being captured. Please ensure that your application is DPI aware before using the DXGI capture method.");
+            return Err(ObsError::InvalidOperation(
+                "Cannot use DXGI capture method when the current thread is DPI unaware.".into(),
+            ));
+        }
+
         let runtime = self.runtime.clone();
         let obj_info = self.object_build()?;
 
@@ -111,7 +141,7 @@ impl ObsSourceBuilder for MonitorCaptureSourceBuilder {
 
         if let Some(method) = method_to_set {
             res.create_updater()?
-                .set_capture_method(method) //
+                .set_capture_method(method)? //
                 .update()?;
         }
 

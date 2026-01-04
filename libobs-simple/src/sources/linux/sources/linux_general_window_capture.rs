@@ -34,6 +34,13 @@ impl ObsObjectBuilder for LinuxGeneralWindowCaptureBuilder {
         Ok(Self { underlying_builder })
     }
 
+    fn runtime(&self) -> &ObsRuntime {
+        match &self.underlying_builder {
+            Either::Left(builder) => builder.runtime(),
+            Either::Right(builder) => builder.runtime(),
+        }
+    }
+
     fn get_name(&self) -> ObsString {
         match &self.underlying_builder {
             Either::Left(builder) => builder.get_name(),

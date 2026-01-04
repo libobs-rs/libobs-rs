@@ -1,7 +1,7 @@
 use std::ptr;
 
 #[cfg(target_os = "linux")]
-use std::sync::Arc;
+use std::rc::Rc;
 
 use crate::unsafe_send::Sendable;
 
@@ -51,7 +51,7 @@ impl Drop for PlatformSpecificGuard {
 }
 
 #[cfg(not(target_os = "linux"))]
-pub(crate) fn platform_specific_setup() -> Result<Option<Arc<PlatformSpecificGuard>>, ObsError> {
+pub(crate) fn platform_specific_setup() -> Result<Option<Rc<PlatformSpecificGuard>>, ObsError> {
     return Ok(None);
 }
 
@@ -63,7 +63,7 @@ pub(crate) fn platform_specific_setup() -> Result<Option<Arc<PlatformSpecificGua
 #[allow(unknown_lints, ensure_obs_call_in_runtime)]
 pub(crate) unsafe fn platform_specific_setup(
     display: Option<NixDisplay>,
-) -> Result<Option<Arc<PlatformSpecificGuard>>, ObsError> {
+) -> Result<Option<Rc<PlatformSpecificGuard>>, ObsError> {
     let mut display_ptr = None;
     let mut owned = true;
 
@@ -124,7 +124,7 @@ pub(crate) unsafe fn platform_specific_setup(
             );
 
             //TODO make sure when creating a display that the same platform is used
-            Ok(Some(Arc::new(PlatformSpecificGuard {
+            Ok(Some(Rc::new(PlatformSpecificGuard {
                 display: Sendable(display),
                 platform: PlatformType::X11,
                 owned,
@@ -155,7 +155,7 @@ pub(crate) unsafe fn platform_specific_setup(
                 "[libobs-wrapper]: Detected Platform: Wayland".to_string(),
             );
 
-            Ok(Some(Arc::new(PlatformSpecificGuard {
+            Ok(Some(Rc::new(PlatformSpecificGuard {
                 display: Sendable(display),
                 platform: PlatformType::Wayland,
                 owned,

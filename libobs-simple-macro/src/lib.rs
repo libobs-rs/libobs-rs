@@ -98,6 +98,11 @@ pub fn obs_object_updater(attr: TokenStream, item: TokenStream) -> TokenStream {
                 &self.settings
             }
 
+            fn runtime(&self) -> &libobs_wrapper::runtime::ObsRuntime {
+                use libobs_wrapper::data::object::ObsObjectTrait;
+                self.updatable.runtime()
+            }
+
             fn get_settings_updater(&mut self) -> &mut libobs_wrapper::data::ObsDataUpdater {
                 &mut self.settings_updater
             }
@@ -259,6 +264,10 @@ pub fn obs_object_builder(attr: TokenStream, item: TokenStream) -> TokenStream {
                     hotkeys,
                     runtime
                 })
+            }
+
+            fn runtime(&self) -> &libobs_wrapper::runtime::ObsRuntime {
+                &self.runtime
             }
 
             fn get_settings(&self) -> &libobs_wrapper::data::ObsData {

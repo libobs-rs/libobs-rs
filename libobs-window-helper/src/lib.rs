@@ -53,9 +53,11 @@ pub fn get_all_windows(mode: WindowSearchMode) -> Result<Vec<WindowInfo>, Window
     let mut use_find_window_ex = false;
 
     let mut parent = None as Option<HWND>;
-    let window = unsafe { first_window(mode, &mut parent, &mut use_find_window_ex)? };
+    let window = first_window(mode, &mut parent, &mut use_find_window_ex)?;
     let mut window = Some(window);
 
+    // Safety: Retrieves the HWND of the current console window; the handle is only compared, not used
+    // for further operations.
     let curr = unsafe { GetConsoleWindow() };
 
     let mut out = Vec::new();
@@ -70,9 +72,7 @@ pub fn get_all_windows(mode: WindowSearchMode) -> Result<Vec<WindowInfo>, Window
             }
         }
 
-        unsafe {
-            window = next_window(window, mode, &mut parent, use_find_window_ex)?;
-        }
+        window = next_window(window, mode, &mut parent, use_find_window_ex)?;
     }
 
     Ok(out)

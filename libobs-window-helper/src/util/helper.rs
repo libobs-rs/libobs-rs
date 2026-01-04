@@ -124,7 +124,11 @@ pub struct ProcessInfo {
 pub fn get_thread_proc_id(wnd: HWND) -> WinResult<ProcessInfo> {
     let mut proc_id = 0u32;
 
-    let thread_id = unsafe { GetWindowThreadProcessId(wnd, Some(&mut proc_id)) };
+    let thread_id = unsafe {
+        // Safety: `wnd` is an HWND obtained from Win32; `proc_id` is a valid out pointer to receive the
+        // process id from `GetWindowThreadProcessId`.
+        GetWindowThreadProcessId(wnd, Some(&mut proc_id))
+    };
     if thread_id == 0 {
         return Err(Error::from_thread());
     }

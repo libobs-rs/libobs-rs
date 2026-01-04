@@ -43,6 +43,8 @@ type DWORD = u32;
 pub(crate) fn is_window_cloaked(handle: HWND) -> bool {
     let cloaked: DWORD = 0;
     let res = unsafe {
+        // Safety: `handle` is provided by Win32 window enumeration and `cloaked` is a valid out pointer
+        // sized for the DWMWA_CLOAKED attribute.
         DwmGetWindowAttribute(
             handle,
             DWMWA_CLOAKED,
@@ -55,13 +57,20 @@ pub(crate) fn is_window_cloaked(handle: HWND) -> bool {
 }
 
 pub fn is_window_valid(handle: HWND, mode: WindowSearchMode) -> Result<bool> {
-    let is_visible = unsafe { IsWindowVisible(handle) };
+    let is_visible = unsafe {
+        // Safety: `handle` references a Win32 window; querying its visibility does not require additional
+        // invariants beyond a valid HWND.
+        IsWindowVisible(handle)
+    };
     if !is_visible.as_bool() {
         return Ok(false);
     }
 
     if mode == WindowSearchMode::ExcludeMinimized {
-        let is_minimized = unsafe { IsIconic(handle).as_bool() } || is_window_cloaked(handle);
+        let is_minimized = unsafe {
+            // Safety: `handle` is a valid HWND and can be queried for its minimized state via `IsIconic`.
+            IsIconic(handle).as_bool()
+        } || is_window_cloaked(handle);
         if is_minimized {
             return Ok(false);
         }
@@ -72,6 +81,8 @@ pub fn is_window_valid(handle: HWND, mode: WindowSearchMode) -> Result<bool> {
     let ex_styles;
 
     unsafe {
+        // Safety: `handle` is a valid HWND; `rect`, `styles`, and `ex_styles` are local writable buffers and
+        // remain valid for the duration of these Win32 queries.
         GetClientRect(handle, &mut rect)?;
 
         // Use the W function because obs can only be compiled for 64-bit

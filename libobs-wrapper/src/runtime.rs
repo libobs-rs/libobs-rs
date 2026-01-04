@@ -37,6 +37,7 @@
 #[cfg(feature = "enable_runtime")]
 use std::any;
 use std::ffi::CStr;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::{ptr, thread};
 
@@ -44,8 +45,9 @@ use crate::context::ObsContext;
 use crate::crash_handler::main_crash_handler;
 use crate::enums::{ObsLogLevel, ObsResetVideoStatus};
 use crate::logger::{extern_log_callback, internal_log_global, LOGGER};
+#[cfg(target_os = "linux")]
 use crate::run_with_obs;
-use crate::utils::initialization::{platform_specific_setup, PlatformSpecificGuard, PlatformType};
+use crate::utils::initialization::{platform_specific_setup, PlatformSpecificGuard};
 use crate::utils::{ObsError, ObsModules, ObsString};
 use crate::{context::OBS_THREAD_ID, utils::StartupInfo};
 
@@ -430,7 +432,7 @@ impl ObsRuntime {
     #[allow(ensure_obs_call_in_runtime)]
     unsafe fn initialize_inner(
         mut info: StartupInfo,
-    ) -> Result<(StartupInfo, ObsModules, Option<Arc<PlatformSpecificGuard>>), ObsError> {
+    ) -> Result<(StartupInfo, ObsModules, Option<Rc<PlatformSpecificGuard>>), ObsError> {
         // Checks that there are no other threads
         // using libobs using a static Mutex.
         //
@@ -463,6 +465,7 @@ impl ObsRuntime {
 
         #[cfg(windows)]
         unsafe {
+            // Safety: We are in the OBS thread, so it's safe to call this here.
             libobs::obs_init_win32_crash_handler();
         }
 
@@ -579,6 +582,11 @@ impl ObsRuntime {
             "==== Startup complete ===============================================".to_string(),
         );
 
+        #[cfg(windows)]
+        if let Some(e) = native.as_ref() {
+            e.unset_dpi_awareness();
+        }
+
         Ok((info, obs_modules, native))
     }
 
@@ -651,7 +659,8 @@ impl ObsRuntime {
         Ok(())
     }
 
-    pub fn get_platform(&self) -> Result<PlatformType, ObsError> {
+    #[cfg(target_os = "linux")]
+    pub fn get_platform(&self) -> Result<crate::utils::initialization::PlatformType, ObsError> {
         run_with_obs!(self, || {
             let raw_platform = unsafe {
                 // Safety: This is safe to call as long as OBS is initialized.
@@ -659,9 +668,13 @@ impl ObsRuntime {
             };
 
             match raw_platform {
-                libobs::obs_nix_platform_type_OBS_NIX_PLATFORM_X11_EGL => PlatformType::X11,
-                libobs::obs_nix_platform_type_OBS_NIX_PLATFORM_WAYLAND => PlatformType::Wayland,
-                _ => PlatformType::Invalid,
+                libobs::obs_nix_platform_type_OBS_NIX_PLATFORM_X11_EGL => {
+                    crate::utils::initialization::PlatformType::X11
+                }
+                libobs::obs_nix_platform_type_OBS_NIX_PLATFORM_WAYLAND => {
+                    crate::utils::initialization::PlatformType::Wayland
+                }
+                _ => crate::utils::initialization::PlatformType::Invalid,
             }
         })
     }
