@@ -317,6 +317,7 @@ impl ObsRuntime {
     where
         F: FnOnce() + 'static,
     {
+        let is_within_runtime = std::thread::current().id() == self.thread_id;
         if !is_within_runtime {
             return Err(ObsError::RuntimeOutsideThread);
         }

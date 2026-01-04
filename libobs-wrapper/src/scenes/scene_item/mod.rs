@@ -8,7 +8,9 @@ use libobs::{obs_scene_item, obs_transform_info, obs_video_info};
 use crate::{
     enums::ObsBoundsType,
     graphics::Vec2,
-    impl_obs_drop, run_with_obs,
+    impl_obs_drop,
+    macros::trait_with_optional_send_sync,
+    run_with_obs,
     runtime::ObsRuntime,
     scenes::{ObsSceneRef, ObsTransformInfo, ObsTransformInfoBuilder},
     sources::ObsSourceTrait,
@@ -74,174 +76,176 @@ impl<T: ObsSourceTrait + Clone> SceneItemRef<T> {
     }
 }
 
-pub trait SceneItemTrait: Debug + Send + Sync {
-    fn as_ptr(&self) -> &SmartPointerSendable<*mut obs_scene_item>;
-    fn runtime(&self) -> ObsRuntime;
-    fn inner_source_dyn(&self) -> &dyn ObsSourceTrait;
-    fn inner_source_dyn_mut(&mut self) -> &mut dyn ObsSourceTrait;
+trait_with_optional_send_sync! {
+    pub trait SceneItemTrait: Debug {
+        fn as_ptr(&self) -> &SmartPointerSendable<*mut obs_scene_item>;
+        fn runtime(&self) -> ObsRuntime;
+        fn inner_source_dyn(&self) -> &dyn ObsSourceTrait;
+        fn inner_source_dyn_mut(&mut self) -> &mut dyn ObsSourceTrait;
 
-    /// Gets the transform info of the given source in this scene.
-    fn get_transform_info(&self) -> Result<ObsTransformInfo, ObsError> {
-        let self_ptr = self.as_ptr();
-        let item_info = run_with_obs!(self.runtime(), (self_ptr), move || {
-            let mut item_info: obs_transform_info = unsafe {
-                // Safety: this is safe to call because we are filling a struct with zeros
-                std::mem::zeroed()
-            };
-            unsafe {
-                // Safety: Fill the transform info struct with the data
-                libobs::obs_sceneitem_get_info2(self_ptr.get_ptr(), &mut item_info)
-            };
-
-            ObsTransformInfo(item_info)
-        })?;
-
-        Ok(item_info)
-    }
-
-    /// Gets the position of the given source in this scene.
-    fn get_source_position(&self) -> Result<Vec2, ObsError> {
-        let self_ptr = self.as_ptr();
-        let position = run_with_obs!(self.runtime(), (self_ptr), move || {
-            let main_pos = unsafe {
-                // Safety: this is safe to call because we a filling a struct with zeros
-                let mut main_pos: libobs::vec2 = std::mem::zeroed();
-
-                // Safety: Fill the vec2 struct with the position data
-                libobs::obs_sceneitem_get_pos(self_ptr.get_ptr(), &mut main_pos);
-
-                main_pos
-            };
-
-            Vec2::from(main_pos)
-        })?;
-
-        Ok(position)
-    }
-
-    /// Gets the scale of the given source in this scene.
-    fn get_source_scale(&self) -> Result<Vec2, ObsError> {
-        let self_ptr = self.as_ptr();
-        let scale = run_with_obs!(self.runtime(), (self_ptr), move || {
-            let main_pos = unsafe {
-                // Safety: this is safe to call because we a filling a struct with zeros
-                let mut main_pos: libobs::vec2 = std::mem::zeroed();
-
-                // Safety: Fill the vec2 struct with the scale data, this using the correct size
-                libobs::obs_sceneitem_get_scale(self_ptr.get_ptr(), &mut main_pos);
-
-                main_pos
-            };
-
-            Vec2::from(main_pos)
-        })?;
-
-        Ok(scale)
-    }
-
-    /// Sets the position of the given source in this scene.
-    fn set_source_position(&self, position: Vec2) -> Result<(), ObsError> {
-        let self_ptr = self.as_ptr();
-
-        run_with_obs!(self.runtime(), (self_ptr), move || {
-            let position: libobs::vec2 = position.into();
-
-            unsafe {
-                // Safety: The pointer is valid as it is a safe pointer
-                libobs::obs_sceneitem_set_pos(self_ptr.get_ptr(), &position);
-            }
-        })?;
-
-        Ok(())
-    }
-
-    /// Sets the transform info of the given source in this scene.
-    /// The `ObsTransformInfo` can be built by using the `ObsTransformInfoBuilder`.
-    fn set_transform_info(&self, info: &ObsTransformInfo) -> Result<(), ObsError> {
-        let item_info = Sendable(info.clone());
-        let self_ptr = self.as_ptr();
-
-        run_with_obs!(self.runtime(), (self_ptr, item_info), move || {
-            let item_info = item_info.0 .0;
-
-            unsafe {
-                // Safety: The pointers are valid as they are safe pointers
-                libobs::obs_sceneitem_set_info2(self_ptr.get_ptr(), &item_info);
-            }
-        })?;
-
-        Ok(())
-    }
-
-    /// Fits the given source to the screen size.
-    /// If the source is locked, no action is taken.
-    ///
-    /// Returns `Ok(true)` if the source was resized, `Ok(false)` if the source was locked and not resized.
-    fn fit_source_to_screen(&self) -> Result<bool, ObsError> {
-        let self_ptr = self.as_ptr();
-        let is_locked = {
-            run_with_obs!(self.runtime(), (self_ptr), move || unsafe {
-                // Safety: The pointer is valid as it is a safe pointer
-                libobs::obs_sceneitem_locked(self_ptr.get_ptr())
-            })?
-        };
-
-        if is_locked {
-            return Ok(false);
-        }
-
-        let ovi = run_with_obs!(self.runtime(), (), move || {
-            let mut ovi = std::mem::MaybeUninit::<obs_video_info>::uninit();
-            let success = unsafe {
-                // Safety: This is safe because we are providing a valid pointer to be filled
-                libobs::obs_get_video_info(ovi.as_mut_ptr())
-            };
-
-            if success {
-                let res = unsafe {
-                    // Safety: This is safe because libobs filled the pointer and returned success
-                    ovi.assume_init()
+        /// Gets the transform info of the given source in this scene.
+        fn get_transform_info(&self) -> Result<ObsTransformInfo, ObsError> {
+            let self_ptr = self.as_ptr();
+            let item_info = run_with_obs!(self.runtime(), (self_ptr), move || {
+                let mut item_info: obs_transform_info = unsafe {
+                    // Safety: this is safe to call because we are filling a struct with zeros
+                    std::mem::zeroed()
+                };
+                unsafe {
+                    // Safety: Fill the transform info struct with the data
+                    libobs::obs_sceneitem_get_info2(self_ptr.get_ptr(), &mut item_info)
                 };
 
-                Ok(Sendable(res))
-            } else {
-                Err(ObsError::NullPointer(Some(
-                    "Failed to get video info".to_string(),
-                )))
+                ObsTransformInfo(item_info)
+            })?;
+
+            Ok(item_info)
+        }
+
+        /// Gets the position of the given source in this scene.
+        fn get_source_position(&self) -> Result<Vec2, ObsError> {
+            let self_ptr = self.as_ptr();
+            let position = run_with_obs!(self.runtime(), (self_ptr), move || {
+                let main_pos = unsafe {
+                    // Safety: this is safe to call because we a filling a struct with zeros
+                    let mut main_pos: libobs::vec2 = std::mem::zeroed();
+
+                    // Safety: Fill the vec2 struct with the position data
+                    libobs::obs_sceneitem_get_pos(self_ptr.get_ptr(), &mut main_pos);
+
+                    main_pos
+                };
+
+                Vec2::from(main_pos)
+            })?;
+
+            Ok(position)
+        }
+
+        /// Gets the scale of the given source in this scene.
+        fn get_source_scale(&self) -> Result<Vec2, ObsError> {
+            let self_ptr = self.as_ptr();
+            let scale = run_with_obs!(self.runtime(), (self_ptr), move || {
+                let main_pos = unsafe {
+                    // Safety: this is safe to call because we a filling a struct with zeros
+                    let mut main_pos: libobs::vec2 = std::mem::zeroed();
+
+                    // Safety: Fill the vec2 struct with the scale data, this using the correct size
+                    libobs::obs_sceneitem_get_scale(self_ptr.get_ptr(), &mut main_pos);
+
+                    main_pos
+                };
+
+                Vec2::from(main_pos)
+            })?;
+
+            Ok(scale)
+        }
+
+        /// Sets the position of the given source in this scene.
+        fn set_source_position(&self, position: Vec2) -> Result<(), ObsError> {
+            let self_ptr = self.as_ptr();
+
+            run_with_obs!(self.runtime(), (self_ptr), move || {
+                let position: libobs::vec2 = position.into();
+
+                unsafe {
+                    // Safety: The pointer is valid as it is a safe pointer
+                    libobs::obs_sceneitem_set_pos(self_ptr.get_ptr(), &position);
+                }
+            })?;
+
+            Ok(())
+        }
+
+        /// Sets the transform info of the given source in this scene.
+        /// The `ObsTransformInfo` can be built by using the `ObsTransformInfoBuilder`.
+        fn set_transform_info(&self, info: &ObsTransformInfo) -> Result<(), ObsError> {
+            let item_info = Sendable(info.clone());
+            let self_ptr = self.as_ptr();
+
+            run_with_obs!(self.runtime(), (self_ptr, item_info), move || {
+                let item_info = item_info.0 .0;
+
+                unsafe {
+                    // Safety: The pointers are valid as they are safe pointers
+                    libobs::obs_sceneitem_set_info2(self_ptr.get_ptr(), &item_info);
+                }
+            })?;
+
+            Ok(())
+        }
+
+        /// Fits the given source to the screen size.
+        /// If the source is locked, no action is taken.
+        ///
+        /// Returns `Ok(true)` if the source was resized, `Ok(false)` if the source was locked and not resized.
+        fn fit_source_to_screen(&self) -> Result<bool, ObsError> {
+            let self_ptr = self.as_ptr();
+            let is_locked = {
+                run_with_obs!(self.runtime(), (self_ptr), move || unsafe {
+                    // Safety: The pointer is valid as it is a safe pointer
+                    libobs::obs_sceneitem_locked(self_ptr.get_ptr())
+                })?
+            };
+
+            if is_locked {
+                return Ok(false);
             }
-        })??;
 
-        let bounds_crop = run_with_obs!(self.runtime(), (self_ptr), move || {
-            unsafe {
-                // Safety: The pointer is valid as it is a safe pointer
-                libobs::obs_sceneitem_get_bounds_crop(self_ptr.get_ptr())
-            }
-        })?;
+            let ovi = run_with_obs!(self.runtime(), (), move || {
+                let mut ovi = std::mem::MaybeUninit::<obs_video_info>::uninit();
+                let success = unsafe {
+                    // Safety: This is safe because we are providing a valid pointer to be filled
+                    libobs::obs_get_video_info(ovi.as_mut_ptr())
+                };
 
-        // We are not constructing it from the source here because we want to reset full transform (so we use build instead of build_with_fallback)
-        let item_info = ObsTransformInfoBuilder::new()
-            .set_bounds_type(ObsBoundsType::ScaleInner)
-            .set_crop_to_bounds(bounds_crop)
-            .build(ovi.0.base_width, ovi.0.base_height);
+                if success {
+                    let res = unsafe {
+                        // Safety: This is safe because libobs filled the pointer and returned success
+                        ovi.assume_init()
+                    };
 
-        self.set_transform_info(&item_info)?;
-        Ok(true)
-    }
+                    Ok(Sendable(res))
+                } else {
+                    Err(ObsError::NullPointer(Some(
+                        "Failed to get video info".to_string(),
+                    )))
+                }
+            })??;
 
-    /// Sets the scale of the given source in this scene.
-    fn set_source_scale(&self, scale: Vec2) -> Result<(), ObsError> {
-        let self_ptr = self.as_ptr();
+            let bounds_crop = run_with_obs!(self.runtime(), (self_ptr), move || {
+                unsafe {
+                    // Safety: The pointer is valid as it is a safe pointer
+                    libobs::obs_sceneitem_get_bounds_crop(self_ptr.get_ptr())
+                }
+            })?;
 
-        run_with_obs!(self.runtime(), (self_ptr), move || {
-            let scale: libobs::vec2 = scale.into();
+            // We are not constructing it from the source here because we want to reset full transform (so we use build instead of build_with_fallback)
+            let item_info = ObsTransformInfoBuilder::new()
+                .set_bounds_type(ObsBoundsType::ScaleInner)
+                .set_crop_to_bounds(bounds_crop)
+                .build(ovi.0.base_width, ovi.0.base_height);
 
-            unsafe {
-                // Safety: The pointer is valid as it is a safe pointer
-                libobs::obs_sceneitem_set_scale(self_ptr.get_ptr(), &scale);
-            }
-        })?;
+            self.set_transform_info(&item_info)?;
+            Ok(true)
+        }
 
-        Ok(())
+        /// Sets the scale of the given source in this scene.
+        fn set_source_scale(&self, scale: Vec2) -> Result<(), ObsError> {
+            let self_ptr = self.as_ptr();
+
+            run_with_obs!(self.runtime(), (self_ptr), move || {
+                let scale: libobs::vec2 = scale.into();
+
+                unsafe {
+                    // Safety: The pointer is valid as it is a safe pointer
+                    libobs::obs_sceneitem_set_scale(self_ptr.get_ptr(), &scale);
+                }
+            })?;
+
+            Ok(())
+        }
     }
 }
 

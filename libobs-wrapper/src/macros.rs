@@ -120,5 +120,42 @@ macro_rules! enum_from_number {
     }};
 }
 
+/// Defines a trait that conditionally includes Send + Sync bounds when the enable_runtime feature is enabled.
+/// This avoids duplicating trait definitions for runtime vs non-runtime scenarios.
+///
+/// # Example
+/// ```ignore
+/// trait_with_optional_send_sync! {
+///     #[doc(hidden)]
+///     pub trait MyTrait: Debug {
+///         fn my_method(&self);
+///     }
+/// }
+/// ```
+/// This expands to two trait definitions:
+/// - With enable_runtime: `pub trait MyTrait: Debug + Send + Sync { ... }`
+/// - Without enable_runtime: `pub trait MyTrait: Debug { ... }`
+macro_rules! trait_with_optional_send_sync {
+    (
+        $(#[$meta:meta])*
+        $vis:vis trait $trait_name:ident: $base_bound:path {
+            $($body:tt)*
+        }
+    ) => {
+        #[cfg(feature="enable_runtime")]
+        $(#[$meta])*
+        $vis trait $trait_name: $base_bound + Send + Sync {
+            $($body)*
+        }
+
+        #[cfg(not(feature="enable_runtime"))]
+        $(#[$meta])*
+        $vis trait $trait_name: $base_bound {
+            $($body)*
+        }
+    };
+}
+
 pub(crate) use enum_from_number;
 pub(crate) use impl_eq_of_ptr;
+pub(crate) use trait_with_optional_send_sync;

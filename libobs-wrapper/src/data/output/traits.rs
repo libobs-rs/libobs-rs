@@ -9,6 +9,7 @@ use crate::{
     data::object::ObsObjectTrait,
     encoders::{audio::ObsAudioEncoder, video::ObsVideoEncoder},
     enums::ObsOutputStopSignal,
+    macros::trait_with_optional_send_sync,
     run_with_obs,
     runtime::ObsRuntime,
     utils::{AudioEncoderInfo, ObsError, OutputInfo, VideoEncoderInfo},
@@ -16,18 +17,20 @@ use crate::{
 
 use super::ObsOutputSignals;
 
-pub(crate) trait ObsOutputTraitSealed: Debug + Send + Sync {
-    /// Creates a new output reference from the given output info and runtime.
-    ///
-    /// # Arguments
-    /// * `output` - The output information containing ID, name, and optional settings
-    /// * `runtime` - The OBS runtime instance
-    ///
-    /// # Returns
-    /// A Result containing the new ObsOutputRef or an error
-    fn new(output: OutputInfo, runtime: ObsRuntime) -> Result<Self, ObsError>
-    where
-        Self: Sized;
+trait_with_optional_send_sync! {
+    pub(crate) trait ObsOutputTraitSealed: Debug {
+        /// Creates a new output reference from the given output info and runtime.
+        ///
+        /// # Arguments
+        /// * `output` - The output information containing ID, name, and optional settings
+        /// * `runtime` - The OBS runtime instance
+        ///
+        /// # Returns
+        /// A Result containing the new ObsOutputRef or an error
+        fn new(output: OutputInfo, runtime: ObsRuntime) -> Result<Self, ObsError>
+        where
+            Self: Sized;
+    }
 }
 
 #[allow(private_bounds)]

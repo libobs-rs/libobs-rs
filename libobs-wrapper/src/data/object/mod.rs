@@ -2,6 +2,7 @@ use std::fmt::Debug;
 
 use crate::{
     data::{ImmutableObsData, ObsData, ObsObjectUpdater},
+    macros::trait_with_optional_send_sync,
     runtime::ObsRuntime,
     unsafe_send::SmartPointerSendable,
     utils::{ObsError, ObsString},
@@ -30,17 +31,19 @@ impl<K: Clone> Clone for Box<dyn ObsObjectTrait<K>> {
     }
 }
 
-#[doc(hidden)]
-pub trait ObsObjectTraitPrivate: Debug + Send + Sync {
-    /// Replaces the settings data of the object. This should only be called if the actual OBS object has been updated.
-    ///
-    /// DO NOT USE THIS METHOD UNLESS YOU KNOW WHAT YOU ARE DOING.
-    fn __internal_replace_settings(&self, settings: ImmutableObsData) -> Result<(), ObsError>;
-    /// Replaces the hotkey data of the object. This should only be called if the actual OBS object has been updated.
-    ///
-    /// DO NOT USE THIS METHOD UNLESS YOU KNOW WHAT YOU ARE DOING.
-    fn __internal_replace_hotkey_data(&self, hotkey_data: ImmutableObsData)
-        -> Result<(), ObsError>;
+trait_with_optional_send_sync! {
+    #[doc(hidden)]
+    pub trait ObsObjectTraitPrivate: Debug {
+        /// Replaces the settings data of the object. This should only be called if the actual OBS object has been updated.
+        ///
+        /// DO NOT USE THIS METHOD UNLESS YOU KNOW WHAT YOU ARE DOING.
+        fn __internal_replace_settings(&self, settings: ImmutableObsData) -> Result<(), ObsError>;
+        /// Replaces the hotkey data of the object. This should only be called if the actual OBS object has been updated.
+        ///
+        /// DO NOT USE THIS METHOD UNLESS YOU KNOW WHAT YOU ARE DOING.
+        fn __internal_replace_hotkey_data(&self, hotkey_data: ImmutableObsData)
+            -> Result<(), ObsError>;
+    }
 }
 
 #[allow(private_bounds)]
