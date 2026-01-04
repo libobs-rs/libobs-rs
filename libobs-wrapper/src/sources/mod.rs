@@ -13,7 +13,7 @@ use libobs::obs_source_t;
 
 use crate::{
     data::{
-        object::{inner_fn_update_settings, ObsObjectTrait, ObsObjectTraitSealed},
+        object::{inner_fn_update_settings, ObsObjectTrait, ObsObjectTraitPrivate},
         ImmutableObsData, ObsDataPointers,
     },
     impl_obs_drop, impl_signal_manager, run_with_obs,
@@ -136,7 +136,7 @@ impl ObsSourceRef {
     }
 }
 
-impl ObsObjectTraitSealed for ObsSourceRef {
+impl ObsObjectTraitPrivate for ObsSourceRef {
     fn __internal_replace_settings(&self, settings: ImmutableObsData) -> Result<(), ObsError> {
         let mut guard = self
             .settings

@@ -31,7 +31,7 @@ impl<K: Clone> Clone for Box<dyn ObsObjectTrait<K>> {
 }
 
 #[doc(hidden)]
-pub trait ObsObjectTraitSealed: Debug + Send + Sync {
+pub trait ObsObjectTraitPrivate: Debug + Send + Sync {
     /// Replaces the settings data of the object. This should only be called if the actual OBS object has been updated.
     ///
     /// DO NOT USE THIS METHOD UNLESS YOU KNOW WHAT YOU ARE DOING.
@@ -47,7 +47,7 @@ pub trait ObsObjectTraitSealed: Debug + Send + Sync {
 /// Trait representing an OBS object.
 ///
 /// Hashing for this trait is automatically done by comparing the underlying raw pointer addresses.
-pub trait ObsObjectTrait<K: Clone>: ObsObjectClone<K> + ObsObjectTraitSealed {
+pub trait ObsObjectTrait<K: Clone>: ObsObjectClone<K> + ObsObjectTraitPrivate {
     fn runtime(&self) -> &ObsRuntime;
     fn settings(&self) -> Result<ImmutableObsData, ObsError>;
     fn hotkey_data(&self) -> Result<ImmutableObsData, ObsError>;

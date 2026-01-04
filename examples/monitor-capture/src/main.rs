@@ -1,4 +1,6 @@
 use libobs_simple::output::simple::ObsContextSimpleExt;
+#[cfg(target_os = "linux")]
+use libobs_simple::sources::ObsSourceBuilder;
 use libobs_wrapper::data::output::ObsOutputTrait;
 #[cfg(target_os = "linux")]
 use libobs_wrapper::logger::ObsLogger;
@@ -8,7 +10,7 @@ use libobs_wrapper::utils::StartupInfo;
 use libobs_wrapper::{context::ObsContext, utils::ObsPath};
 
 #[cfg(target_os = "linux")]
-use libobs_simple::sources::linux::LinuxGeneralScreenCapture;
+use libobs_simple::sources::linux::LinuxGeneralScreenCaptureBuilder;
 #[cfg(windows)]
 use libobs_simple::sources::windows::MonitorCaptureSourceBuilder;
 #[cfg(windows)]
@@ -55,15 +57,14 @@ fn main() -> anyhow::Result<()> {
     #[cfg(target_os = "linux")]
     {
         // You could also read a restore token here from a file
-        let screen_capture = LinuxGeneralScreenCapture::auto_detect(
-            context.runtime().clone(),
-            "Screen Capture",
-            None,
-        )
-        .map_err(|e| anyhow::anyhow!("Failed to create screen capture: {}", e))?;
+
+        use libobs_wrapper::data::ObsObjectBuilder;
+        let screen_capture =
+            LinuxGeneralScreenCaptureBuilder::new("Screen Capture", context.runtime().clone())
+                .map_err(|e| anyhow::anyhow!("Failed to create screen capture: {}", e))?;
 
         println!(
-            "Using {} capture method",
+            "Using {:?} capture method",
             screen_capture.capture_type_name()
         );
 

@@ -1,5 +1,5 @@
 use libobs_simple::output::simple::ObsContextSimpleExt;
-use libobs_simple::sources::linux::{PipeWireScreenCaptureSourceBuilder, PipeWireSourceExtTrait};
+use libobs_simple::sources::linux::pipewire::PipeWireScreenCaptureSourceBuilder;
 use libobs_simple::wrapper::{
     context::ObsContext,
     data::output::ObsOutputTrait,
@@ -67,7 +67,7 @@ pub fn main() -> anyhow::Result<()> {
     // Stop recording
     output.stop()?;
     println!("Recording stopped. Output saved to {:?}", obs_path);
-    let restore_token = window_capture.get_restore_token()?;
+    let restore_token = window_capture.inner_source().get_restore_token()?;
     println!("Restore Token: {:?}. You can use this when creating a source so the exact same window is captured again", restore_token);
 
     if let Some(restore_token) = restore_token {

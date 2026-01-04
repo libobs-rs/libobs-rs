@@ -4,14 +4,14 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 #[cfg(target_os = "linux")]
-use libobs_simple::sources::linux::LinuxGeneralScreenCapture;
+use libobs_simple::sources::linux::{LinuxGeneralScreenCaptureBuilder, LinuxGeneralScreenCaptureSourceRef};
 #[cfg(windows)]
 use libobs_simple::sources::windows::monitor_capture::MonitorCaptureSource;
+#[cfg(target_os = "linux")]
+use libobs_wrapper::scenes::SceneItemRef;
 #[cfg(windows)]
 use libobs_wrapper::scenes::SceneItemRef;
 use libobs_wrapper::scenes::SceneItemTrait;
-#[cfg(target_os = "linux")]
-use libobs_wrapper::sources::ObsSourceRef;
 #[cfg(target_os = "linux")]
 use libobs_wrapper::utils::NixDisplay;
 
@@ -25,7 +25,6 @@ use libobs_wrapper::data::video::ObsVideoInfoBuilder;
 use libobs_wrapper::display::{
     ObsDisplayCreationData, ObsDisplayRef, ObsWindowHandle, ShowHideTrait, WindowPositionTrait,
 };
-#[cfg(windows)]
 use libobs_wrapper::sources::ObsSourceBuilder;
 use libobs_wrapper::sources::ObsSourceTrait;
 use libobs_wrapper::unsafe_send::Sendable;
@@ -59,7 +58,7 @@ struct ObsInner {
     #[cfg(windows)]
     _scene_item: SceneItemRef<MonitorCaptureSource>,
     #[cfg(target_os = "linux")]
-    _scene_item: ObsSourceRef,
+    _scene_item: SceneItemRef<LinuxGeneralScreenCaptureSourceRef>,
     _guard: SignalThreadGuard,
 }
 
@@ -109,13 +108,9 @@ impl ObsInner {
 
         // You could also read a restore token here frm a file
         #[cfg(target_os = "linux")]
-        let monitor_src = LinuxGeneralScreenCapture::auto_detect(
-            context.runtime().clone(),
-            "Monitor capture",
-            None,
-        )
-        .unwrap()
-        .add_to_scene(&mut scene)?;
+        let monitor_item = context
+            .source_builder::<LinuxGeneralScreenCaptureBuilder, _>("Monitor capture")?
+            .add_to_scene(&mut scene)?;
 
         monitor_item.fit_source_to_screen()?;
 

@@ -6,7 +6,7 @@ use std::{
 
 use crate::{
     data::{
-        object::{inner_fn_update_settings, ObsObjectTrait, ObsObjectTraitSealed},
+        object::{inner_fn_update_settings, ObsObjectTrait, ObsObjectTraitPrivate},
         ImmutableObsData, ObsData, ObsDataPointers,
     },
     encoders::{ObsEncoderTrait, _ObsEncoderDropGuard},
@@ -126,7 +126,7 @@ impl ObsVideoEncoder {
     }
 }
 
-impl ObsObjectTraitSealed for ObsVideoEncoder {
+impl ObsObjectTraitPrivate for ObsVideoEncoder {
     fn __internal_replace_settings(&self, settings: ImmutableObsData) -> Result<(), ObsError> {
         self.settings
             .write()

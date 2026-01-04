@@ -17,13 +17,13 @@ macro_rules! inner_fn_update_settings {
     }};
 }
 
-/// Implements every functionality of the ObsObjectTrait and ObsObjectTraitSealed
+/// Implements every functionality of the ObsObjectTrait and ObsObjectTraitPrivate
 /// by forwarding the calls to the inner object stored in $var_name.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! forward_obs_object_impl {
     ($struct_name: ident, $var_name: ident, $t: ty) => {
-        impl $crate::data::object::ObsObjectTraitSealed for $struct_name {
+        impl $crate::data::object::ObsObjectTraitPrivate for $struct_name {
             fn __internal_replace_settings(
                 &self,
                 settings: $crate::data::ImmutableObsData,

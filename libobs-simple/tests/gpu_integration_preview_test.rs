@@ -1,13 +1,13 @@
 use std::sync::{Arc, RwLock};
 
 #[cfg(target_os = "linux")]
-use libobs_simple::sources::linux::LinuxGeneralScreenCapture;
+use libobs_simple::sources::linux::{
+    EitherSource, LinuxGeneralScreenCaptureBuilder, LinuxGeneralScreenCaptureSourceRef,
+};
 use libobs_wrapper::graphics::Vec2;
 #[cfg(target_os = "linux")]
 use libobs_wrapper::scenes::SceneItemRef;
 use libobs_wrapper::scenes::SceneItemTrait;
-#[cfg(target_os = "linux")]
-use libobs_wrapper::sources::ObsSourceRef;
 #[cfg(target_os = "linux")]
 use libobs_wrapper::utils::NixDisplay;
 
@@ -19,7 +19,6 @@ use libobs_wrapper::data::video::ObsVideoInfoBuilder;
 use libobs_wrapper::display::{
     ObsDisplayCreationData, ObsDisplayRef, ObsWindowHandle, WindowPositionTrait,
 };
-#[cfg(windows)]
 use libobs_wrapper::sources::ObsSourceBuilder;
 use libobs_wrapper::unsafe_send::Sendable;
 use libobs_wrapper::{context::ObsContext, utils::StartupInfo};
@@ -41,7 +40,7 @@ struct ObsInner {
     context: ObsContext,
     display: ObsDisplayRef,
     #[cfg(target_os = "linux")]
-    _source: SceneItemRef<ObsSourceRef>,
+    _source: SceneItemRef<LinuxGeneralScreenCaptureSourceRef>,
 }
 
 impl ObsInner {
@@ -98,13 +97,11 @@ impl ObsInner {
                 None
             };
 
-            LinuxGeneralScreenCapture::auto_detect(
-                context.runtime().clone(),
-                "Monitor capture",
-                restore_token,
-            )
-            .unwrap()
-            .add_to_scene(&mut scene)?
+            context
+                .source_builder::<LinuxGeneralScreenCaptureBuilder, _>("Monitor capture")
+                .unwrap()
+                .set_restore_token(&restore_token.unwrap_or_default())
+                .add_to_scene(&mut scene)?
         };
 
         monitor_item.set_source_position(Vec2::new(0.0, 0.0))?;
@@ -213,14 +210,16 @@ impl ApplicationHandler for App {
         inner.context.remove_display(&inner.display).unwrap();
 
         #[cfg(target_os = "linux")]
-        if let Ok(Some(token)) = inner._source.get_restore_token() {
-            let restore_token_path = std::env::current_exe()
-                .unwrap()
-                .parent()
-                .unwrap()
-                .join(std::path::PathBuf::from("pipewire_restore_token.txt"));
+        if let EitherSource::Right(pipewire) = inner._source.inner_source() {
+            if let Ok(Some(token)) = pipewire.get_restore_token() {
+                let restore_token_path = std::env::current_exe()
+                    .unwrap()
+                    .parent()
+                    .unwrap()
+                    .join(std::path::PathBuf::from("pipewire_restore_token.txt"));
 
-            std::fs::write(restore_token_path, token).unwrap();
+                std::fs::write(restore_token_path, token).unwrap();
+            }
         }
     }
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
