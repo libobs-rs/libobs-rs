@@ -100,7 +100,7 @@ pub struct ObsRuntime {
     _guard: Arc<_ObsRuntimeGuard>,
 
     #[cfg(not(feature = "enable_runtime"))]
-    _platform_specific: Option<Arc<PlatformSpecificGuard>>,
+    _platform_specific: Option<Rc<PlatformSpecificGuard>>,
 }
 
 impl ObsRuntime {
