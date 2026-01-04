@@ -478,7 +478,10 @@ impl ObsContext {
                             }
 
                             let surface_handle = data.window_handle.window.0.display;
-                            let display_from_surface = wl_proxy_get_display(surface_handle);
+                            let display_from_surface = unsafe {
+                                // Safety: The display handle is valid as long as the surface is valid.
+                                wl_proxy_get_display(surface_handle)
+                            };
                             if let Err(e) = display_from_surface {
                                 log::warn!("Could not get display from surface handle on wayland. Make sure your wayland client is at least version 1.23. Error: {:?}", e);
                             } else {

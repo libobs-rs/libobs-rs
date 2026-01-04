@@ -1,3 +1,5 @@
+#![allow(unknown_lints, require_safety_comments_on_unsafe)]
+
 use std::{convert::Infallible, sync::Arc, time::Duration};
 
 use indicatif::{ProgressBar, ProgressStyle};

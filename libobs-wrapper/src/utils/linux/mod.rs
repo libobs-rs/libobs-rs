@@ -60,23 +60,33 @@ impl Drop for LinuxGlibLoop {
     }
 }
 
-pub(crate) fn wl_proxy_get_display(
+/// # Safety
+/// You must ensure that the proxy is valid.
+pub(crate) unsafe fn wl_proxy_get_display(
     proxy: *mut std::os::raw::c_void,
 ) -> Result<*mut std::os::raw::c_void, libloading::Error> {
-    unsafe {
-        let lib = libloading::Library::new("libwayland-client.so")
-            .or_else(|_e| libloading::Library::new("libwayland-client.so.0"))?;
-        let sym: Result<
-            libloading::Symbol<
-                unsafe extern "C" fn(*mut ::std::os::raw::c_void) -> *mut ::std::os::raw::c_void,
-            >,
-            libloading::Error,
-        > = lib.get(b"wl_proxy_get_display\0");
+    let lib = unsafe {
+        // Safety: We are loading a system library that should be present on Wayland systems.
+        libloading::Library::new("libwayland-client.so")
+            .or_else(|_e| libloading::Library::new("libwayland-client.so.0"))?
+    };
 
-        match sym {
-            Ok(f) => Ok(f(proxy)),
-            Err(e) => Err(e),
-        }
+    let sym: Result<
+        libloading::Symbol<
+            unsafe extern "C" fn(*mut ::std::os::raw::c_void) -> *mut ::std::os::raw::c_void,
+        >,
+        libloading::Error,
+    > = unsafe {
+        // Safety: The function signature matches the expected signature of wl_proxy_get_display, except that it is not a c_void ptr but instead ws_display and wl_proxy but that should work as well.
+        lib.get(b"wl_proxy_get_display\0")
+    };
+
+    match sym {
+        Ok(f) => Ok(unsafe {
+            // Safety: The caller must have made sure that this proxy is valid.
+            f(proxy)
+        }),
+        Err(e) => Err(e),
     }
 }
 

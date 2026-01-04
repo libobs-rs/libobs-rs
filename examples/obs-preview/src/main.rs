@@ -81,6 +81,7 @@ impl ObsInner {
         #[cfg(target_os = "linux")]
         if let RawDisplayHandle::Wayland(handle) = _event_loop.display_handle().unwrap().as_raw() {
             info = unsafe {
+                // Safety: We know that the display handle is valid as long as the event loop is running.
                 info.set_nix_display(NixDisplay::Wayland(Sendable(handle.display.as_ptr() as _)))
             };
         }
@@ -183,7 +184,10 @@ impl ObsInner {
         });
 
         #[cfg_attr(not(target_os = "linux"), allow(unused_unsafe))]
-        let display = unsafe { context.display(data)? };
+        let display = unsafe {
+            // Safety: All references are dropped of the display before the display is dropped.
+            context.display(data)?
+        };
         Ok(Self {
             context,
             #[cfg_attr(not(target_os = "linux"), allow(unused_unsafe))]

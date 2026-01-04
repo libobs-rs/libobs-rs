@@ -1,3 +1,5 @@
+#![allow(unknown_lints, require_safety_comments_on_unsafe)]
+
 use std::sync::{Arc, RwLock};
 
 #[cfg(target_os = "linux")]
