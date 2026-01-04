@@ -1,6 +1,5 @@
 use std::env;
 
-
 /// Display server type detection
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DisplayServerType {

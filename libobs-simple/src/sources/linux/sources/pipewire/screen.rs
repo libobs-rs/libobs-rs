@@ -1,5 +1,5 @@
+use crate::sources::linux::pipewire::{impl_pipewire_source_builder, ObsPipeWireSourceType};
 use libobs_simple_macro::obs_object_builder;
-use crate::sources::linux::pipewire::{ObsPipeWireSourceType, impl_pipewire_source_builder};
 
 #[obs_object_builder("pipewire-screen-capture-source")]
 /// This struct is used to build a PipeWire screen capture source (so window + desktop capture).
@@ -13,4 +13,7 @@ pub struct PipeWireScreenCaptureSourceBuilder {
     show_cursor: bool,
 }
 
-impl_pipewire_source_builder!(PipeWireScreenCaptureSourceBuilder, ObsPipeWireSourceType::ScreenCapture);
+impl_pipewire_source_builder!(
+    PipeWireScreenCaptureSourceBuilder,
+    ObsPipeWireSourceType::ScreenCapture
+);

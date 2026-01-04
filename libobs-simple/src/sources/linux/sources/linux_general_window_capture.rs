@@ -6,7 +6,9 @@ use libobs_wrapper::{
 };
 
 use crate::sources::linux::{
-    Either, EitherSource, XCompositeInputSource, XCompositeInputSourceBuilder, display_server::DisplayServerType, pipewire::{ObsPipeWireSourceRef, PipeWireWindowCaptureSourceBuilder}
+    display_server::DisplayServerType,
+    pipewire::{ObsPipeWireSourceRef, PipeWireWindowCaptureSourceBuilder},
+    Either, EitherSource, XCompositeInputSource, XCompositeInputSourceBuilder,
 };
 
 pub struct LinuxGeneralWindowCaptureBuilder {
@@ -19,7 +21,9 @@ impl ObsObjectBuilder for LinuxGeneralWindowCaptureBuilder {
         Self: Sized,
     {
         let underlying_builder = match DisplayServerType::detect() {
-            DisplayServerType::X11 => Either::Left(XCompositeInputSourceBuilder::new(name, runtime)?),
+            DisplayServerType::X11 => {
+                Either::Left(XCompositeInputSourceBuilder::new(name, runtime)?)
+            }
             DisplayServerType::Wayland | DisplayServerType::Unknown => {
                 Either::Right(PipeWireWindowCaptureSourceBuilder::new(name, runtime)?)
             }
@@ -131,7 +135,9 @@ impl LinuxGeneralWindowCaptureBuilder {
     /// XComposite (X11) only
     pub fn set_capture_window(mut self, capture_window: &str) -> Self {
         self.underlying_builder = match self.underlying_builder {
-            Either::Left(builder) => Either::Left(builder.set_capture_window(capture_window.to_string())),
+            Either::Left(builder) => {
+                Either::Left(builder.set_capture_window(capture_window.to_string()))
+            }
             Either::Right(builder) => Either::Right(builder),
         };
 

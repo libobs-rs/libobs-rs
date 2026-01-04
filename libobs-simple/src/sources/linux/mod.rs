@@ -1,7 +1,7 @@
 mod display_server;
-mod sources;
 mod either;
+mod sources;
 
-pub use either::*;
 pub use display_server::*;
+pub use either::*;
 pub use sources::*;

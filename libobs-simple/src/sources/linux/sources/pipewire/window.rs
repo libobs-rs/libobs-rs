@@ -1,6 +1,6 @@
 use libobs_simple_macro::obs_object_builder;
 
-use crate::sources::linux::pipewire::{ObsPipeWireSourceType, impl_pipewire_source_builder};
+use crate::sources::linux::pipewire::{impl_pipewire_source_builder, ObsPipeWireSourceType};
 
 #[obs_object_builder("pipewire-window-capture-source")]
 pub struct PipeWireWindowCaptureSourceBuilder {
@@ -13,4 +13,7 @@ pub struct PipeWireWindowCaptureSourceBuilder {
     show_cursor: bool,
 }
 
-impl_pipewire_source_builder!(PipeWireWindowCaptureSourceBuilder, ObsPipeWireSourceType::WindowCapture);
+impl_pipewire_source_builder!(
+    PipeWireWindowCaptureSourceBuilder,
+    ObsPipeWireSourceType::WindowCapture
+);

@@ -4,7 +4,9 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 #[cfg(target_os = "linux")]
-use libobs_simple::sources::linux::{LinuxGeneralScreenCaptureBuilder, LinuxGeneralScreenCaptureSourceRef};
+use libobs_simple::sources::linux::{
+    LinuxGeneralScreenCaptureBuilder, LinuxGeneralScreenCaptureSourceRef,
+};
 #[cfg(windows)]
 use libobs_simple::sources::windows::monitor_capture::MonitorCaptureSource;
 #[cfg(target_os = "linux")]

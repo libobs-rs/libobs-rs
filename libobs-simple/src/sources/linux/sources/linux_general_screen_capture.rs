@@ -6,7 +6,9 @@ use libobs_wrapper::{
 };
 
 use crate::sources::linux::{
-    Either, EitherSource, X11CaptureSourceBuilder, display_server::DisplayServerType, pipewire::{ObsPipeWireSourceRef, PipeWireScreenCaptureSourceBuilder}
+    display_server::DisplayServerType,
+    pipewire::{ObsPipeWireSourceRef, PipeWireScreenCaptureSourceBuilder},
+    Either, EitherSource, X11CaptureSourceBuilder,
 };
 
 pub struct LinuxGeneralScreenCaptureBuilder {
@@ -78,8 +80,7 @@ impl ObsObjectBuilder for LinuxGeneralScreenCaptureBuilder {
     }
 }
 
-pub type LinuxGeneralScreenCaptureSourceRef =
-    EitherSource<ObsSourceRef, ObsPipeWireSourceRef>;
+pub type LinuxGeneralScreenCaptureSourceRef = EitherSource<ObsSourceRef, ObsPipeWireSourceRef>;
 
 impl ObsSourceBuilder for LinuxGeneralScreenCaptureBuilder {
     type T = LinuxGeneralScreenCaptureSourceRef;

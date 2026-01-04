@@ -1,5 +1,8 @@
 use libobs_simple_macro::obs_object_builder;
-use libobs_wrapper::{data::ObsObjectBuilder, sources::{ObsSourceBuilder, ObsSourceRef}};
+use libobs_wrapper::{
+    data::ObsObjectBuilder,
+    sources::{ObsSourceBuilder, ObsSourceRef},
+};
 
 #[derive(Debug)]
 /// A source for PipeWire camera capture via camera portal.
@@ -39,7 +42,6 @@ impl ObsSourceBuilder for PipeWireCameraSourceBuilder {
         Ok(source)
     }
 }
-
 
 impl PipeWireCameraSourceBuilder {
     /// Set resolution using width and height values
