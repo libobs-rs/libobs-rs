@@ -1,4 +1,6 @@
 #![cfg_attr(coverage_nightly, feature(coverage_attribute))]
+// awaits and streams use unsafe internally, so I'm gonna check for unsafe blocks manually here.
+#![allow(unknown_lints, require_safety_comments_on_unsafe)]
 
 use std::{env, path::PathBuf, process};
 

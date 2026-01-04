@@ -32,8 +32,16 @@ impl TryFrom<PropertyCreationInfo> for ObsEditableListProperty {
             unsafe_is_of_type_result!(EditableList, pointer)?;
 
             let list_type = get_enum!(pointer, list_type, ObsEditableListType)?;
-            let filter = get_opt_str!(pointer, path_filter).unwrap_or_default();
-            let default_path = get_opt_str!(pointer, path_default_path).unwrap_or_default();
+            let filter = unsafe {
+                // Safety: The pointer must be valid because of the unsafe new method of PropertyCreationInfo
+                get_opt_str!(pointer, path_filter)
+            }
+            .unwrap_or_default();
+            let default_path = unsafe {
+                // Safety: The pointer must be valid because of the unsafe new method of PropertyCreationInfo
+                get_opt_str!(pointer, path_default_path)
+            }
+            .unwrap_or_default();
 
             Ok(Self {
                 name,

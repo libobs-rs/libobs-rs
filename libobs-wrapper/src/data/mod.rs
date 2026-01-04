@@ -29,6 +29,7 @@ pub(super) struct _ObsDataDropGuard {
 }
 
 impl_obs_drop!(_ObsDataDropGuard, (data_ptr), move || unsafe {
+    // Safety: This is the drop guard, so the data_ptr must be valid here.
     libobs::obs_data_release(data_ptr.0)
 });
 
@@ -58,6 +59,7 @@ impl ObsData {
     /// using `obs_data` directly from libobs.
     pub fn new(runtime: ObsRuntime) -> Result<Self, ObsError> {
         let obs_data = run_with_obs!(runtime, move || unsafe {
+            // Safety: We are in the runtime, so creating new obs_data_t is safe.
             Sendable(libobs::obs_data_create())
         })?;
 
@@ -79,9 +81,9 @@ impl ObsData {
     pub fn from_json(json: &str, runtime: ObsRuntime) -> Result<Self, ObsError> {
         let cstr = CString::new(json).map_err(|_| ObsError::JsonParseError)?;
 
-        let cstr_ptr = Sendable(cstr.as_ptr());
-        let raw_ptr = run_with_obs!(runtime, (cstr_ptr), move || unsafe {
-            Sendable(libobs::obs_data_create_from_json(cstr_ptr.0))
+        let raw_ptr = run_with_obs!(runtime, (cstr), move || unsafe {
+            // Safety: We made sure that the cstr pointer is valid during the call.
+            Sendable(libobs::obs_data_create_from_json(cstr.as_ptr()))
         })?;
 
         if raw_ptr.0.is_null() {

@@ -69,7 +69,7 @@ macro_rules! impl_signal_manager {
                     )*
 
                     $crate::run_with_obs!(runtime, (raw_ptr, smart_ptr), move || {
-                            let handler = ($handler_getter)(smart_ptr.get_ptr());
+                            let handler = ($handler_getter)(smart_ptr);
                             $(
                                 let signal = ObsString::new($signal_name);
                                 unsafe {
@@ -120,10 +120,8 @@ macro_rules! impl_signal_manager {
 
                     //TODO make this non blocking
                     let future = $crate::run_with_obs!(runtime, (ptr), move || {
-                        let raw_ptr = ptr.get_ptr();
-
                         #[allow(unused_variables)]
-                        let handler = ($handler_getter)(raw_ptr);
+                        let handler = ($handler_getter)(ptr.clone());
                         $(
                             let signal = $crate::utils::ObsString::new($signal_name);
                             unsafe {
@@ -132,7 +130,7 @@ macro_rules! impl_signal_manager {
                                     handler,
                                     signal.as_ptr().0,
                                     Some([< $signal_name:snake _handler>]),
-                                    raw_ptr as *mut std::ffi::c_void,
+                                    ptr.get_ptr() as *mut std::ffi::c_void,
                                 );
                             }
                         )*

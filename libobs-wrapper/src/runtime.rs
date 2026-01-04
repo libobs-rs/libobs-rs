@@ -186,7 +186,10 @@ impl ObsRuntime {
             .spawn(move || {
                 log::trace!("Starting OBS thread");
 
-                let res = unsafe { Self::initialize_inner(info) };
+                let res = unsafe {
+                    // Safety: This is safe to can because we are in the dedicated OBS thread.
+                    Self::initialize_inner(info)
+                };
 
                 match res {
                     Ok((info, modules, _platform_specific)) => {
@@ -211,7 +214,10 @@ impl ObsRuntime {
                             }
                         }
 
-                        let r = unsafe { Self::shutdown_inner() };
+                        let r = unsafe {
+                            // Safety: We are in the OBS thread, so it's safe to call shutdown here.
+                            Self::shutdown_inner()
+                        };
                         if let Err(err) = r {
                             log::error!("Failed to shut down OBS context: {:?}", err);
                         }
@@ -460,11 +466,13 @@ impl ObsRuntime {
 
         // Set logger, load debug privileges and crash handler
         unsafe {
+            // Safety: We are in the OBS thread, so it's safe to call this here.
             libobs::base_set_crash_handler(Some(main_crash_handler), std::ptr::null_mut());
         }
 
         let native = platform_specific_setup(info.nix_display.clone())?;
         unsafe {
+            // Safety: We are in the OBS thread, so it's safe to call this here.
             libobs::base_set_log_handler(Some(extern_log_callback), std::ptr::null_mut());
         }
 
@@ -477,8 +485,10 @@ impl ObsRuntime {
         // libobs for logging purposes, making it
         // unnecessary to support other languages.
         let locale_str = ObsString::new("en-US");
-        let startup_status =
-            unsafe { libobs::obs_startup(locale_str.as_ptr().0, ptr::null(), ptr::null_mut()) };
+        let startup_status = unsafe {
+            // Safety: All pointers are valid here.
+            libobs::obs_startup(locale_str.as_ptr().0, ptr::null(), ptr::null_mut())
+        };
 
         let version = unsafe { libobs::obs_get_version_string() };
         let version_cstr = unsafe { CStr::from_ptr(version) };
@@ -515,13 +525,17 @@ impl ObsRuntime {
             return Err(ObsError::Failure);
         }
 
-        let mut obs_modules = unsafe { ObsModules::add_paths(&info.startup_paths) };
+        let mut obs_modules = unsafe {
+            // Safety: This is running in the OBS thread, so it's safe to call this here.
+            ObsModules::add_paths(&info.startup_paths)
+        };
 
         // Note that audio is meant to only be reset
         // once. See the link below for information.
         //
         // https://docs.obsproject.com/frontends
         unsafe {
+            // Safety: The audio_info pointer is valid here.
             libobs::obs_reset_audio2(info.obs_audio_info.as_ptr().0);
         }
 
@@ -532,6 +546,7 @@ impl ObsRuntime {
         // and also because there is no need to free
         // anything tied to the OBS context.
         let reset_video_status = num_traits::FromPrimitive::from_i32(unsafe {
+            // Safety: The video_info pointer is valid here.
             libobs::obs_reset_video(info.obs_video_info.as_ptr())
         });
 
@@ -546,6 +561,7 @@ impl ObsRuntime {
 
         let sdr_info = info.obs_video_info.get_sdr_info();
         unsafe {
+            // Safety: These are just numbers, so it's safe to call this here. Also graphics are initialized, so we can call this.
             libobs::obs_set_video_levels(sdr_info.sdr_white_level, sdr_info.hdr_nominal_peak_level);
         }
 
@@ -578,13 +594,19 @@ impl ObsRuntime {
             unsafe { libobs::obs_set_output_source(i, ptr::null_mut()) };
         }
 
-        unsafe { libobs::obs_shutdown() }
+        unsafe {
+            // Safety: We are in the OBS thread, so it's safe to call this here. Also by this time, we _should_ have dropped all OBS resources.
+            libobs::obs_shutdown()
+        }
 
         let r = LOGGER.lock();
         match r {
             Ok(mut logger) => {
                 logger.log(ObsLogLevel::Info, "OBS context shutdown.".to_string());
-                let allocs = unsafe { libobs::bnum_allocs() };
+                let allocs = unsafe {
+                    // Safety: Can always be called because it just returns a number.
+                    libobs::bnum_allocs()
+                };
 
                 // Increasing this to 1 because of whats described below
                 let mut notice = "";
@@ -612,6 +634,7 @@ impl ObsRuntime {
         }
 
         unsafe {
+            // Safety: We are in the OBS thread, so it's safe to call this here.
             // Clean up log and crash handler
             libobs::base_set_crash_handler(None, std::ptr::null_mut());
             libobs::base_set_log_handler(None, std::ptr::null_mut());

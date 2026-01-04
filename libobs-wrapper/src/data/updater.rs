@@ -76,6 +76,8 @@ impl ObsDataUpdater {
 
         let data_ptr = data_ptr.clone();
         run_with_obs!(runtime, (data_ptr), move || unsafe {
+            // Safety: All pointers are held within the changes type and data_ptr is valid because we are using a SmartPointer.
+
             for change in changes {
                 match change {
                     ObsDataChange::String(key, value) => libobs::obs_data_set_string(

@@ -58,6 +58,7 @@ impl ObsVideoEncoder {
                 };
 
                 let ptr = unsafe {
+                    // Safety: All pointers are in the current scope and therefore valid.
                     libobs::obs_video_encoder_create(
                         id.as_ptr().0,
                         name.as_ptr().0,

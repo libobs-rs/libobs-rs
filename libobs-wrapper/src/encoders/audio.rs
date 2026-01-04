@@ -59,6 +59,7 @@ impl ObsAudioEncoder {
                 };
 
                 let ptr = unsafe {
+                    // Safety: All pointers are in the current scope and therefore valid.
                     libobs::obs_audio_encoder_create(
                         id.as_ptr().0,
                         name.as_ptr().0,
@@ -86,6 +87,7 @@ impl ObsAudioEncoder {
 
         let settings = {
             let settings_ptr = run_with_obs!(runtime, (encoder), move || unsafe {
+                // Safety: We are using a smart pointer to ensure that the encoder pointer is valid
                 Sendable(libobs::obs_encoder_get_settings(encoder.get_ptr()))
             })?;
 

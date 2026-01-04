@@ -6,8 +6,8 @@ macro_rules! inner_fn_update_settings {
         let runtime = $self.runtime().clone();
 
         run_with_obs!(runtime, (obs_ptr, settings_ptr), move || {
+            // SAFETY: Both the obs_ptr and the settings_ptr are a SmartPointer, so neither can't be dropped.
             unsafe {
-                // Safety: Both the obs_ptr and the settings_ptr are a SmartPointer, so neither can't be dropped.
                 $update_fn(obs_ptr.get_ptr(), settings_ptr.get_ptr())
             }
         })?;

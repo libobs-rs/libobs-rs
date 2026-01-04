@@ -27,6 +27,7 @@ pub(crate) struct _ObsPropertiesDropGuard {
 impl ObsDropGuard for _ObsPropertiesDropGuard {}
 
 impl_obs_drop!(_ObsPropertiesDropGuard, (properties), move || unsafe {
+    // Safety: The pointer is valid as long as we are in the runtime and the guard is alive.
     libobs::obs_properties_destroy(properties.0);
 });
 
@@ -136,7 +137,14 @@ pub(crate) fn property_ptr_to_struct(
             }
 
             // Move to the next property
-            unsafe { libobs::obs_property_next(&mut property) };
+            let has_next = unsafe {
+                // Safety: We didn't drop the property, so it is still valid and we can proceed
+                libobs::obs_property_next(&mut property)
+            };
+
+            if !has_next {
+                break;
+            }
         }
 
         result

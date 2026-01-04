@@ -34,7 +34,6 @@ impl ObsDropGuard for _NoOpDropGuard {}
 #[derive(Debug, Clone)]
 pub struct ObsSceneRef {
     name: ObsString,
-    global_active_scenes: Arc<RwLock<HashMap<u32, ObsSceneRef>>>,
     attached_scene_items:
         GeneralTraitHashMap<dyn ObsSourceTrait, Vec<Arc<Box<dyn SceneItemTrait + 'static>>>>,
     attached_filters: Arc<RwLock<Vec<ObsFilterGuardPair>>>,
@@ -46,22 +45,28 @@ pub struct ObsSceneRef {
 impl_eq_of_ptr!(ObsSceneRef);
 
 impl ObsSceneRef {
-    pub(crate) fn new(
-        name: ObsString,
-        active_scenes: Arc<RwLock<HashMap<u32, ObsSceneRef>>>,
-        runtime: ObsRuntime,
-    ) -> Result<Self, ObsError> {
-        let scene = run_with_obs!(runtime, (name), move || unsafe {
+    pub(crate) fn new(name: ObsString, runtime: ObsRuntime) -> Result<Self, ObsError> {
+        let scene = run_with_obs!(runtime, (name), move || {
             let name_ptr = name.as_ptr();
 
-            let scene_ptr = libobs::obs_scene_create(name_ptr.0);
+            let scene_ptr = unsafe {
+                // Safety: name_ptr is valid because we have the name variable in scope.
+                libobs::obs_scene_create(name_ptr.0)
+            };
             if scene_ptr.is_null() {
                 return Err(ObsError::NullPointer(None));
             }
 
-            let source_ptr = libobs::obs_scene_get_source(scene_ptr);
+            let source_ptr = unsafe {
+                // Safety: scene_ptr is valid because we just created it and its not null.
+                libobs::obs_scene_get_source(scene_ptr)
+            };
+
             if source_ptr.is_null() {
-                libobs::obs_scene_release(scene_ptr);
+                unsafe {
+                    // Safety: scene_ptr is valid because we just created it and its not null.
+                    libobs::obs_scene_release(scene_ptr);
+                }
                 return Err(ObsError::NullPointer(None));
             }
 
@@ -77,7 +82,6 @@ impl ObsSceneRef {
             scene,
             attached_scene_items: Arc::new(RwLock::new(HashMap::new())),
             attached_filters: Arc::new(RwLock::new(Vec::new())),
-            global_active_scenes: active_scenes,
             runtime,
             signals,
         })
@@ -101,15 +105,10 @@ impl ObsSceneRef {
             )));
         }
 
-        // let mut s = self
-        //     .active_scenes
-        //     .write()
-        //     .map_err(|e| ObsError::LockError(format!("{:?}", e)))?;
-
-        // s.insert(channel, self.clone());
-
         let scene_source_ptr = self.get_scene_source_ptr()?;
         run_with_obs!(self.runtime, (scene_source_ptr), move || unsafe {
+            // Safety: We are in the runtime and the struct hasn't been dropped yet, therefore the scene source must be valid.
+            // Also we are removing that pointer from the output source if this scene is dropped in the Drop guard
             libobs::obs_set_output_source(channel, scene_source_ptr.0);
         })
     }
@@ -124,14 +123,8 @@ impl ObsSceneRef {
             )));
         }
 
-        let mut s = self
-            .global_active_scenes
-            .write()
-            .map_err(|e| ObsError::LockError(format!("{:?}", e)))?;
-
-        s.remove(&channel);
-
         run_with_obs!(self.runtime, (), move || unsafe {
+            // Safety: We are in the runtime
             libobs::obs_set_output_source(channel, std::ptr::null_mut());
         })
     }
@@ -160,8 +153,9 @@ impl ObsSceneRef {
     }
 }
 
-impl_signal_manager!(|scene_ptr| unsafe {
-    let source_ptr = libobs::obs_scene_get_source(scene_ptr);
+impl_signal_manager!(|scene_ptr: SmartPointerSendable<*mut obs_scene_t>| unsafe {
+    // Safety: This is a smart pointer, so it is fine
+    let source_ptr = libobs::obs_scene_get_source(scene_ptr.get_ptr());
 
     libobs::obs_source_get_signal_handler(source_ptr)
 }, ObsSceneSignals for ObsSceneRef<*mut obs_scene_t>, [

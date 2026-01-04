@@ -23,6 +23,7 @@ pub struct ImmutableObsData {
 impl ImmutableObsData {
     pub fn new(runtime: &ObsRuntime) -> Result<Self, ObsError> {
         let ptr = run_with_obs!(runtime, move || unsafe {
+            // Safety: We are in the runtime, so creating new obs_data_t is safe.
             Sendable(libobs::obs_data_create())
         })?;
 
@@ -65,10 +66,13 @@ impl ImmutableObsData {
                 )));
             }
 
-            let json = unsafe { CStr::from_ptr(json_ptr) }
-                .to_str()
-                .map_err(|_| ObsError::JsonParseError)?
-                .to_string();
+            let json = unsafe {
+                // Safety: We made sure the json ptr is valid because it is not null.
+                CStr::from_ptr(json_ptr)
+            }
+            .to_str()
+            .map_err(|_| ObsError::JsonParseError)?
+            .to_string();
 
             Ok(json)
         })??;

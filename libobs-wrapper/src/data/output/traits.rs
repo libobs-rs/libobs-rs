@@ -200,7 +200,10 @@ pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsObjectTrait<*mut libobs::obs
 
         let runtime = self.runtime().clone();
         let err = run_with_obs!(runtime, (output_ptr), move || {
-            let err = unsafe { libobs::obs_output_get_last_error(output_ptr.get_ptr()) };
+            let err = unsafe {
+                // Safety: The output pointer must be valid because of SmartPointer
+                libobs::obs_output_get_last_error(output_ptr.get_ptr())
+            };
 
             if err.is_null() {
                 return "Unknown error".to_string();

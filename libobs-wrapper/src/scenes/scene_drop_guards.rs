@@ -17,18 +17,33 @@ impl _SceneDropGuard {
 
 impl ObsDropGuard for _SceneDropGuard {}
 
-impl_obs_drop!(_SceneDropGuard, (scene), move || unsafe {
-    let scene_source = libobs::obs_scene_get_source(scene.0);
+impl_obs_drop!(_SceneDropGuard, (scene), move || {
+    let scene_source = unsafe {
+        // Safety: We know the scene pointer is
+        libobs::obs_scene_get_source(scene.0)
+    };
 
     for i in 0..libobs::MAX_CHANNELS {
-        let current_source = libobs::obs_get_output_source(i);
+        let current_source = unsafe {
+            // Safety: We are in the runtime and the pointer is valid because of the drop guard
+            libobs::obs_get_output_source(i)
+        };
         if current_source == scene_source {
-            libobs::obs_set_output_source(i, ptr::null_mut());
+            unsafe {
+                // Safety: Removing references to our pointer from the scene
+                libobs::obs_set_output_source(i, ptr::null_mut());
+            }
         }
 
-        libobs::obs_source_release(current_source);
+        unsafe {
+            // Safety: We are in the runtime and the pointer is valid because of the drop guard
+            libobs::obs_source_release(current_source);
+        }
     }
 
-    libobs::obs_source_release(scene_source);
-    libobs::obs_scene_release(scene.0);
+    unsafe {
+        // Safety: We are in the runtime and the pointer is valid because of the drop guard
+        libobs::obs_source_release(scene_source);
+        libobs::obs_scene_release(scene.0);
+    }
 });

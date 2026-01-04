@@ -35,7 +35,7 @@ macro_rules! impl_from_property {
                         use crate::data::properties::ObsNumberType;
 
                         let min = unsafe {
-// Safety: The caller must have ensured that the pointer is valid
+                            // Safety: The caller must have ensured that the pointer is valid
                             libobs::[<obs_property_ $obs_number_name _min>](pointer.0)
                         };
 

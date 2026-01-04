@@ -16,6 +16,8 @@ lazy_static! {
     pub static ref LOGGER: Mutex<Box<dyn ObsLogger>> = Mutex::new(Box::new(ConsoleLogger::new()));
 }
 
+/// # Safety
+/// This function is unsafe because it is called from C code.
 pub(crate) unsafe extern "C" fn extern_log_callback<V>(
     log_level: i32,
     msg: *const i8,

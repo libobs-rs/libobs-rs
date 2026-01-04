@@ -78,12 +78,16 @@ macro_rules! get_enum {
 macro_rules! get_opt_str {
     ($pointer_name: ident, $name: ident) => {{
         paste::paste! {
-            let v = unsafe { libobs::[<obs_property_ $name>]($pointer_name.0) };
+            let v = libobs::[<obs_property_ $name>]($pointer_name.0);
         }
         if v.is_null() {
             None
         } else {
-            let v = unsafe { std::ffi::CStr::from_ptr(v as _) };
+            #[expect(unused_unsafe)]
+            let v = unsafe {
+                // Safety: The function didn't return a null pointer, so it must be valid
+                std::ffi::CStr::from_ptr(v as _)
+            };
             let v = v.to_string_lossy().to_string();
             if v.is_empty() {
                 None

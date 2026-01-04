@@ -34,6 +34,7 @@ struct _ObsOutputDropGuard {
 impl ObsDropGuard for _ObsOutputDropGuard {}
 
 impl_obs_drop!(_ObsOutputDropGuard, (output), move || unsafe {
+    // Safety: We are in the runtime and drop guards are always constructed from valid output pointers. Also this guard should be in an Arc, so no double free should happen.
     libobs::obs_output_release(output.0);
 });
 
@@ -252,7 +253,10 @@ impl ObsOutputTrait for ObsOutputRef {
     }
 }
 
-impl_signal_manager!(|ptr| unsafe { libobs::obs_output_get_signal_handler(ptr) }, ObsOutputSignals for ObsOutputRef<*mut libobs::obs_output>, [
+impl_signal_manager!(|ptr: SmartPointerSendable<*mut libobs::obs_output>| unsafe {
+    // Safety: We are using a smart pointer, so it is fine
+    libobs::obs_output_get_signal_handler(ptr.get_ptr())
+}, ObsOutputSignals for ObsOutputRef<*mut libobs::obs_output>, [
     "start": {},
     "stop": {code: crate::enums::ObsOutputStopSignal},
     "pause": {},

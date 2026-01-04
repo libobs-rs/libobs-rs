@@ -26,40 +26,57 @@ pub struct CalldataWrapper {
 
 impl CalldataWrapper {
     /// Returns a mutable pointer to the inner `calldata_t`.
-    pub fn as_mut_ptr(&mut self) -> Sendable<*mut calldata_t> {
+    /// # Safety
+    ///
+    /// This function is unsafe. You must guarantee that you will never move
+    /// the data out of the mutable reference you receive when you call this
+    /// function, so that the invariants on the `Pin` type can be upheld.
+    pub unsafe fn as_mut_ptr(&mut self) -> Sendable<*mut calldata_t> {
         // Safe: pinned box guarantees stable location; we only get a mutable reference.
-        let r: &mut calldata_t = unsafe { Pin::as_mut(&mut self.data.0).get_unchecked_mut() };
+        let r: &mut calldata_t = Pin::as_mut(&mut self.data.0).get_unchecked_mut();
         Sendable(r as *mut _)
     }
 
     /// Extracts a C string pointer for the given key from the calldata.
     pub fn get_string<T: Into<ObsString>>(&mut self, key: T) -> Result<String, ObsError> {
         let key: ObsString = key.into();
-        let self_ptr = self.as_mut_ptr();
+        let self_ptr = unsafe {
+            // Safety: We won't modify the calldata, so its safe to get a mutable pointer here.
+            self.as_mut_ptr()
+        };
 
         let _drop_guard = self._drop_guard.clone(); // Ensure runtime is valid during the call
         let value = run_with_obs!(
             self.runtime.clone(),
             (_drop_guard, self_ptr, key),
-            move || unsafe {
+            move || {
                 let key_ptr = key.as_ptr().0;
 
                 let mut data = MaybeUninit::<*const c_char>::uninit();
-                let ok = libobs::calldata_get_string(self_ptr.0, key_ptr, data.as_mut_ptr());
+                let ok = unsafe {
+                    // Safety: self_ptr and key_ptr are valid pointers.
+                    libobs::calldata_get_string(self_ptr.0, key_ptr, data.as_mut_ptr())
+                };
                 if !ok {
                     return Err(ObsError::Unexpected(format!(
                         "Calldata String {key} not found."
                     )));
                 }
 
-                let data_ptr = data.assume_init();
+                let data_ptr = unsafe {
+                    // Safety: data was initialized by calldata_get_string and we made sure the call was ok.
+                    data.assume_init()
+                };
                 if data_ptr.is_null() {
                     return Err(ObsError::Unexpected(format!(
                         "Calldata String {key} is null."
                     )));
                 }
 
-                let data = CStr::from_ptr(data_ptr);
+                let data = unsafe {
+                    // Safety: data_ptr is a valid C string pointer because it is not null.
+                    CStr::from_ptr(data_ptr)
+                };
                 let data = data.to_str();
                 if let Err(_e) = data {
                     return Err(ObsError::Unexpected(format!(
@@ -84,6 +101,7 @@ struct _CalldataWrapperDropGuard {
 }
 
 impl_obs_drop!(_CalldataWrapperDropGuard, (calldata_ptr), move || unsafe {
+    // Safety: We are in the runtime and drop guards are always constructed frm valid calldata pointers.
     calldata_free(calldata_ptr.0);
 });
 

@@ -15,7 +15,7 @@ use crate::{
     },
     forward_obs_object_impl, forward_obs_output_impl, impl_signal_manager, run_with_obs,
     runtime::ObsRuntime,
-    unsafe_send::Sendable,
+    unsafe_send::{Sendable, SmartPointerSendable},
     utils::{ObsCalldataExt, ObsError, ObsString, OutputInfo},
 };
 
@@ -53,9 +53,11 @@ impl ObsOutputTraitSealed for ObsReplayBufferOutputRef {
 forward_obs_object_impl!(ObsReplayBufferOutputRef, output, *mut libobs::obs_output);
 forward_obs_output_impl!(ObsReplayBufferOutputRef, output);
 
-impl_signal_manager!(|ptr| {
-    // Safety: Again, it carries a reference of the drop guard so we must have a valid pointer
-    unsafe { libobs::obs_output_get_signal_handler(ptr) }
+impl_signal_manager!(|ptr: SmartPointerSendable<*mut libobs::obs_output>| {
+    unsafe {
+        // Safety: Again, it carries a reference of the drop guard so we must have a valid pointer
+        libobs::obs_output_get_signal_handler(ptr.get_ptr())
+    }
 }, ObsReplayOutputSignals for ObsReplayOutputRef<*mut libobs::obs_output>, [
     "saved": {}
 ]);

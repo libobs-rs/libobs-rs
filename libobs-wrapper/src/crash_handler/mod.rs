@@ -56,6 +56,9 @@ lazy_static! {
     };
 }
 
+/// # Safety
+/// This function is unsafe because it is called from C code in a crash context.
+/// You MUST ensure that the function does the least amount of work possible.
 pub(crate) unsafe extern "C" fn main_crash_handler<V>(
     format: *const std::os::raw::c_char,
     args: *mut V,

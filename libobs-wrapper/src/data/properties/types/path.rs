@@ -32,8 +32,17 @@ impl TryFrom<PropertyCreationInfo> for ObsPathProperty {
             unsafe_is_of_type_result!(Path, pointer)?;
 
             let path_type = get_enum!(pointer, path_type, ObsPathType)?;
-            let filter = get_opt_str!(pointer, path_filter).unwrap_or_default();
-            let default_path = get_opt_str!(pointer, path_default_path).unwrap_or_default();
+            let filter = unsafe {
+                // Safety: The pointer must be valid because of the unsafe new method of PropertyCreationInfo
+                get_opt_str!(pointer, path_filter)
+            }
+            .unwrap_or_default();
+
+            let default_path = unsafe {
+                // Safety: The pointer must be valid because of the unsafe new method of PropertyCreationInfo
+                get_opt_str!(pointer, path_default_path)
+            }
+            .unwrap_or_default();
             Ok(Self {
                 name,
                 description,

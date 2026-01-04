@@ -78,9 +78,16 @@ unsafe extern "C" fn render_display(data: *mut c_void, width: u32, height: u32) 
         .unwrap_or((0, 0));
 
     let mut ovi = MaybeUninit::<obs_video_info>::uninit();
-    libobs::obs_get_video_info(ovi.as_mut_ptr());
+    let was_ok = libobs::obs_get_video_info(ovi.as_mut_ptr());
+    if !was_ok {
+        log::error!("Failed to get video info in display render callback");
+        return;
+    }
 
-    let ovi = unsafe { ovi.assume_init() };
+    let ovi = unsafe {
+        // Safety: was_ok checked that the video info was properly initialized
+        ovi.assume_init()
+    };
 
     libobs::gs_viewport_push();
     libobs::gs_projection_push();
@@ -145,6 +152,7 @@ impl ObsWindowHandle {
     pub fn new_from_x11(runtime: &ObsRuntime, id: u32) -> Result<Self, ObsError> {
         let runtime = runtime.clone();
         let display = run_with_obs!(runtime, (), move || unsafe {
+            // Safety: We are just getting a pointer and we are in the runtime
             Sendable(libobs::obs_get_nix_platform_display())
         })?;
 
@@ -296,6 +304,7 @@ struct _ObsDisplayDropGuard {
 impl ObsDropGuard for _ObsDisplayDropGuard {}
 
 impl_obs_drop!(_ObsDisplayDropGuard, (display), move || unsafe {
+    // Safety: The pointer is valid as long as we are in the runtime and the guard is alive.
     log::trace!("Removing callback of display {:?}...", display);
     libobs::obs_display_remove_draw_callback(display.0, Some(render_display), std::ptr::null_mut());
 

@@ -9,6 +9,8 @@ use crate::{
 
 /// # Safety
 /// This function must be called on the OBS runtime.
+#[allow(unknown_lints)]
+#[allow(ensure_obs_call_in_runtime)]
 unsafe fn has_value(
     data_ptr: SmartPointerSendable<*mut libobs::obs_data>,
     key: &ObsString,

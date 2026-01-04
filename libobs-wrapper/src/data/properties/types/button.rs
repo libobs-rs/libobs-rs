@@ -30,7 +30,10 @@ impl TryFrom<PropertyCreationInfo> for ObsButtonProperty {
         run_with_obs!(runtime, (pointer), move || {
             unsafe_is_of_type_result!(Button, pointer)?;
 
-            let url = get_opt_str!(pointer, button_url);
+            let url = unsafe {
+                // Safety: The pointer must be valid because of the unsafe new method of PropertyCreationInfo
+                get_opt_str!(pointer, button_url)
+            };
             let button_type = get_enum!(pointer, button_type, ObsButtonType)?;
 
             Ok(Self {

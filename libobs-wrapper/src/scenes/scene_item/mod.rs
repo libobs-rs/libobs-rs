@@ -24,6 +24,8 @@ pub(super) struct _ObsSceneItemDropGuard {
 
 impl ObsDropGuard for _ObsSceneItemDropGuard {}
 impl_obs_drop!(_ObsSceneItemDropGuard, (scene_item), move || unsafe {
+    // Safety: The pointer is valid as long as we are in the runtime and the guard is alive.
+    // Because scene item is attached to a scene, we first remove it from the scene and then release it.
     libobs::obs_sceneitem_remove(scene_item.0);
     libobs::obs_sceneitem_release(scene_item.0);
 });
@@ -81,9 +83,15 @@ pub trait SceneItemTrait: Debug + Send + Sync {
     /// Gets the transform info of the given source in this scene.
     fn get_transform_info(&self) -> Result<ObsTransformInfo, ObsError> {
         let self_ptr = self.as_ptr();
-        let item_info = run_with_obs!(self.runtime(), (self_ptr), move || unsafe {
-            let mut item_info: obs_transform_info = std::mem::zeroed();
-            libobs::obs_sceneitem_get_info2(self_ptr.get_ptr(), &mut item_info);
+        let item_info = run_with_obs!(self.runtime(), (self_ptr), move || {
+            let mut item_info: obs_transform_info = unsafe {
+                // Safety: this is safe to call because we are filling a struct with zeros
+                std::mem::zeroed()
+            };
+            unsafe {
+                // Safety: Fill the transform info struct with the data
+                libobs::obs_sceneitem_get_info2(self_ptr.get_ptr(), &mut item_info)
+            };
 
             ObsTransformInfo(item_info)
         })?;

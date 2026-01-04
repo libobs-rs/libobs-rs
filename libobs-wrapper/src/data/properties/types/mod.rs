@@ -14,10 +14,28 @@ mod path;
 mod text;
 
 pub(crate) struct PropertyCreationInfo {
-    pub name: String,
-    pub description: Option<String>,
-    pub pointer: Sendable<*mut libobs::obs_property>,
+    name: String,
+    description: Option<String>,
+    pointer: Sendable<*mut libobs::obs_property>,
     runtime: ObsRuntime,
+}
+
+impl PropertyCreationInfo {
+    // # Safety
+    // The caller must ensure that `pointer` is a valid pointer to an `obs_property
+    pub(crate) unsafe fn new(
+        name: String,
+        description: Option<String>,
+        pointer: Sendable<*mut libobs::obs_property>,
+        runtime: ObsRuntime,
+    ) -> Self {
+        Self {
+            name,
+            description,
+            pointer,
+            runtime,
+        }
+    }
 }
 
 use std::ffi::CStr;
@@ -44,33 +62,42 @@ impl ObsPropertyType {
         pointer: Sendable<*mut obs_property>,
     ) -> Result<ObsProperty, ObsError> {
         let (name, description) = run_with_obs!(runtime, (pointer), move || {
-            let name = unsafe { libobs::obs_property_name(pointer.0) };
+            let name = unsafe {
+                // Safety: The pointer is valid because the caller ensured it.
+                libobs::obs_property_name(pointer.0)
+            };
             if name.is_null() {
                 return Err(ObsError::NullPointer(Some(
                     "Property name pointer is null".to_string(),
                 )));
             }
 
-            let name = unsafe { CStr::from_ptr(name) };
+            let name = unsafe {
+                // Safety: We made sure that the name pointer is valid because it is not null.
+                CStr::from_ptr(name)
+            };
             let name = name.to_string_lossy().to_string();
 
             let description = unsafe { libobs::obs_property_description(pointer.0) };
             let description = if description.is_null() {
                 None
             } else {
-                let description = unsafe { CStr::from_ptr(description) };
+                let description = unsafe {
+                    // Safety: We made sure that the description pointer is valid because it is not null.
+                    CStr::from_ptr(description)
+                };
                 Some(description.to_string_lossy().to_string())
             };
 
             Ok((name, description))
         })??;
 
-        let info = PropertyCreationInfo {
+        let info = PropertyCreationInfo::new(
             name,
             description,
             pointer,
-            runtime: runtime.clone(),
-        };
+            runtime.clone(), //
+        );
 
         let data = match self {
             ObsPropertyType::Invalid => ObsProperty::Invalid,

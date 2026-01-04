@@ -194,8 +194,10 @@ impl Drop for ObsModules {
             feature = "__test_environment"
         ))]
         {
-            let r = run_with_obs!(runtime, move || unsafe {
-                libobs::obs_remove_data_path(paths.libobs_data_path().as_ptr().0);
+            let data_path = paths.libobs_data_path().clone();
+            let r = run_with_obs!(runtime, (data_path), move || unsafe {
+                // Safety: This is running in the OBS thread, so it's safe to call this here and the pointer is valid.
+                libobs::obs_remove_data_path(data_path.as_ptr().0);
             });
 
             if std::thread::panicking() {
