@@ -158,7 +158,7 @@ impl_signal_manager!(|scene_ptr: SmartPointerSendable<*mut obs_scene_t>| unsafe 
     let source_ptr = libobs::obs_scene_get_source(scene_ptr.get_ptr());
 
     libobs::obs_source_get_signal_handler(source_ptr)
-}, ObsSceneSignals for ObsSceneRef<*mut obs_scene_t>, [
+}, ObsSceneSignals for *mut obs_scene_t, [
     "item_add": {
         struct ItemAddSignal {
             POINTERS {

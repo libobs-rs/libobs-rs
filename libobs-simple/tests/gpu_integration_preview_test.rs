@@ -8,7 +8,7 @@ use libobs_simple::sources::linux::{
 };
 use libobs_wrapper::graphics::Vec2;
 #[cfg(target_os = "linux")]
-use libobs_wrapper::scenes::SceneItemRef;
+use libobs_wrapper::scenes::ObsSceneItemRef;
 use libobs_wrapper::scenes::SceneItemTrait;
 #[cfg(target_os = "linux")]
 use libobs_wrapper::utils::NixDisplay;

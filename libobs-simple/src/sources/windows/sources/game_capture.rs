@@ -8,8 +8,11 @@ use libobs_wrapper::{
 };
 
 use super::{ObsHookRate, ObsWindowPriority};
-use crate::error::ObsSimpleError;
 use crate::{define_object_manager, sources::macro_helper::impl_custom_source};
+use crate::{
+    error::ObsSimpleError,
+    sources::windows::{ObsHookableSourceSignals, ObsHookableSourceTrait},
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// Describes the capture mode of the game capture source.
@@ -173,23 +176,17 @@ impl GameCaptureSource {
     }
 }
 
-impl_custom_source!(GameCaptureSource, [
-    //TODO Add support for the `linux-capture` type as it does not contain the `title` field (its 'name' instead)
-    "hooked": {struct HookedSignal {
-        title: String,
-        class: String,
-        executable: String;
-        POINTERS {
-            source: *mut libobs::obs_source_t,
-        }
-    }},
-    //TODO Add support for the `linux-capture` type as it does not contain the `title` field (its 'name' instead)
-    "unhooked": {struct UnhookedSignal {
-        POINTERS {
-            source: *mut libobs::obs_source_t,
-        }
-    }},
-]);
+impl_custom_source!(
+    GameCaptureSource,
+    ObsHookableSourceSignals,
+    NO_SPECIFIC_SIGNALS_FUNCTION
+);
+
+impl ObsHookableSourceTrait for GameCaptureSource {
+    fn source_specific_signals(&self) -> std::sync::Arc<ObsHookableSourceSignals> {
+        self.source_specific_signals.clone()
+    }
+}
 
 // Custom made signals for the game capture and implementation
 

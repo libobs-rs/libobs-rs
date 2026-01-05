@@ -3,9 +3,118 @@ mod traits;
 
 pub use traits::*;
 
+/// Generates a signal manager for OBS objects that can emit signals.
+///
+/// This macro creates a complete signal management system including:
+/// - Signal handler functions that interface with OBS's C API
+/// - A manager struct that maintains signal subscriptions
+/// - Methods to subscribe to signals via `tokio::sync::broadcast` channels
+/// - Automatic cleanup on drop
+///
+/// # Parameters
+///
+/// * `$handler_getter` - A closure that takes a `SmartPointerSendable<$ptr>` and returns the raw signal handler pointer.
+///   The closure should have an explicit type annotation for the parameter and typically contains an unsafe block.
+///   Example: `|scene_ptr: SmartPointerSendable<*mut obs_scene_t>| unsafe { libobs::obs_scene_get_signal_handler(scene_ptr.get_ptr()) }`
+///
+/// * `$name` - The identifier for the generated signal manager struct.
+///
+/// * `$ptr` - The raw pointer type for the OBS object (e.g., `*mut obs_scene_t`).
+///
+/// * Signal definitions - A list of signal definitions with the following syntax:
+///   - `"signal_name": {}` - For signals with no data
+///   - `"signal_name": { field: Type }` - For signals with a single field
+///   - `"signal_name": { struct StructName { field1: Type1, field2: Type2 } }` - For signals with multiple fields
+///   - `"signal_name": { struct StructName { field1: Type1; POINTERS { ptr_field: *mut Type } } }` - For signals with both regular and pointer fields
+///
+/// # Generated Code
+///
+/// The macro generates:
+/// - A `$name` struct that manages all signal subscriptions for a single object instance
+/// - `on_<signal_name>()` methods that return `broadcast::Receiver` for each signal
+/// - Automatic signal handler registration and cleanup
+/// - Thread-safe signal dispatching using `tokio::sync::broadcast`
+///
+/// # Signal Data Types
+///
+/// Signals can carry different types of data:
+/// - **Empty signals**: Use `"signal_name": {}`
+/// - **Single value**: Use `"signal_name": { value: Type }` where Type can be primitives, String, or enums
+/// - **Struct**: Use `"signal_name": { struct Name { field1: Type1, field2: Type2 } }`
+/// - **Pointers**: Use the `POINTERS` section to mark fields as raw pointers that need special handling
+///
+/// # Safety
+///
+/// The generated code is safe to use, but relies on:
+/// - The OBS runtime being properly initialized
+/// - Smart pointers remaining valid for the lifetime of the signal manager
+/// - Signal handlers being called on the OBS thread
+///
+/// # Examples
+///
+/// ```ignore
+/// impl_signal_manager!(
+///     |scene_ptr: SmartPointerSendable<*mut obs_scene_t>| unsafe {
+///         let source_ptr = libobs::obs_scene_get_source(scene_ptr.get_ptr());
+///         libobs::obs_source_get_signal_handler(source_ptr)
+///     },
+///     ObsSceneSignals for *mut obs_scene_t,
+///     [
+///         // Simple signal with no data
+///         "refresh": {},
+///         
+///         // Signal with a single pointer field
+///         "item_add": {
+///             struct ItemAddSignal {
+///                 POINTERS {
+///                     item: *mut libobs::obs_sceneitem_t,
+///                 }
+///             }
+///         },
+///         
+///         // Signal with both regular and pointer fields
+///         "item_visible": {
+///             struct ItemVisibleSignal {
+///                 visible: bool;
+///                 POINTERS {
+///                     item: *mut libobs::obs_sceneitem_t,
+///                 }
+///             }
+///         }
+///     ]
+/// );
+/// ```
+///
+/// # Usage
+///
+/// The generated signal manager is typically stored in an `Arc` within your main struct:
+///
+/// ```ignore
+/// pub struct ObsSceneRef {
+///     signals: Arc<ObsSceneSignals>,
+///     // ... other fields
+/// }
+///
+/// impl ObsSceneRef {
+///     pub fn signals(&self) -> Arc<ObsSceneSignals> {
+///         self.signals.clone()
+///     }
+/// }
+///
+/// // Subscribe to signals
+/// let scene = ObsSceneRef::new(name, runtime)?;
+/// let signals = scene.signals();
+/// let mut rx = signals.on_refresh()?;
+/// 
+/// tokio::spawn(async move {
+///     while let Ok(_) = rx.recv().await {
+///         println!("Scene refreshed!");
+///     }
+/// });
+/// ```
 #[macro_export]
 macro_rules! impl_signal_manager {
-    ($handler_getter: expr, $name: ident for $ref: ident<$ptr: ty>, [
+    ($handler_getter: expr, $name: ident for $ptr: ty, [
         $($(#[$attr:meta])* $signal_name: literal: { $($inner_def:tt)* }),* $(,)*
     ]) => {
         paste::paste! {

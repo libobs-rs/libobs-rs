@@ -1,6 +1,6 @@
 use crate::{
     data::ObsObjectBuilder,
-    scenes::{ObsSceneRef, SceneItemExtSceneTrait, SceneItemRef},
+    scenes::{ObsSceneRef, SceneItemExtSceneTrait, ObsSceneItemRef},
     sources::ObsSourceTrait,
     utils::ObsError,
 };
@@ -14,7 +14,7 @@ pub trait ObsSourceBuilder: ObsObjectBuilder {
 
     /// Both items are returned: the source and the scene item it was added as.
     /// You can safely drop these items, they are stored within the scene if you don't need them.
-    fn add_to_scene(self, scene: &mut ObsSceneRef) -> Result<SceneItemRef<Self::T>, ObsError>
+    fn add_to_scene(self, scene: &mut ObsSceneRef) -> Result<ObsSceneItemRef<Self::T>, ObsError>
     where
         Self: Sized,
     {

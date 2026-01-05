@@ -10,9 +10,9 @@ use libobs_simple::sources::linux::{
 #[cfg(windows)]
 use libobs_simple::sources::windows::monitor_capture::MonitorCaptureSource;
 #[cfg(target_os = "linux")]
-use libobs_wrapper::scenes::SceneItemRef;
+use libobs_wrapper::scenes::ObsSceneItemRef;
 #[cfg(windows)]
-use libobs_wrapper::scenes::SceneItemRef;
+use libobs_wrapper::scenes::ObsSceneItemRef;
 use libobs_wrapper::scenes::SceneItemTrait;
 #[cfg(target_os = "linux")]
 use libobs_wrapper::utils::NixDisplay;
@@ -59,9 +59,9 @@ struct ObsInner {
     context: ObsContext,
     display: ObsDisplayRef,
     #[cfg(windows)]
-    _scene_item: SceneItemRef<MonitorCaptureSource>,
+    _scene_item: ObsSceneItemRef<MonitorCaptureSource>,
     #[cfg(target_os = "linux")]
-    _scene_item: SceneItemRef<LinuxGeneralScreenCaptureSourceRef>,
+    _scene_item: ObsSceneItemRef<LinuxGeneralScreenCaptureSourceRef>,
     _guard: SignalThreadGuard,
 }
 

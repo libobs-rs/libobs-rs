@@ -12,7 +12,7 @@ use display_info::DisplayInfo;
 use libobs_simple_macro::obs_object_impl;
 use libobs_wrapper::run_with_obs;
 use libobs_wrapper::runtime::ObsRuntime;
-use libobs_wrapper::scenes::{SceneItemExtSceneTrait, SceneItemRef};
+use libobs_wrapper::scenes::{SceneItemExtSceneTrait, ObsSceneItemRef};
 use libobs_wrapper::{
     data::{ObsObjectBuilder, ObsObjectUpdater},
     scenes::ObsSceneRef,
@@ -124,7 +124,7 @@ impl ObsSourceBuilder for MonitorCaptureSourceBuilder {
         MonitorCaptureSource::new(res)
     }
 
-    fn add_to_scene(mut self, scene: &mut ObsSceneRef) -> Result<SceneItemRef<Self::T>, ObsError>
+    fn add_to_scene(mut self, scene: &mut ObsSceneRef) -> Result<ObsSceneItemRef<Self::T>, ObsError>
     where
         Self: Sized,
     {

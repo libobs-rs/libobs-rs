@@ -16,5 +16,7 @@ pub mod windows;
 pub mod linux;
 
 mod macro_helper;
+mod either;
 
+pub use either::*;
 pub use libobs_wrapper::{data::ObsObjectUpdater, sources::ObsSourceBuilder};

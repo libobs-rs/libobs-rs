@@ -252,7 +252,7 @@ impl ObsSourceTrait for ObsSourceRef {
 impl_signal_manager!(|ptr: SmartPointerSendable<*mut libobs::obs_source_t>| unsafe {
     // Safety: We are using a smart pointer, so it is fine
     libobs::obs_source_get_signal_handler(ptr.get_ptr())
-}, ObsSourceSignals for ObsSourceRef<*mut libobs::obs_source_t>, [
+}, ObsSourceSignals for *mut libobs::obs_source_t, [
     "destroy": {},
     "remove": {},
     "update": {},

@@ -1,4 +1,4 @@
-use crate::{define_object_manager, sources::macro_helper::impl_custom_source};
+use crate::{define_object_manager, sources::{macro_helper::impl_custom_source, windows::{ObsHookableSourceSignals, ObsHookableSourceTrait}}};
 
 use super::{ObsWindowCaptureMethod, ObsWindowPriority};
 use crate::error::ObsSimpleError;
@@ -7,7 +7,7 @@ use libobs_simple_macro::obs_object_impl;
 use libobs_window_helper::{get_all_windows, WindowInfo, WindowSearchMode};
 use libobs_wrapper::{
     data::{ObsObjectBuilder, ObsObjectUpdater},
-    scenes::{ObsSceneRef, SceneItemExtSceneTrait, SceneItemRef},
+    scenes::{ObsSceneRef, SceneItemExtSceneTrait, ObsSceneItemRef},
     sources::{ObsSourceBuilder, ObsSourceRef},
     utils::ObsError,
 };
@@ -129,21 +129,13 @@ impl WindowCaptureSource {
     }
 }
 
-impl_custom_source!(WindowCaptureSource, [
-    "hooked": {struct HookedSignal {
-        title: String,
-        class: String,
-        executable: String;
-        POINTERS {
-            source: *mut libobs::obs_source_t,
-        }
-    }},
-    "unhooked": {struct UnhookedSignal {
-        POINTERS {
-            source: *mut libobs::obs_source_t,
-        }
-    }},
-]);
+impl_custom_source!(WindowCaptureSource, ObsHookableSourceSignals, NO_SPECIFIC_SIGNALS_FUNCTION);
+
+impl ObsHookableSourceTrait for WindowCaptureSource {
+    fn source_specific_signals(&self) -> std::sync::Arc<ObsHookableSourceSignals> {
+        self.source_specific_signals.clone()
+    }
+}
 
 impl ObsSourceBuilder for WindowCaptureSourceBuilder {
     type T = WindowCaptureSource;
@@ -157,7 +149,7 @@ impl ObsSourceBuilder for WindowCaptureSourceBuilder {
         WindowCaptureSource::new(source)
     }
 
-    fn add_to_scene(mut self, scene: &mut ObsSceneRef) -> Result<SceneItemRef<Self::T>, ObsError>
+    fn add_to_scene(mut self, scene: &mut ObsSceneRef) -> Result<ObsSceneItemRef<Self::T>, ObsError>
     where
         Self: Sized,
     {

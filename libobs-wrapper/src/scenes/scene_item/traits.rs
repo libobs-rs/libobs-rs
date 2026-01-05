@@ -1,4 +1,4 @@
-use crate::scenes::{ObsSceneRef, SceneItemRef, SceneItemTrait};
+use crate::scenes::{ObsSceneRef, ObsSceneItemRef, SceneItemTrait};
 use crate::sources::{ObsSourceRef, ObsSourceTrait};
 use crate::utils::{ObsError, SourceInfo};
 use std::sync::Arc;
@@ -9,14 +9,14 @@ pub trait SceneItemExtSceneTrait {
     fn add_source<T: ObsSourceTrait + Clone + 'static>(
         &mut self,
         source: T,
-    ) -> Result<SceneItemRef<T>, ObsError>;
+    ) -> Result<ObsSceneItemRef<T>, ObsError>;
 
     /// Creates and adds a source to this scene based on the given `SourceInfo`.
     /// Returns a reference to the created scene item, which internally holds the created source.
     fn add_and_create_source(
         &mut self,
         info: SourceInfo,
-    ) -> Result<SceneItemRef<ObsSourceRef>, ObsError>;
+    ) -> Result<ObsSceneItemRef<ObsSourceRef>, ObsError>;
 
     /// Gets a source by name from this scene. Returns None if no source with the given name exists in this scene.
     fn get_source_mut(&self, name: &str) -> Result<Option<Arc<Box<dyn ObsSourceTrait>>>, ObsError>;
@@ -44,8 +44,8 @@ impl SceneItemExtSceneTrait for ObsSceneRef {
     fn add_source<T: ObsSourceTrait + Clone + 'static>(
         &mut self,
         source: T,
-    ) -> Result<SceneItemRef<T>, ObsError> {
-        let scene_item = SceneItemRef::new(self, source.clone(), self.runtime.clone())?;
+    ) -> Result<ObsSceneItemRef<T>, ObsError> {
+        let scene_item = ObsSceneItemRef::new(self, source.clone(), self.runtime.clone())?;
 
         let scene_clone = scene_item.clone();
         self.attached_scene_items
@@ -61,7 +61,7 @@ impl SceneItemExtSceneTrait for ObsSceneRef {
     fn add_and_create_source(
         &mut self,
         info: SourceInfo,
-    ) -> Result<SceneItemRef<ObsSourceRef>, ObsError> {
+    ) -> Result<ObsSceneItemRef<ObsSourceRef>, ObsError> {
         let source = crate::sources::ObsSourceRef::new(
             info.id,
             info.name,

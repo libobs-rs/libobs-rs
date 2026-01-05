@@ -33,13 +33,13 @@ impl_obs_drop!(_ObsSceneItemDropGuard, (scene_item), move || unsafe {
 });
 
 #[derive(Debug, Clone)]
-pub struct SceneItemRef<T: ObsSourceTrait + Clone> {
+pub struct ObsSceneItemRef<T: ObsSourceTrait + Clone> {
     underlying_source: T,
     scene_item_ptr: SmartPointerSendable<*mut obs_scene_item>,
     runtime: ObsRuntime,
 }
 
-impl<T: ObsSourceTrait + Clone> SceneItemRef<T> {
+impl<T: ObsSourceTrait + Clone> ObsSceneItemRef<T> {
     pub(crate) fn new(
         scene: &ObsSceneRef,
         source: T,
@@ -249,7 +249,7 @@ trait_with_optional_send_sync! {
     }
 }
 
-impl<T: ObsSourceTrait + Clone> SceneItemTrait for SceneItemRef<T> {
+impl<T: ObsSourceTrait + Clone> SceneItemTrait for ObsSceneItemRef<T> {
     fn as_ptr(&self) -> &SmartPointerSendable<*mut obs_scene_item> {
         &self.scene_item_ptr
     }
@@ -267,7 +267,7 @@ impl<T: ObsSourceTrait + Clone> SceneItemTrait for SceneItemRef<T> {
     }
 }
 
-impl<T> SceneItemRef<T>
+impl<T> ObsSceneItemRef<T>
 where
     T: ObsSourceTrait + Clone,
 {
@@ -285,15 +285,15 @@ where
 // The macro doesn't support generics yet, so we implement it manually
 //impl_eq_of_ptr!(SceneItemRef<T>, scene_item_ptr);
 
-impl<T: ObsSourceTrait + Clone> PartialEq for SceneItemRef<T> {
+impl<T: ObsSourceTrait + Clone> PartialEq for ObsSceneItemRef<T> {
     fn eq(&self, other: &Self) -> bool {
         self.scene_item_ptr.get_ptr() == other.scene_item_ptr.get_ptr()
     }
 }
 
-impl<T: ObsSourceTrait + Clone> Eq for SceneItemRef<T> {}
+impl<T: ObsSourceTrait + Clone> Eq for ObsSceneItemRef<T> {}
 
-impl<T: ObsSourceTrait + Clone> Hash for SceneItemRef<T> {
+impl<T: ObsSourceTrait + Clone> Hash for ObsSceneItemRef<T> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.scene_item_ptr.get_ptr().hash(state);
     }

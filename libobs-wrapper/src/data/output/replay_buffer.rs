@@ -58,7 +58,7 @@ impl_signal_manager!(|ptr: SmartPointerSendable<*mut libobs::obs_output>| {
         // Safety: Again, it carries a reference of the drop guard so we must have a valid pointer
         libobs::obs_output_get_signal_handler(ptr.get_ptr())
     }
-}, ObsReplayOutputSignals for ObsReplayOutputRef<*mut libobs::obs_output>, [
+}, ObsReplayOutputSignals for *mut libobs::obs_output, [
     "saved": {}
 ]);
 
