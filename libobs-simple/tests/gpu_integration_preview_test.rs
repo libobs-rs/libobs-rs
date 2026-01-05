@@ -3,11 +3,11 @@
 use std::sync::{Arc, RwLock};
 
 #[cfg(target_os = "linux")]
-use libobs_simple::sources::ObsEitherSource;
-#[cfg(target_os = "linux")]
 use libobs_simple::sources::linux::{
     LinuxGeneralScreenCaptureBuilder, LinuxGeneralScreenCaptureSourceRef,
 };
+#[cfg(target_os = "linux")]
+use libobs_simple::sources::ObsEitherSource;
 use libobs_wrapper::graphics::Vec2;
 #[cfg(target_os = "linux")]
 use libobs_wrapper::scenes::ObsSceneItemRef;
