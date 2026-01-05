@@ -214,7 +214,7 @@ pub const CALL_PARAM_IN: u32 = 1;
 pub const CALL_PARAM_OUT: u32 = 2;
 pub const LIBOBS_API_MAJOR_VER: u32 = 32;
 pub const LIBOBS_API_MINOR_VER: u32 = 0;
-pub const LIBOBS_API_PATCH_VER: u32 = 2;
+pub const LIBOBS_API_PATCH_VER: u32 = 4;
 pub const OBS_VERSION: &[u8; 8] = b"unknown\0";
 pub const OBS_DATA_PATH: &[u8; 11] = b"../../data\0";
 pub const OBS_INSTALL_PREFIX: &[u8; 1] = b"\0";
@@ -1839,7 +1839,7 @@ const _: () = {
 };
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
-pub struct data_ptr {
+pub struct obs_data {
     _unused: [u8; 0],
 }
 #[repr(C)]
@@ -1852,7 +1852,7 @@ pub struct obs_data_item {
 pub struct obs_data_array {
     _unused: [u8; 0],
 }
-pub type obs_data_t = data_ptr;
+pub type obs_data_t = obs_data;
 pub type obs_data_item_t = obs_data_item;
 pub type obs_data_array_t = obs_data_array;
 pub const obs_data_type_OBS_DATA_NULL: obs_data_type = 0;
@@ -7219,6 +7219,11 @@ unsafe extern "C" {
         source: *mut obs_source_t,
         callback: obs_source_audio_capture_t,
         param: *mut ::std::os::raw::c_void,
+    );
+#[doc = " For an Audio Output Capture source (like 'wasapi_output_capture') used for 'Desktop Audio', this checks whether the\n device is also used for monitoring. A signal to obs core struct is then emitted to trigger deduplication  logic at\n the end of an audio tick."]
+    pub fn obs_source_audio_output_capture_device_changed(
+        source: *mut obs_source_t,
+        device_id: *const ::std::os::raw::c_char,
     );
     pub fn obs_source_add_caption_callback(
         source: *mut obs_source_t,
