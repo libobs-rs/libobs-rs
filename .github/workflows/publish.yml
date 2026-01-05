@@ -90,10 +90,25 @@ jobs:
             exit 0
           fi
 
-          # Iterate tags line-by-line to avoid issues when the list contains
-          # newlines or is expanded across multiple lines by the runner.
+          # Define the desired publish order
+          declare -a PUBLISH_ORDER=("cargo-obs-build" "libobs" "libobs-wrapper" "libobs-simple-macro" "libobs-window-helper" "libobs-bootstrapper" "libobs-simple")
+
+          # Create an associative array to store tags by crate name
+          declare -A TAG_MAP
           printf '%s\n' "$TAGS" | while IFS= read -r TAG; do
             CRATE_NAME="${TAG%-v*}"
+            TAG_MAP[$CRATE_NAME]=$TAG
+          done
+
+          # Iterate in the desired order
+          for CRATE_NAME in "${PUBLISH_ORDER[@]}"; do
+            TAG="${TAG_MAP[$CRATE_NAME]}"
+            
+            if [ -z "$TAG" ]; then
+              echo "No tag found for $CRATE_NAME, skipping"
+              continue
+            fi
+
             TAG_VERSION="${TAG#*-v}"
 
             if [ ! -d "$CRATE_NAME" ]; then
