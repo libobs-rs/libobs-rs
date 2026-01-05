@@ -1,6 +1,6 @@
 use crate::{
     data::ObsObjectBuilder,
-    scenes::{ObsSceneRef, SceneItemExtSceneTrait, ObsSceneItemRef},
+    scenes::{ObsSceneItemRef, ObsSceneRef, SceneItemExtSceneTrait},
     sources::ObsSourceTrait,
     utils::ObsError,
 };

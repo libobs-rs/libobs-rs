@@ -1,4 +1,4 @@
-use crate::scenes::{ObsSceneRef, ObsSceneItemRef, SceneItemTrait};
+use crate::scenes::{ObsSceneItemRef, ObsSceneRef, SceneItemTrait};
 use crate::sources::{ObsSourceRef, ObsSourceTrait};
 use crate::utils::{ObsError, SourceInfo};
 use std::sync::Arc;

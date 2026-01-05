@@ -2,7 +2,8 @@ use std::ffi::CStr;
 
 pub mod window_capture;
 use libobs_wrapper::{
-    impl_signal_manager, run_with_obs, runtime::ObsRuntime, sources::ObsSourceTrait, unsafe_send::SmartPointerSendable, utils::ObsError
+    impl_signal_manager, run_with_obs, runtime::ObsRuntime, sources::ObsSourceTrait,
+    unsafe_send::SmartPointerSendable, utils::ObsError,
 };
 pub use window_capture::{
     WindowCaptureSource, WindowCaptureSourceBuilder, WindowCaptureSourceUpdater,

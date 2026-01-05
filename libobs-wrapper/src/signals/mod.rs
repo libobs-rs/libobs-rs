@@ -105,7 +105,7 @@ pub use traits::*;
 /// let scene = ObsSceneRef::new(name, runtime)?;
 /// let signals = scene.signals();
 /// let mut rx = signals.on_refresh()?;
-/// 
+///
 /// tokio::spawn(async move {
 ///     while let Ok(_) = rx.recv().await {
 ///         println!("Scene refreshed!");

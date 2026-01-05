@@ -119,7 +119,7 @@ where
     }
 }
 
-pub enum Either<A, B> {
+pub enum ObsEither<A, B> {
     Left(A),
     Right(B),
 }

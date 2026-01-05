@@ -12,7 +12,7 @@ use display_info::DisplayInfo;
 use libobs_simple_macro::obs_object_impl;
 use libobs_wrapper::run_with_obs;
 use libobs_wrapper::runtime::ObsRuntime;
-use libobs_wrapper::scenes::{SceneItemExtSceneTrait, ObsSceneItemRef};
+use libobs_wrapper::scenes::{ObsSceneItemRef, SceneItemExtSceneTrait};
 use libobs_wrapper::{
     data::{ObsObjectBuilder, ObsObjectUpdater},
     scenes::ObsSceneRef,

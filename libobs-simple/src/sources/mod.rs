@@ -15,8 +15,8 @@ pub mod windows;
 #[cfg_attr(doc, doc(cfg(target_os = "linux")))]
 pub mod linux;
 
-mod macro_helper;
 mod either;
+mod macro_helper;
 
 pub use either::*;
 pub use libobs_wrapper::{data::ObsObjectUpdater, sources::ObsSourceBuilder};

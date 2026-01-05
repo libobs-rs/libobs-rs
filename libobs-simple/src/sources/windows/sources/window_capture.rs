@@ -1,4 +1,10 @@
-use crate::{define_object_manager, sources::{macro_helper::impl_custom_source, windows::{ObsHookableSourceSignals, ObsHookableSourceTrait}}};
+use crate::{
+    define_object_manager,
+    sources::{
+        macro_helper::impl_custom_source,
+        windows::{ObsHookableSourceSignals, ObsHookableSourceTrait},
+    },
+};
 
 use super::{ObsWindowCaptureMethod, ObsWindowPriority};
 use crate::error::ObsSimpleError;
@@ -7,7 +13,7 @@ use libobs_simple_macro::obs_object_impl;
 use libobs_window_helper::{get_all_windows, WindowInfo, WindowSearchMode};
 use libobs_wrapper::{
     data::{ObsObjectBuilder, ObsObjectUpdater},
-    scenes::{ObsSceneRef, SceneItemExtSceneTrait, ObsSceneItemRef},
+    scenes::{ObsSceneItemRef, ObsSceneRef, SceneItemExtSceneTrait},
     sources::{ObsSourceBuilder, ObsSourceRef},
     utils::ObsError,
 };
@@ -129,7 +135,11 @@ impl WindowCaptureSource {
     }
 }
 
-impl_custom_source!(WindowCaptureSource, ObsHookableSourceSignals, NO_SPECIFIC_SIGNALS_FUNCTION);
+impl_custom_source!(
+    WindowCaptureSource,
+    ObsHookableSourceSignals,
+    NO_SPECIFIC_SIGNALS_FUNCTION
+);
 
 impl ObsHookableSourceTrait for WindowCaptureSource {
     fn source_specific_signals(&self) -> std::sync::Arc<ObsHookableSourceSignals> {
