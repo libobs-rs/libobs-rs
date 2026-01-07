@@ -51,8 +51,7 @@ impl Drop for SignalThreadGuard {
         self.should_exit.store(true, Ordering::Relaxed);
         if let Some(handle) = self.handle.take() {
             let res = handle.join();
-            if let Err(e) = res
-            {
+            if let Err(e) = res {
                 eprintln!("Couldn't join signal thread {e:?}");
             }
         }

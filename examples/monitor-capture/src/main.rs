@@ -29,6 +29,8 @@ impl ObsLogger for NoLogger {
 }
 
 fn main() -> anyhow::Result<()> {
+    env_logger::init();
+
     // Start the OBS context
     let startup_info = StartupInfo::default();
 

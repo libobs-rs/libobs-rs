@@ -8,3 +8,4 @@ publish = false
 libobs-wrapper = { workspace = true }
 libobs-simple = { workspace = true }
 anyhow = { workspace = true }
+env_logger.workspace = true

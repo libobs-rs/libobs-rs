@@ -581,11 +581,6 @@ impl ObsRuntime {
             "==== Startup complete ===============================================".to_string(),
         );
 
-        #[cfg(windows)]
-        if let Some(e) = native.as_ref() {
-            e.unset_dpi_awareness()?;
-        }
-
         Ok((info, obs_modules, native))
     }
 

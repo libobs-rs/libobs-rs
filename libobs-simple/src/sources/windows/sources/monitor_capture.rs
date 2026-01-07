@@ -22,7 +22,9 @@ use libobs_wrapper::{
 };
 use num_traits::ToPrimitive;
 use windows::Win32::UI::HiDpi::{
-    GetAwarenessFromDpiAwarenessContext, GetThreadDpiAwarenessContext, DPI_AWARENESS_UNAWARE,
+    GetAwarenessFromDpiAwarenessContext, GetThreadDpiAwarenessContext,
+    SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
+    DPI_AWARENESS_UNAWARE,
 };
 
 // Usage example
@@ -75,13 +77,30 @@ fn is_thread_dpi_unaware(runtime: &ObsRuntime) -> Result<bool, ObsError> {
     })
 }
 
+fn set_dpi_awareness_if_needed(runtime: &ObsRuntime) -> Result<(), ObsError> {
+    if is_thread_dpi_unaware(runtime)? {
+        log::warn!("The current thread is DPI unaware. Setting the DPI awareness context to Per Monitor Aware V2 to allow DXGI capture method to work correctly.");
+    } else {
+        return Ok(());
+    }
+
+    let set_result = unsafe {
+        // The call is safe and does not require synchronization.
+        SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)
+    };
+
+    if let Err(e) = set_result {
+        log::warn!("Could not set DPI awareness context: {:?}. This is fine if you don't want to use DXGI capture or if you have already specified DPI awareness in the application manifest.", e);
+        Err(ObsError::InvalidOperation("Process is not DPI aware and could not set DPI awareness. DPI awareness is required for DXGI monitor capture however".into()))
+    } else {
+        Ok(())
+    }
+}
+
 impl<'a> MonitorCaptureSourceUpdater<'a> {
     pub fn set_capture_method(mut self, method: ObsDisplayCaptureMethod) -> Result<Self, ObsError> {
-        if is_thread_dpi_unaware(self.runtime())? && method == ObsDisplayCaptureMethod::MethodDXGI {
-            log::warn!("You are trying to capture the monitor using the DXGI capture method while the current thread is DPI unaware. This will lead to a black screen being captured. Please ensure that your application is DPI aware before using the DXGI capture method.");
-            return Err(ObsError::InvalidOperation(
-                "Cannot use DXGI capture method when the current thread is DPI unaware.".into(),
-            ));
+        if method == ObsDisplayCaptureMethod::MethodDXGI {
+            set_dpi_awareness_if_needed(self.runtime())?;
         }
         self.get_settings_updater()
             .set_int_ref("method", method.to_i32().unwrap() as i64);
@@ -108,13 +127,8 @@ impl ObsSourceBuilder for MonitorCaptureSourceBuilder {
     where
         Self: Sized,
     {
-        if is_thread_dpi_unaware(self.runtime())?
-            && self.capture_method == Some(ObsDisplayCaptureMethod::MethodDXGI)
-        {
-            log::warn!("You are trying to capture the monitor using the DXGI capture method while the current thread is DPI unaware. This will lead to a black screen being captured. Please ensure that your application is DPI aware before using the DXGI capture method.");
-            return Err(ObsError::InvalidOperation(
-                "Cannot use DXGI capture method when the current thread is DPI unaware.".into(),
-            ));
+        if self.capture_method == Some(ObsDisplayCaptureMethod::MethodDXGI) {
+            set_dpi_awareness_if_needed(self.runtime())?;
         }
 
         let runtime = self.runtime.clone();
