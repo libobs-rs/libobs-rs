@@ -1,7 +1,7 @@
 [package]
 name = "libobs-wrapper"
 description = "A safe wrapper around libobs"
-version = "9.0.2+32.0.2"
+version = "9.0.3+32.0.2"
 repository = "https://github.com/libobs-rs/libobs-rs"
 documentation = "https://libobs-rs.github.io/libobs-rs/libobs_wrapper/"
 readme = "README.md"

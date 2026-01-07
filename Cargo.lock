@@ -1918,7 +1918,7 @@ dependencies = [
 
 [[package]]
 name = "libobs-wrapper"
-version = "9.0.2+32.0.2"
+version = "9.0.3+32.0.2"
 dependencies = [
  "arboard",
  "chrono",
