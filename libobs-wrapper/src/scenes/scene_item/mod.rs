@@ -31,7 +31,7 @@ impl_obs_drop!(_ObsSceneItemDropGuard, (scene_item), move || unsafe {
     // Safety: The pointer is valid as long as we are in the runtime and the guard is alive.
     // Because scene item is attached to a scene, we first remove it from the scene and then release it.
     libobs::obs_sceneitem_remove(scene_item.0);
-    libobs::obs_sceneitem_release(scene_item.0);
+    // Release is called under the hood
 });
 
 #[derive(Debug, Clone)]
