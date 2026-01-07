@@ -25,7 +25,7 @@
 
 .EXAMPLE
     .\run-integration-tests-with-debugger.ps1
-    
+
 .EXAMPLE
     .\run-integration-tests-with-debugger.ps1 -AllFeatures
 #>
@@ -248,12 +248,31 @@ q
                 Remove-Item "$exeDir\test_error.txt" -ErrorAction SilentlyContinue
             }
             
-            # Check debugger log for exceptions
+            # Check debugger log for exceptions and critical errors
             if (Test-Path "$exeDir\debugger_log.txt") {
                 $debugLog = Get-Content "$exeDir\debugger_log.txt" -Raw
-                if ($debugLog -match "(Access violation|Stack overflow|Invalid handle|STATUS_\w+)") {
+                
+                # Check for various critical errors and exceptions
+                $criticalPatterns = @(
+                    "Access violation",
+                    "Stack overflow",
+                    "Invalid handle",
+                    "STATUS_\w+",
+                    "Critical error detected",
+                    "c0000374",  # Heap corruption
+                    "RtlReportCriticalFailure",
+                    "RtlReportFatalFailure",
+                    "Fatal",
+                    "heap corruption",
+                    "Unknown exception"
+                )
+                
+                $pattern = "($($criticalPatterns -join '|'))"
+                if ($debugLog -match $pattern) {
                     $hadException = $true
-                    $exceptionDetails = $matches[1]
+                    $matchedError = $matches[0]
+                    $exceptionDetails = "Debugger detected: $matchedError"
+                    Write-Warning "Critical error found in debugger log: $matchedError"
                 }
                 Remove-Item "$exeDir\debugger_log.txt" -ErrorAction SilentlyContinue
             }

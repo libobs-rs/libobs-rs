@@ -17,11 +17,12 @@ use crate::{
 
 /// RAII wrapper for libobs `calldata_t` ensuring stable address and proper free.
 pub struct CalldataWrapper {
+    // We need to make sure the data is freed in OBS BEFORE it is dropped
+    _drop_guard: Arc<_CalldataWrapperDropGuard>,
     // Not using a SmartPointerSendable here because its just way too complicated if we want to get the inner mut pointer
     //TODO ?
     data: Sendable<Pin<Box<calldata_t>>>, // stable address
     runtime: ObsRuntime,
-    _drop_guard: Arc<_CalldataWrapperDropGuard>,
 }
 
 impl CalldataWrapper {
@@ -41,7 +42,7 @@ impl CalldataWrapper {
     pub fn get_string<T: Into<ObsString>>(&mut self, key: T) -> Result<String, ObsError> {
         let key: ObsString = key.into();
         let self_ptr = unsafe {
-            // Safety: We won't modify the calldata, so its safe to get a mutable pointer here.
+            // Safety: We won't modify the calldata, so it's safe to get a mutable pointer here.
             self.as_mut_ptr()
         };
 
@@ -64,7 +65,7 @@ impl CalldataWrapper {
                 }
 
                 let data_ptr = unsafe {
-                    // Safety: data was initialized by calldata_get_string and we made sure the call was ok.
+                    // Safety: data was initialized by calldata_get_string, and we made sure the call was ok.
                     data.assume_init()
                 };
                 if data_ptr.is_null() {
@@ -129,7 +130,7 @@ impl ObsCalldataExt for ObsRuntime {
         let proc_handler = proc_handler.clone();
         let name: ObsString = name.into();
         let mut calldata = run_with_obs!(self.clone(), (proc_handler, name), move || {
-            // Safety: calldata will be properly freed by the drop guard and we are using a struct for the `zeroed` call.
+            // Safety: calldata will be properly freed by the drop guard, and we are using a struct for the `zeroed` call.
             let data: calldata_t = unsafe { std::mem::zeroed() };
             let mut data = Box::pin(data);
             // Safety: Data will not get moved out of the pinned box, only the proc handler call will use the pointer and not move it.
