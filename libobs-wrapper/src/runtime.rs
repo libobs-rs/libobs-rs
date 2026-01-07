@@ -317,13 +317,8 @@ impl ObsRuntime {
     where
         F: FnOnce() + 'static,
     {
-        let is_within_runtime = std::thread::current().id() == self.thread_id;
-        if !is_within_runtime {
-            return Err(ObsError::RuntimeOutsideThread);
-        }
-
-        operation();
-        return Ok(());
+        // We are on runtime, so it will block either way
+        self.run_with_obs_result(operation)
     }
 
     /// No-Op function, as you have the runtime disabled. This is just so the run_with_obs macro still works

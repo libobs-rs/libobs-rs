@@ -6,6 +6,7 @@ src/bindings.rs
 obs-build
 rtmp-services
 win-capture
+test-results
 *.dmp
 *.mp4
 

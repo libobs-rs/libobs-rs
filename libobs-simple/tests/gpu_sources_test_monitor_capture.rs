@@ -18,9 +18,6 @@ pub fn monitor_list_check() {
     MonitorCaptureSourceBuilder::get_monitors().unwrap();
 }
 
-/// DXGI is not supported for now
-const ENABLE_DXGI_TEST: bool = 1 == 0; // I know this is false, this is just so RustRover doesn't complain about dead code
-
 #[test]
 pub fn record() {
     let rec_file = ObsPath::from_relative("monitor_capture.mp4");
@@ -43,22 +40,21 @@ pub fn record() {
 
     println!("Recording started");
     std::thread::sleep(Duration::from_secs(5));
-    if ENABLE_DXGI_TEST {
-        println!("Testing DXGI capture method");
-        scene_item
-            .inner_source_mut()
-            .create_updater()
-            .unwrap()
-            .set_capture_method(ObsDisplayCaptureMethod::MethodDXGI)
-            .unwrap()
-            .update()
-            .unwrap();
 
-        std::thread::sleep(Duration::from_secs(5));
-    }
+    println!("Testing DXGI capture method");
+    scene_item
+        .inner_source_mut()
+        .create_updater()
+        .unwrap()
+        .set_capture_method(ObsDisplayCaptureMethod::MethodDXGI)
+        .unwrap()
+        .update()
+        .unwrap();
+
+    std::thread::sleep(Duration::from_secs(5));
     println!("Recording stop");
 
     output.stop().unwrap();
 
-    assert_not_black(&path_out, if ENABLE_DXGI_TEST { 2.0 } else { 1.0 });
+    assert_not_black(&path_out, 2.0);
 }

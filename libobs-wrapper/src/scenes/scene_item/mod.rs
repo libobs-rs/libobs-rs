@@ -43,6 +43,11 @@ pub struct ObsSceneItemRef<T: ObsSourceTrait + Clone> {
     scene_item_ptr: SmartPointerSendable<*mut obs_scene_item>,
     runtime: ObsRuntime,
     // Then the scene
+    // Note: Ideally, we'd want to keep the whole ObsScene struct, however
+    // that would lead to a circular dependency, meaning that this SceneItem / the scene
+    // would never be dropped. Because the only argument the scene takes is its name
+    // and there are no settings attached to it, it's safe to only have a SmartPointer
+    // and not the full scene
     _scene_ptr: SmartPointerSendable<*mut libobs::obs_scene>,
 
     // And at last the source
