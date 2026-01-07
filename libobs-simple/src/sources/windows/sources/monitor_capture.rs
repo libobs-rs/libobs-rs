@@ -85,7 +85,7 @@ fn set_dpi_awareness_if_needed(runtime: &ObsRuntime) -> Result<(), ObsError> {
     }
 
     let set_result = unsafe {
-        // The call is safe and does not require synchronization.
+        // Safety: The call is safe and does not require synchronization.
         SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)
     };
 
