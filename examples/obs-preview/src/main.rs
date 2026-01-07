@@ -18,12 +18,12 @@ use libobs_wrapper::scenes::SceneItemTrait;
 use libobs_wrapper::utils::NixDisplay;
 
 #[cfg(windows)]
+use libobs_simple::sources::ObsObjectUpdater;
+#[cfg(windows)]
 use libobs_simple::sources::windows::{
     GameCaptureSourceBuilder, MonitorCaptureSourceBuilder, ObsDisplayCaptureMethod,
     ObsGameCaptureMode, WindowSearchMode,
 };
-#[cfg(windows)]
-use libobs_simple::sources::ObsObjectUpdater;
 use libobs_wrapper::data::video::ObsVideoInfoBuilder;
 use libobs_wrapper::display::{
     ObsDisplayCreationData, ObsDisplayRef, ObsWindowHandle, ShowHideTrait, WindowPositionTrait,
@@ -50,7 +50,11 @@ impl Drop for SignalThreadGuard {
     fn drop(&mut self) {
         self.should_exit.store(true, Ordering::Relaxed);
         if let Some(handle) = self.handle.take() {
-            handle.join().unwrap();
+            let res = handle.join();
+            if let Err(e) = res
+            {
+                eprintln!("Couldn't join signal thread {e:?}");
+            }
         }
     }
 }

@@ -1,7 +1,10 @@
 //! This is derived from the frontend/obs-main.cpp.
 
 use crate::utils::initialization::NixDisplay;
-use std::{rc::Rc, sync::atomic::AtomicBool};
+use std::{
+    rc::Rc,
+    sync::{atomic::AtomicBool, Mutex},
+};
 
 use lazy_static::lazy_static;
 use windows::{
@@ -21,7 +24,7 @@ use crate::utils::ObsError;
 
 #[derive(Debug)]
 pub(crate) struct PlatformSpecificGuard {
-    previous_dpi_context: Option<*mut std::ffi::c_void>,
+    previous_dpi_context: Mutex<Option<*mut std::ffi::c_void>>,
 }
 
 lazy_static! {
@@ -43,7 +46,7 @@ impl PlatformSpecificGuard {
             // DPI awareness has already been set for this process
             log::debug!("DPI awareness has already been set for this process");
             return Ok(PlatformSpecificGuard {
-                previous_dpi_context: None,
+                previous_dpi_context: Mutex::new(None),
             });
         }
 
@@ -56,18 +59,21 @@ impl PlatformSpecificGuard {
         if !previous_context.is_invalid() {
             log::debug!("DPI awareness enabled for current thread");
             Ok(PlatformSpecificGuard {
-                previous_dpi_context: Some(previous_context.0),
+                previous_dpi_context: Mutex::new(Some(previous_context.0)),
             })
         } else {
             log::warn!("Could not set DPI awareness context");
             Ok(PlatformSpecificGuard {
-                previous_dpi_context: None,
+                previous_dpi_context: Mutex::new(None),
             })
         }
     }
 
-    pub fn unset_dpi_awareness(&self) {
-        if let Some(previous_context) = self.previous_dpi_context {
+    pub fn unset_dpi_awareness(&self) -> Result<(), ObsError> {
+        let mut guard = self.previous_dpi_context.lock().map_err(|_| {
+            ObsError::LockError("PlatformSpecificGuard previous_dpi_context".into())
+        })?;
+        if let Some(previous_context) = guard.take() {
             log::debug!("Restoring previous DPI context");
 
             // SAFETY: We are restoring a previously saved DPI awareness context from the same thread.
@@ -79,12 +85,17 @@ impl PlatformSpecificGuard {
                 let _ = SetThreadDpiAwarenessContext(dpi_context);
             }
         }
+
+        Ok(())
     }
 }
 
 impl Drop for PlatformSpecificGuard {
     fn drop(&mut self) {
-        self.unset_dpi_awareness();
+        let res = self.unset_dpi_awareness();
+        if let Err(e) = res {
+            log::error!("Error unsetting DPI awareness: {:?}", e);
+        }
     }
 }
 /// # Safety
