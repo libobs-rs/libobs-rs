@@ -7,7 +7,7 @@ edition = "2024"
 libobs-bootstrapper = { path = "../../../libobs-bootstrapper", features = [
     "__mock_github_responses",
 ] }
-tokio = { version = "1.48.0", default-features = false, features = [
+tokio = { version = "1.49.0", default-features = false, features = [
     "macros",
     "rt-multi-thread",
 ] }
