@@ -40,7 +40,7 @@ libc = "0.2"
 bitflags = "2.11"
 
 [target.'cfg(target_os="linux")'.dependencies]
-glib = "0.21"
+glib = "0.22"
 libloading = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
