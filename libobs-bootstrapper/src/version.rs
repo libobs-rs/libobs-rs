@@ -65,7 +65,10 @@ pub fn get_installed_version(obs_dll: &Path) -> Result<Option<String>, ObsBootst
     }
 }
 
-pub fn should_update(installed_version_str: &str, target_version: &Version) -> Result<bool, ObsBootstrapError> {
+pub fn should_update(
+    installed_version_str: &str,
+    target_version: &Version,
+) -> Result<bool, ObsBootstrapError> {
     let installed_version = parse_version(installed_version_str)?;
     if installed_version.major != LIBOBS_API_MAJOR_VER as u64 {
         return Ok(false);

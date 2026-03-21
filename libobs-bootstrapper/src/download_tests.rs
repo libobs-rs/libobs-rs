@@ -3,9 +3,7 @@ mod tests {
     use libobs::LIBOBS_API_MAJOR_VER;
 
     use crate::{
-        download::select_latest_compatible_release,
-        github_types::Root2,
-        options::UpdateTargetMode,
+        download::select_latest_compatible_release, github_types::Root2, options::UpdateTargetMode,
     };
 
     fn release(tag_name: &str, draft: bool, prerelease: bool) -> Root2 {
@@ -26,9 +24,11 @@ mod tests {
             release(&format!("obs-build-{}.7.10", major), false, false),
         ];
 
-        let (_, version) =
-            select_latest_compatible_release(&releases, UpdateTargetMode::LatestCompatibleSameMajor)
-                .unwrap();
+        let (_, version) = select_latest_compatible_release(
+            &releases,
+            UpdateTargetMode::LatestCompatibleSameMajor,
+        )
+        .unwrap();
 
         assert_eq!(version.major, major as u64);
         assert_eq!(version.minor, 9);
@@ -74,9 +74,11 @@ mod tests {
             release(&format!("obs-build-{}.7.5", major), false, false),
         ];
 
-        let (_, version) =
-            select_latest_compatible_release(&releases, UpdateTargetMode::LatestCompatibleSameMajor)
-                .unwrap();
+        let (_, version) = select_latest_compatible_release(
+            &releases,
+            UpdateTargetMode::LatestCompatibleSameMajor,
+        )
+        .unwrap();
 
         assert_eq!(version.major, major as u64);
         assert_eq!(version.minor, 7);
@@ -92,8 +94,10 @@ mod tests {
             false,
         )];
 
-        let result =
-            select_latest_compatible_release(&releases, UpdateTargetMode::LatestCompatibleSameMajor);
+        let result = select_latest_compatible_release(
+            &releases,
+            UpdateTargetMode::LatestCompatibleSameMajor,
+        );
 
         assert!(result.is_err());
     }
