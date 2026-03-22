@@ -20,8 +20,8 @@ The library needs OBS binaries in your target directory for Windows and MacOS.
 
 If you want to target Linux, you'll need to build and install OBS Studio from source. This can be done on Ubuntu using the `cargo-obs-build` tool (using `cargo obs-build install`), or by following the [official OBS build instructions](https://github.com/obsproject/obs-studio/wiki/Build-Instructions-For-Linux). Users of your application can just install OBS Studio via their package manager directly (tested and working for version 30+ on Ubuntu)
 
-Also, the libobs-wrapper creates required symlinks `obs-nvenc-test`, `obs-ffmpeg-mux` at runtime. If you are on Linux and have OBS installed in a custom location, make sure to create these symlinks manually in your executable directory, pointing to the correct OBS binaries.
-
+On Linux:
+When running the application and saving for example an replay buffer, the underlying `libobs` library will look at the current executables directory and tries to execute `obs-ffmpeg-mux` and `obs-nvenc-test`. Because they don't exist by default, the `libobs-wrapper` will create symlinks to the existing `obs-ffmpeg-mux` and `obs-nvenc-test` binaries which are found by searching the `PATH`.
 
 For Windows and Macos, there are multiple ways to set this up:
 
