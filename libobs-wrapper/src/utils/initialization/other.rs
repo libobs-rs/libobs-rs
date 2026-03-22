@@ -66,6 +66,8 @@ pub(crate) fn platform_specific_setup() -> Result<Option<Rc<PlatformSpecificGuar
 pub(crate) unsafe fn platform_specific_setup(
     display: Option<NixDisplay>,
 ) -> Result<Option<Rc<PlatformSpecificGuard>>, ObsError> {
+    symlink_required_muxers()?;
+
     let mut display_ptr = None;
     let mut owned = true;
 
@@ -188,4 +190,47 @@ fn detect_platform() -> Option<PlatformType> {
     }
 
     None
+}
+
+#[cfg(target_os = "linux")]
+fn symlink_required_muxers() -> Result<(), ObsError> {
+    let self_exe = std::env::current_exe().map_err(|_| {
+        ObsError::PlatformInitError("Failed to get current executable path".to_string())
+    })?;
+    let target_dir = self_exe.parent().ok_or_else(|| {
+        ObsError::PlatformInitError("Failed to get parent directory of executable".to_string())
+    })?;
+
+    let executables = ["obs-nvenc-test", "obs-ffmpeg-mux"];
+    for exe in &executables {
+        let link_name = target_dir.join(exe);
+        let target = which::which(exe).map_err(|_| {
+            ObsError::PlatformInitError(format!(
+                "Failed to find required OBS executable '{}' in PATH",
+                exe
+            ))
+        })?;
+
+        if link_name.exists() {
+            let should_warn = link_name
+                .read_link()
+                .map(|existing_target| existing_target != target)
+                .unwrap_or(true);
+
+            if should_warn {
+                log::warn!(
+                    "[libobs-wrapper]: Symlink for '{}' already exists at '{}', skipping creation. If this is not intentional, please remove the existing file and restart the application.",
+                    exe,
+                    link_name.display()
+                );
+            }
+        }
+
+        std::process::Command::new("ln")
+            .args(["-s", target.to_str().unwrap(), link_name.to_str().unwrap()])
+            .status()
+            .expect("Failed to create symlink");
+    }
+
+    Ok(())
 }
