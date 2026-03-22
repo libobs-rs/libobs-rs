@@ -68,3 +68,6 @@ enable_runtime = []
 dialog_crash_handler = ["dep:arboard", "dep:dialog"]
 logging_crash_handler = []
 __test_environment = []
+
+[build-dependencies]
+which = "8.0.2"
