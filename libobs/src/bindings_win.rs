@@ -213,8 +213,8 @@ pub const VIDEO_OUTPUT_FAIL: i32 = -2;
 pub const CALL_PARAM_IN: u32 = 1;
 pub const CALL_PARAM_OUT: u32 = 2;
 pub const LIBOBS_API_MAJOR_VER: u32 = 32;
-pub const LIBOBS_API_MINOR_VER: u32 = 0;
-pub const LIBOBS_API_PATCH_VER: u32 = 4;
+pub const LIBOBS_API_MINOR_VER: u32 = 1;
+pub const LIBOBS_API_PATCH_VER: u32 = 0;
 pub const OBS_VERSION: &[u8; 8] = b"unknown\0";
 pub const OBS_DATA_PATH: &[u8; 11] = b"../../data\0";
 pub const OBS_INSTALL_PREFIX: &[u8; 1] = b"\0";
@@ -2796,10 +2796,13 @@ pub struct obs_encoder_info {
             received_packet: *mut bool,
         ) -> bool,
     >,
+#[doc = " Audio encoder only: Returns padding, in samples, that must be skipped at the start of the stream."]
+    pub get_priming_samples:
+        ::std::option::Option<unsafe extern "C" fn(data: *mut ::std::os::raw::c_void) -> u32>,
 }
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]
 const _: () = {
-    ["Size of obs_encoder_info"][::std::mem::size_of::<obs_encoder_info>() - 176usize];
+    ["Size of obs_encoder_info"][::std::mem::size_of::<obs_encoder_info>() - 184usize];
     ["Alignment of obs_encoder_info"][::std::mem::align_of::<obs_encoder_info>() - 8usize];
     ["Offset of field: obs_encoder_info::id"]
         [::std::mem::offset_of!(obs_encoder_info, id) - 0usize];
@@ -2845,6 +2848,8 @@ const _: () = {
         [::std::mem::offset_of!(obs_encoder_info, encode_texture) - 160usize];
     ["Offset of field: obs_encoder_info::encode_texture2"]
         [::std::mem::offset_of!(obs_encoder_info, encode_texture2) - 168usize];
+    ["Offset of field: obs_encoder_info::get_priming_samples"]
+        [::std::mem::offset_of!(obs_encoder_info, get_priming_samples) - 176usize];
 };
 #[repr(C)]
 pub struct obs_output_info {
@@ -4636,6 +4641,7 @@ unsafe extern "C" {
     );
     pub fn blog(log_level: ::std::os::raw::c_int, format: *const ::std::os::raw::c_char, ...);
     pub fn bcrash(format: *const ::std::os::raw::c_char, ...) -> !;
+    pub fn xbegin() -> ::std::os::raw::c_uint;
     pub fn bmalloc(size: usize) -> *mut ::std::os::raw::c_void;
     pub fn brealloc(ptr: *mut ::std::os::raw::c_void, size: usize) -> *mut ::std::os::raw::c_void;
     pub fn bfree(ptr: *mut ::std::os::raw::c_void);
@@ -7410,6 +7416,7 @@ unsafe extern "C" {
     pub fn obs_transition_get_alignment(transition: *const obs_source_t) -> u32;
     pub fn obs_transition_set_size(transition: *mut obs_source_t, cx: u32, cy: u32);
     pub fn obs_transition_get_size(transition: *const obs_source_t, cx: *mut u32, cy: *mut u32);
+    pub fn obs_transition_is_active(transition: *mut obs_source_t) -> bool;
 #[doc = " Enables fixed transitions (videos or specific types of transitions that\n are of fixed duration and linearly interpolated"]
     pub fn obs_transition_enable_fixed(
         transition: *mut obs_source_t,
@@ -7989,6 +7996,7 @@ unsafe extern "C" {
     pub fn obs_encoder_get_frame_size(encoder: *const obs_encoder_t) -> usize;
 #[doc = " For audio encoders, returns the mixer index"]
     pub fn obs_encoder_get_mixer_index(encoder: *const obs_encoder_t) -> usize;
+    pub fn obs_encoder_get_priming_samples(encoder: *const obs_encoder_t) -> u32;
 #[doc = " Sets the preferred video format for a video encoder.  If the encoder can use\n the format specified, it will force a conversion to that format if the\n obs output format does not match the preferred format.\n\n If the format is set to VIDEO_FORMAT_NONE, will revert to the default\n functionality of converting only when absolutely necessary.\n\n If GPU scaling is enabled, conversion will happen on the GPU."]
     pub fn obs_encoder_set_preferred_video_format(
         encoder: *mut obs_encoder_t,
