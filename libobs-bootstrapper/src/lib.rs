@@ -100,7 +100,7 @@ pub(crate) fn bootstrap(
     let update = if options.update {
         ObsBootstrapper::is_update_available()?
     } else {
-        ObsBootstrapper::is_valid_installation()?
+        !ObsBootstrapper::is_valid_installation()?
     };
 
     if !update {

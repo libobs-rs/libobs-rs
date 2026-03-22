@@ -22,7 +22,7 @@ libobs-window-helper = { path = "./libobs-window-helper", version = "0.4" }
 libobs-bootstrapper = { path = "./libobs-bootstrapper", version = "0.3" }
 
 # Error handling, logging, utilities
-anyhow = "1.0.101"  # Minimum version with improved error trait support
+anyhow = "1.0.102"  # Minimum version with improved error trait support
 chrono = "0.4"
 colored = "3"
 env_logger = "0.11"

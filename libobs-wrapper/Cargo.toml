@@ -30,7 +30,7 @@ vsprintf = { workspace = true }
 chrono = { workspace = true }
 getters0 = "0.1.1"
 colored = { workspace = true, optional = true }
-oneshot = { version = "0.1", default-features = false, features = ["std"] }
+oneshot = { version = "0.2", default-features = false, features = ["std"] }
 arboard = { version = "3", optional = true }
 dialog = { version = "0.3", optional = true }
 paste = { workspace = true }
