@@ -30,7 +30,7 @@ fn main() {
     let is_dummy_dll_file =
         obs_dll_file.metadata().map(|m| m.len()).unwrap_or(0) <= DUMMY_DLL_SIZE_THRESHOLD;
 
-        if obs_dll_file.exists() && !is_dummy_dll_file {
+    if obs_dll_file.exists() && !is_dummy_dll_file {
         println!(
             "cargo:warning=obs.dll already exists at {:?}, skipping dummy DLL installation.",
             obs_dll_file
