@@ -1,11 +1,29 @@
 use std::path::Path;
 
 use libloading::Library;
-use libobs::{LIBOBS_API_MAJOR_VER, LIBOBS_API_MINOR_VER, LIBOBS_API_PATCH_VER};
+use libobs::LIBOBS_API_MAJOR_VER;
+use semver::Version;
 
 use crate::error::ObsBootstrapError;
 
 pub type GetVersionFunc = unsafe extern "C" fn() -> u32;
+
+pub fn parse_version(version_str: &str) -> Result<Version, ObsBootstrapError> {
+    let parse_error =
+        || ObsBootstrapError::VersionError(format!("Invalid version string: {}", version_str));
+
+    let version = Version::parse(version_str).map_err(|_| parse_error())?;
+    if !version.pre.is_empty() || !version.build.is_empty() {
+        return Err(parse_error());
+    }
+
+    Ok(version)
+}
+
+pub fn is_compatible_major(version_str: &str) -> Result<bool, ObsBootstrapError> {
+    let version = parse_version(version_str)?;
+    Ok(version.major == LIBOBS_API_MAJOR_VER as u64)
+}
 
 pub fn get_installed_version(obs_dll: &Path) -> Result<Option<String>, ObsBootstrapError> {
     // The obs.dll should always exist
@@ -42,27 +60,19 @@ pub fn get_installed_version(obs_dll: &Path) -> Result<Option<String>, ObsBootst
             version & 0xFFFF
         );
 
+        log::trace!("obs.dll version string: {}", version_str);
         Ok(Some(version_str))
     }
 }
 
-pub fn should_update(version_str: &str) -> Result<bool, ObsBootstrapError> {
-    let version = version_str.split('.').collect::<Vec<_>>();
-    if version.len() != 3 {
-        return Err(ObsBootstrapError::VersionError(format!(
-            "Invalid version string: {}",
-            version_str
-        )));
+pub fn should_update(
+    installed_version_str: &str,
+    target_version: &Version,
+) -> Result<bool, ObsBootstrapError> {
+    let installed_version = parse_version(installed_version_str)?;
+    if installed_version.major != LIBOBS_API_MAJOR_VER as u64 {
+        return Ok(false);
     }
 
-    let parse_error =
-        || ObsBootstrapError::VersionError(format!("Invalid version string: {}", version_str));
-
-    let major = version[0].parse::<u64>().map_err(|_| parse_error())?;
-    let minor = version[1].parse::<u64>().map_err(|_| parse_error())?;
-    let patch = version[2].parse::<u64>().map_err(|_| parse_error())?;
-
-    Ok(major != LIBOBS_API_MAJOR_VER as u64
-        || minor != LIBOBS_API_MINOR_VER as u64
-        || patch < LIBOBS_API_PATCH_VER as u64)
+    Ok(installed_version < *target_version)
 }

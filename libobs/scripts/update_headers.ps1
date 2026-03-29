@@ -133,7 +133,7 @@ if (-not $DryRun) {
     Push-Location $PSScriptRoot/../../libobs-bootstrapper/assets/
     try
     {
-        . $tempDir/dummy-dll/dummyDLL.exe $tempDir/build_x64/libobs/RelWithDebInfo/obs.dll
+        . $tempDir/dummy-dll/dummyDLL.exe $tempDir/build_x64/libobs/RelWithDebInfo/obs.dll obs_get_version
         Move-Item out.dll obs-dummy.dll -Force
         Remove-Item out.exp -Force
         Remove-Item out.lib -Force

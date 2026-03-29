@@ -1,6 +1,9 @@
 #[cfg(test)]
 mod tests {
-    use crate::{ObsBootstrapperOptions, options::GITHUB_REPO};
+    use crate::{
+        ObsBootstrapperOptions,
+        options::{GITHUB_REPO, UpdateTargetMode},
+    };
 
     #[test]
     fn test_default_options() {
@@ -8,6 +11,10 @@ mod tests {
         assert_eq!(options.get_repository(), GITHUB_REPO);
         assert!(options.update);
         assert!(options.restart_after_update);
+        assert_eq!(
+            options.update_target_mode,
+            UpdateTargetMode::LatestCompatibleSameMajor
+        );
     }
 
     #[test]
@@ -39,11 +46,16 @@ mod tests {
         let options = ObsBootstrapperOptions::new()
             .set_repository("test/repo")
             .set_update(false)
+            .set_update_target_mode(UpdateTargetMode::LatestCompatibleSameMajorMinor)
             .set_no_restart();
 
         assert_eq!(options.get_repository(), "test/repo");
         assert!(!options.update);
         assert!(!options.restart_after_update);
+        assert_eq!(
+            options.update_target_mode,
+            UpdateTargetMode::LatestCompatibleSameMajorMinor
+        );
     }
 
     #[test]
@@ -52,6 +64,20 @@ mod tests {
         assert_eq!(options.get_repository(), GITHUB_REPO);
         assert!(options.update);
         assert!(options.restart_after_update);
+        assert_eq!(
+            options.update_target_mode,
+            UpdateTargetMode::LatestCompatibleSameMajor
+        );
+    }
+
+    #[test]
+    fn test_set_update_target_mode() {
+        let options = ObsBootstrapperOptions::new()
+            .set_update_target_mode(UpdateTargetMode::LatestCompatibleSameMajorMinor);
+        assert_eq!(
+            options.update_target_mode,
+            UpdateTargetMode::LatestCompatibleSameMajorMinor
+        );
     }
 
     #[test]

@@ -10,7 +10,14 @@ use tokio::{fs::File, io::AsyncWriteExt};
 use uuid::Uuid;
 
 use super::{LIBRARY_OBS_VERSION, github_types};
-use crate::error::ObsBootstrapError;
+use crate::{error::ObsBootstrapError, options::UpdateTargetMode};
+
+#[derive(Debug, Clone)]
+pub(crate) struct ResolvedRelease {
+    pub(crate) version: Version,
+    pub(crate) archive_url: String,
+    pub(crate) hash_url: String,
+}
 
 pub enum DownloadStatus {
     Error(ObsBootstrapError),
@@ -18,61 +25,63 @@ pub enum DownloadStatus {
     Done(PathBuf),
 }
 
-pub(crate) async fn download_obs(
-    _repo: &str,
-) -> Result<impl Stream<Item = DownloadStatus>, ObsBootstrapError> {
-    // Fetch latest OBS release
-    let client = reqwest::ClientBuilder::new()
-        .user_agent("libobs-rs")
-        .build()
-        .map_err(|e| ObsBootstrapError::DownloadError("Building the reqwest client", e))?;
+fn parse_release_version(release: &github_types::Root2) -> Result<Version, ObsBootstrapError> {
+    let tag = release.tag_name.replace("obs-build-", "");
+    Version::parse(&tag)
+        .map_err(|e| ObsBootstrapError::VersionError(format!("Parsing version: {}", e)))
+}
 
-    #[cfg(not(feature = "__mock_github_responses"))]
-    let releases_url = format!("https://api.github.com/repos/{}/releases", _repo);
-    #[cfg(not(feature = "__mock_github_responses"))]
-    let releases: github_types::Root = client
-        .get(&releases_url)
-        .send()
-        .await
-        .map_err(|e| ObsBootstrapError::DownloadError("Sending Github API request", e))?
-        .json()
-        .await
-        .map_err(|e| ObsBootstrapError::DownloadError("Converting Github API requet to JSON", e))?;
+fn is_release_compatible(version: &Version, mode: UpdateTargetMode) -> bool {
+    if version.major != LIBOBS_API_MAJOR_VER as u64 {
+        return false;
+    }
 
-    #[cfg(feature = "__mock_github_responses")]
-    let releases: github_types::Root = {
-        println!("-- WARNING --");
-        println!("Using mock GitHub responses! This is only for testing purposes.");
-        println!("-- WARNING --");
-        serde_json::from_str(include_str!("../mock_responses/libobs_builds_release.json"))
-            .expect("Parsing mock response")
-    };
+    match mode {
+        UpdateTargetMode::LatestCompatibleSameMajor => true,
+        UpdateTargetMode::LatestCompatibleSameMajorMinor => {
+            version.minor == LIBOBS_API_MINOR_VER as u64
+        }
+    }
+}
 
-    let mut possible_versions = vec![];
+pub(crate) fn select_latest_compatible_release(
+    releases: &[github_types::Root2],
+    mode: UpdateTargetMode,
+) -> Result<(&github_types::Root2, Version), ObsBootstrapError> {
+    let mut latest: Option<(&github_types::Root2, Version)> = None;
+
     for release in releases {
-        let tag = release.tag_name.replace("obs-build-", "");
-        let version = Version::parse(&tag)
-            .map_err(|e| ObsBootstrapError::VersionError(format!("Parsing version: {}", e)))?;
+        if release.draft || release.prerelease {
+            continue;
+        }
 
-        // The minor and major version must be the same, patches shouldn't have braking changes
-        if version.major == LIBOBS_API_MAJOR_VER as u64
-            && version.minor == LIBOBS_API_MINOR_VER as u64
-        {
-            possible_versions.push(release);
+        let version = parse_release_version(release)?;
+        if !is_release_compatible(&version, mode) {
+            continue;
+        }
+
+        if let Some((_, latest_version)) = &latest {
+            if version > *latest_version {
+                latest = Some((release, version));
+            }
+        } else {
+            latest = Some((release, version));
         }
     }
 
-    let latest_version = possible_versions
-        .iter()
-        .max_by_key(|r| &r.published_at)
-        .ok_or_else(|| {
-            ObsBootstrapError::InvalidFormatError(format!(
-                "Finding a matching obs version for {}",
-                *LIBRARY_OBS_VERSION
-            ))
-        })?;
+    latest.ok_or_else(|| {
+        ObsBootstrapError::InvalidFormatError(format!(
+            "Finding a matching obs version for {}",
+            *LIBRARY_OBS_VERSION
+        ))
+    })
+}
 
-    let archive_url = latest_version
+fn release_to_resolved(
+    release: &github_types::Root2,
+    version: Version,
+) -> Result<ResolvedRelease, ObsBootstrapError> {
+    let archive_url = release
         .assets
         .iter()
         .find(|a| a.name.ends_with(".7z"))
@@ -80,13 +89,91 @@ pub(crate) async fn download_obs(
         .browser_download_url
         .clone();
 
-    let hash_url = latest_version
+    let hash_url = release
         .assets
         .iter()
         .find(|a| a.name.ends_with(".sha256"))
         .ok_or_else(|| ObsBootstrapError::InvalidFormatError("Finding sha256 asset".to_string()))?
         .browser_download_url
         .clone();
+
+    Ok(ResolvedRelease {
+        version,
+        archive_url,
+        hash_url,
+    })
+}
+
+pub(crate) async fn resolve_latest_compatible_release(
+    repo: &str,
+    mode: UpdateTargetMode,
+) -> Result<ResolvedRelease, ObsBootstrapError> {
+    #[cfg(feature = "__mock_github_responses")]
+    {
+        let _ = repo;
+        println!("-- WARNING --");
+        println!("Using mock GitHub responses! This is only for testing purposes.");
+        println!("-- WARNING --");
+        let releases: github_types::Root =
+            serde_json::from_str(include_str!("../mock_responses/libobs_builds_release.json"))
+                .expect("Parsing mock response");
+        let (release, version) = select_latest_compatible_release(&releases, mode)?;
+        return release_to_resolved(release, version);
+    }
+
+    #[cfg(not(feature = "__mock_github_responses"))]
+    {
+        let client = reqwest::ClientBuilder::new()
+            .user_agent("libobs-rs")
+            .build()
+            .map_err(|e| ObsBootstrapError::DownloadError("Building the reqwest client", e))?;
+
+        let latest_release_url = format!("https://api.github.com/repos/{}/releases/latest", repo);
+        let latest_release: github_types::Root2 = client
+            .get(&latest_release_url)
+            .send()
+            .await
+            .map_err(|e| ObsBootstrapError::DownloadError("Sending Github API request", e))?
+            .json()
+            .await
+            .map_err(|e| {
+                ObsBootstrapError::DownloadError("Converting Github API request to JSON", e)
+            })?;
+
+        if !latest_release.draft && !latest_release.prerelease {
+            let latest_version = parse_release_version(&latest_release)?;
+            if is_release_compatible(&latest_version, mode) {
+                return release_to_resolved(&latest_release, latest_version);
+            }
+        }
+
+        let releases_url = format!("https://api.github.com/repos/{}/releases", repo);
+        let releases: github_types::Root = client
+            .get(&releases_url)
+            .send()
+            .await
+            .map_err(|e| ObsBootstrapError::DownloadError("Sending Github API request", e))?
+            .json()
+            .await
+            .map_err(|e| {
+                ObsBootstrapError::DownloadError("Converting Github API request to JSON", e)
+            })?;
+
+        let (release, version) = select_latest_compatible_release(&releases, mode)?;
+        release_to_resolved(release, version)
+    }
+}
+
+pub(crate) async fn download_obs(
+    resolved_release: &ResolvedRelease,
+) -> Result<impl Stream<Item = DownloadStatus>, ObsBootstrapError> {
+    let archive_url = resolved_release.archive_url.clone();
+    let hash_url = resolved_release.hash_url.clone();
+
+    let client = reqwest::ClientBuilder::new()
+        .user_agent("libobs-rs")
+        .build()
+        .map_err(|e| ObsBootstrapError::DownloadError("Building the reqwest client", e))?;
 
     let res = client
         .get(archive_url)
@@ -124,7 +211,13 @@ pub(crate) async fn download_obs(
             }
 
             curr_len = std::cmp::min(curr_len + chunk.len() as u64, length);
-            yield DownloadStatus::Progress(curr_len as  f32 / length as f32, "Downloading OBS".to_string());
+            let progress = if length == 0 {
+                0.0
+            } else {
+                curr_len as f32 / length as f32
+            };
+
+            yield DownloadStatus::Progress(progress, "Downloading OBS".to_string());
         }
 
         // Getting remote hash

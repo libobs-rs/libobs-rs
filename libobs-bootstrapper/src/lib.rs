@@ -25,13 +25,15 @@ pub mod status_handler;
 mod version;
 
 #[cfg(test)]
+mod download_tests;
+#[cfg(test)]
 mod options_tests;
 #[cfg(test)]
 mod version_tests;
 
 pub use error::ObsBootstrapError;
 
-pub use options::ObsBootstrapperOptions;
+pub use options::{ObsBootstrapperOptions, UpdateTargetMode};
 
 use crate::status_handler::{ObsBootstrapConsoleHandler, ObsBootstrapStatusHandler};
 
@@ -97,10 +99,25 @@ pub(crate) fn bootstrap(
     let repo = options.repository.to_string();
 
     log::trace!("Checking for update...");
+    let installed = version::get_installed_version(&get_obs_dll_path()?)?;
+
     let update = if options.update {
-        ObsBootstrapper::is_update_available()?
+        if let Some(installed_version) = &installed {
+            if !version::is_compatible_major(installed_version)? {
+                log::warn!(
+                    "Installed OBS major version ({}) does not match required major ({}); skipping automatic update.",
+                    installed_version,
+                    LIBOBS_API_MAJOR_VER
+                );
+                false
+            } else {
+                true
+            }
+        } else {
+            true
+        }
     } else {
-        !ObsBootstrapper::is_valid_installation()?
+        installed.is_none()
     };
 
     if !update {
@@ -110,8 +127,33 @@ pub(crate) fn bootstrap(
 
     let options = options.clone();
     Ok(Some(stream! {
+        let resolved_release = download::resolve_latest_compatible_release(&repo, options.update_target_mode).await;
+        if let Err(err) = resolved_release {
+            yield BootstrapStatus::Error(err);
+            return;
+        }
+
+        let resolved_release = resolved_release.unwrap();
+
+        if let Some(installed_version) = installed.as_deref() {
+            let should_update = version::should_update(installed_version, &resolved_release.version);
+            if let Err(err) = should_update {
+                yield BootstrapStatus::Error(err);
+                return;
+            }
+
+            if !should_update.unwrap() {
+                log::debug!(
+                    "No update needed; installed OBS version {} is up-to-date for compatible target {}.",
+                    installed_version,
+                    resolved_release.version
+                );
+                return;
+            }
+        }
+
         log::debug!("Downloading OBS from {}", repo);
-        let download_stream = download::download_obs(&repo).await;
+        let download_stream = download::download_obs(&resolved_release).await;
         if let Err(err) = download_stream {
             yield BootstrapStatus::Error(err);
             return;
@@ -261,7 +303,12 @@ impl ObsBootstrapper {
     /// reading the installed version information.
     pub fn is_valid_installation() -> Result<bool, ObsBootstrapError> {
         let installed = version::get_installed_version(&get_obs_dll_path()?)?;
-        Ok(installed.is_some())
+        if installed.is_none() {
+            log::trace!("No valid OBS installation found");
+            return Ok(false);
+        }
+
+        Ok(true)
     }
 
     /// Returns true when an update to OBS should be performed.
@@ -283,12 +330,21 @@ impl ObsBootstrapper {
     pub fn is_update_available() -> Result<bool, ObsBootstrapError> {
         let installed = version::get_installed_version(&get_obs_dll_path()?)?;
         if installed.is_none() {
+            log::trace!("No OBS installation found, treating as update available");
             return Ok(true);
         }
 
         let installed = installed.unwrap();
+        if !version::is_compatible_major(&installed)? {
+            log::warn!(
+                "Installed OBS major version ({}) does not match required major ({}); not counting as update.",
+                installed,
+                LIBOBS_API_MAJOR_VER
+            );
+            return Ok(false);
+        }
 
-        version::should_update(&installed)
+        Ok(true)
     }
 
     /// Bootstraps OBS using the provided options and a default console status
