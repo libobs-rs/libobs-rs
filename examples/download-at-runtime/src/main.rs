@@ -72,4 +72,10 @@ async fn main() {
     // Use the context here
     // For example creating new obs data
     context.data().unwrap();
+
+    println!("OBS context initialized successfully.");
+    println!("OBS version: {}", context.get_version().unwrap());
+    println!("Press Enter to exit...");
+    let mut input = String::new();
+    std::io::stdin().read_line(&mut input).unwrap();
 }
