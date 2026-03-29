@@ -20,10 +20,12 @@ The library needs OBS binaries in your target directory for Windows and MacOS.
 
 If you want to target Linux, you'll need to build and install OBS Studio from source. This can be done on Ubuntu using the `cargo-obs-build` tool (using `cargo obs-build install`), or by following the [official OBS build instructions](https://github.com/obsproject/obs-studio/wiki/Build-Instructions-For-Linux). Users of your application can just install OBS Studio via their package manager directly (tested and working for version 30+ on Ubuntu)
 
+On Linux:
+When running the application and saving for example an replay buffer, the underlying `libobs` library will look at the current executables directory and tries to execute `obs-ffmpeg-mux` and `obs-nvenc-test`. Because they don't exist by default, the `libobs-wrapper` will create symlinks to the existing `obs-ffmpeg-mux` and `obs-nvenc-test` binaries which are found by searching the `PATH`.
 
 For Windows and Macos, there are multiple ways to set this up:
 
-### Option 1: Using cargo-obs-build (Recommended for development)
+### Option 1: Using cargo-obs-build
 
 Install the `cargo-obs-build` tool:
 
@@ -57,12 +59,8 @@ cargo obs-build build --out-dir target/(debug|release)/deps
 
 More details can be found in the [cargo-obs-build documentation](../cargo-obs-build/README.md).
 
-### Option 2: Using the OBS Bootstrapper (Recommended for distribution)
-
-For applications that need to bundle OBS binaries or handle runtime installation, we recommend using the [libobs-bootstrapper](https://crates.io/crates/libobs-bootstrapper) crate.
-
-This separate crate provides functionality to download and install OBS binaries at runtime, which is particularly useful for distributing applications without requiring users to install OBS separately.
-
+### Option 2: Using the OBS Bootstrapper
+You can also download OBS binaries at runtime using the [libobs-bootstrapper](https://crates.io/crates/libobs-bootstrapper) crate, which provides a convenient API for downloading and setting up OBS without needing to include it in your build process. This is useful if you want to keep your application lightweight.
 See the [libobs-bootstrapper documentation](https://docs.rs/libobs-bootstrapper) for detailed setup instructions and examples of implementing custom progress handlers.
 
 ## Advanced Usage
