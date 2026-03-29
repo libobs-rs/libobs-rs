@@ -407,7 +407,7 @@ dependencies = [
  "regex",
  "serde_json",
  "sha2",
- "toml",
+ "toml 1.1.0+spec-1.1.0",
  "walkdir",
  "zip 8.4.0",
 ]
@@ -3797,7 +3797,7 @@ dependencies = [
  "cfg-expr",
  "heck",
  "pkg-config",
- "toml",
+ "toml 0.9.12+spec-1.1.0",
  "version-compare",
 ]
 
@@ -4029,6 +4029,21 @@ dependencies = [
  "toml_parser",
  "toml_writer",
  "winnow 0.7.15",
+]
+
+[[package]]
+name = "toml"
+version = "1.1.0+spec-1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f8195ca05e4eb728f4ba94f3e3291661320af739c4e43779cbdfae82ab239fcc"
+dependencies = [
+ "indexmap",
+ "serde_core",
+ "serde_spanned",
+ "toml_datetime 1.1.0+spec-1.1.0",
+ "toml_parser",
+ "toml_writer",
+ "winnow 1.0.0",
 ]
 
 [[package]]
