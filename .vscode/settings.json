@@ -11,10 +11,10 @@
         "stdint.h": "c"
     },
     "rust-analyzer.cargo.targetDir": true,
-    "rust-analyzer.check.overrideCommand": [
+    /*"rust-analyzer.check.overrideCommand": [
         "python3",
         "scripts/lint.py"
-    ],
+    ],*/
     //"rust-analyzer.check.command": "clippy",
     "rust-analyzer.cargo.features": [],
     "cSpell.words": [

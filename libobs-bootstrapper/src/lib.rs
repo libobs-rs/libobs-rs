@@ -100,11 +100,10 @@ pub(crate) fn bootstrap(
 
     log::trace!("Checking for update...");
     let installed = version::get_installed_version(&get_obs_dll_path()?)?;
-    let installed_for_stream = installed.clone();
 
     let update = if options.update {
-        if let Some(installed_version) = installed {
-            if !version::is_compatible_major(&installed_version)? {
+        if let Some(installed_version) = &installed {
+            if !version::is_compatible_major(installed_version)? {
                 log::warn!(
                     "Installed OBS major version ({}) does not match required major ({}); skipping automatic update.",
                     installed_version,
@@ -118,7 +117,7 @@ pub(crate) fn bootstrap(
             true
         }
     } else {
-        installed_for_stream.is_none()
+        installed.is_none()
     };
 
     if !update {
@@ -136,7 +135,7 @@ pub(crate) fn bootstrap(
 
         let resolved_release = resolved_release.unwrap();
 
-        if let Some(installed_version) = installed_for_stream.as_deref() {
+        if let Some(installed_version) = installed.as_deref() {
             let should_update = version::should_update(installed_version, &resolved_release.version);
             if let Err(err) = should_update {
                 yield BootstrapStatus::Error(err);
