@@ -19,7 +19,7 @@ libobs-wrapper = { path = "./libobs-wrapper", version = "9", default-features = 
 libobs-simple-macro = { path = "./libobs-simple-macro", version = "7" }
 libobs-simple = { path = "./libobs-simple", version = "8" }
 libobs-window-helper = { path = "./libobs-window-helper", version = "0.4" }
-libobs-bootstrapper = { path = "./libobs-bootstrapper", version = "0.3" }
+libobs-bootstrapper = { path = "./libobs-bootstrapper", version = "0.4" }
 
 # Error handling, logging, utilities
 anyhow = "1.0.102"  # Minimum version with improved error trait support
