@@ -6,8 +6,10 @@ A safe, ergonomic Rust wrapper around the OBS (Open Broadcaster Software) Studio
 
 ## Features
 
-- **Thread Safety**: Uses a dedicated thread to communicate with OBS, allowing safe cross-thread usage
-- **Resource Safety**: RAII-based resource management for OBS objects
+- **Actor Runtime**: Uses one bounded dedicated-thread actor for libobs calls, with backpressure for fire-and-forget work
+- **Resource Safety**: Native objects live in a runtime-owned registry and wrapper clones carry opaque IDs/leases rather than owned raw pointers
+- **Non-blocking Cleanup**: Destructors enqueue native release operations without requiring Tokio or panicking on runtime shutdown
+- **Per-object Signals**: Signal subscriptions are owned by each object; callback-only pointers are exposed as opaque identities
 - **Runtime Bootstrapping**: Optional automatic download and setup of OBS binaries at runtime (functionality moved to [libobs-bootstrapper](https://crates.io/crates/libobs-bootstrapper))
 - **Scene Management**: Create and manipulate scenes, sources, and outputs
 - **Video Recording**: Configure and record video with various encoders
@@ -16,7 +18,7 @@ A safe, ergonomic Rust wrapper around the OBS (Open Broadcaster Software) Studio
 
 ## Prerequisites
 
-The library needs OBS binaries in your target directory for Windows and MacOS.
+The library needs compatible OBS binaries/libraries for the selected target. Windows can be prepared with `cargo-obs-build`; Linux uses a system/source libobs installation. macOS wrapper support is still incomplete.
 
 If you want to target Linux, you'll need to build and install OBS Studio from source. This can be done on Ubuntu using the `cargo-obs-build` tool (using `cargo obs-build install`), or by following the [official OBS build instructions](https://github.com/obsproject/obs-studio/wiki/Build-Instructions-For-Linux). Users of your application can just install OBS Studio via their package manager directly (tested and working for version 30+ on Ubuntu)
 
@@ -74,7 +76,7 @@ For even easier handling, consider using the [`libobs-simple`](https://crates.io
 builds on top of this wrapper.
 
 ## Features
-- `no_blocking_drops` - Spawns a tokio thread using `tokio::task::spawn_blocking`, so drops don't block your Application (experimental, make sure you have a tokio runtime running)
+- `no_blocking_drops` - Deprecated compatibility feature. Native cleanup is now always deferred to the OBS actor without requiring Tokio.
 - `generate_bindings` - When enabled, forces the underlying bindings from `libobs` to generate instead of using the cached ones.
 - `color-logger` - Enables coloring for the console. **On by default**.
 - `dialog_crash_handler` - Adds a default crash handler, which shows the error and an option to copy the stacktrace to the clipboard. **On by default**. If turned off, OBS crashes will be reported via `stderr`, unless `logging_crash_handler` is enabled, in which case they will be reported via `log::error!`.

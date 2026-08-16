@@ -29,7 +29,7 @@ pub fn test_recording() {
 
     let window = window.expect("Couldn't find notepad window");
 
-    println!("Recording {:?}", window.0.obs_id);
+    println!("Recording {:?}", window.obs_id);
 
     let (mut context, mut output) = initialize_obs(rec_file);
 

@@ -4,32 +4,12 @@ use crate::{
     data::{ImmutableObsData, ObsData, ObsObjectUpdater},
     macros::trait_with_optional_send_sync,
     runtime::ObsRuntime,
-    unsafe_send::SmartPointerSendable,
+    unsafe_send::{NativePointer, SmartPointerSendable},
     utils::{ObsError, ObsString},
 };
 
 mod macros;
 pub(crate) use macros::*;
-
-/// Helper trait to enable cloning boxed outputs.
-pub trait ObsObjectClone<K: Clone> {
-    fn clone_box(&self) -> Box<dyn ObsObjectTrait<K>>;
-}
-
-impl<T, K: Clone> ObsObjectClone<K> for T
-where
-    T: ObsObjectTrait<K> + Clone + 'static,
-{
-    fn clone_box(&self) -> Box<dyn ObsObjectTrait<K>> {
-        Box::new(self.clone())
-    }
-}
-
-impl<K: Clone> Clone for Box<dyn ObsObjectTrait<K>> {
-    fn clone(&self) -> Self {
-        self.clone_box()
-    }
-}
 
 trait_with_optional_send_sync! {
     #[doc(hidden)]
@@ -49,7 +29,7 @@ trait_with_optional_send_sync! {
 #[allow(private_bounds)]
 /// Trait representing an OBS object.
 /// A OBs object has an id, a name, `settings` and `hotkey_data`.
-pub trait ObsObjectTrait<K: Clone>: ObsObjectClone<K> + ObsObjectTraitPrivate {
+pub trait ObsObjectTrait<K: NativePointer>: ObsObjectTraitPrivate {
     fn runtime(&self) -> &ObsRuntime;
     fn settings(&self) -> Result<ImmutableObsData, ObsError>;
     fn hotkey_data(&self) -> Result<ImmutableObsData, ObsError>;

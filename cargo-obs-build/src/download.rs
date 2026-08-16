@@ -24,16 +24,16 @@ use log::{debug, info};
 use log::{error, trace};
 use sha2::{Digest, Sha256};
 
-use crate::git::ReleaseInfo;
+use crate::{git::ReleaseInfo, target::ObsTarget};
 
 const DEFAULT_REQ_TIMEOUT: u64 = 60 * 60;
 
-pub fn download_binaries(build_dir: &Path, info: &ReleaseInfo) -> anyhow::Result<PathBuf> {
-    let architecture = if cfg!(target_arch = "x86_64") {
-        "x64"
-    } else {
-        "arm64"
-    };
+pub fn download_binaries(
+    build_dir: &Path,
+    info: &ReleaseInfo,
+    target: &ObsTarget,
+) -> anyhow::Result<PathBuf> {
+    let architecture = target.windows_asset_arch()?;
     let to_download = &info.assets.iter().find(|e| {
         let name = e["name"].as_str().unwrap_or("").to_lowercase();
 
@@ -54,7 +54,7 @@ pub fn download_binaries(build_dir: &Path, info: &ReleaseInfo) -> anyhow::Result
         .as_str()
         .ok_or(anyhow!("No download url found"))?;
 
-    let download_path = build_dir.join("obs-prebuilt-windows.zip");
+    let download_path = build_dir.join(format!("obs-prebuilt-{}.zip", target.cache_key()));
 
     #[cfg(feature = "colored")]
     println!("Downloading OBS from {}", url.green());

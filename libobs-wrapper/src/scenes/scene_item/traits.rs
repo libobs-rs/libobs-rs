@@ -19,7 +19,12 @@ pub trait SceneItemExtSceneTrait {
     ) -> Result<ObsSceneItemRef<ObsSourceRef>, ObsError>;
 
     /// Gets a source by name from this scene. Returns None if no source with the given name exists in this scene.
-    fn get_source_mut(&self, name: &str) -> Result<Option<Arc<Box<dyn ObsSourceTrait>>>, ObsError>;
+    fn get_source(&self, name: &str) -> Result<Option<Arc<dyn ObsSourceTrait>>, ObsError>;
+
+    #[deprecated = "Use get_source; the returned shared handle was never a mutable reference"]
+    fn get_source_mut(&self, name: &str) -> Result<Option<Arc<dyn ObsSourceTrait>>, ObsError> {
+        self.get_source(name)
+    }
 
     /// Removes the given source from this scene. Removes the corresponding scene item as well. It may be possible that this source is still added to another scene.
     fn remove_every_item_of_source<T: ObsSourceTrait>(&mut self, source: T)
@@ -37,7 +42,7 @@ pub trait SceneItemExtSceneTrait {
     fn get_scene_item_ptr<T: ObsSourceTrait + Clone>(
         &self,
         source: &T,
-    ) -> Result<Vec<Arc<Box<dyn SceneItemTrait>>>, ObsError>;
+    ) -> Result<Vec<Arc<dyn SceneItemTrait>>, ObsError>;
 }
 
 impl SceneItemExtSceneTrait for ObsSceneRef {
@@ -51,9 +56,10 @@ impl SceneItemExtSceneTrait for ObsSceneRef {
         self.attached_scene_items
             .write()
             .map_err(|e| ObsError::LockError(format!("{:?}", e)))?
-            .entry(Arc::new(Box::new(source)))
-            .or_insert_with(Vec::new)
-            .push(Arc::new(Box::new(scene_clone)));
+            .entry(source.as_ptr().native_id())
+            .or_insert_with(|| (Arc::new(source), Vec::new()))
+            .1
+            .push(Arc::new(scene_clone));
 
         Ok(scene_item)
     }
@@ -74,31 +80,27 @@ impl SceneItemExtSceneTrait for ObsSceneRef {
         Ok(scene_item)
     }
 
-    fn get_source_mut(&self, name: &str) -> Result<Option<Arc<Box<dyn ObsSourceTrait>>>, ObsError> {
-        let r = self
+    fn get_source(&self, name: &str) -> Result<Option<Arc<dyn ObsSourceTrait>>, ObsError> {
+        let guard = self
             .attached_scene_items
             .read()
-            .map_err(|e| ObsError::LockError(format!("{:?}", e)))?
-            .keys()
-            .find(|s| s.name() == name)
-            .cloned();
-
-        Ok(r)
+            .map_err(|e| ObsError::LockError(format!("{:?}", e)))?;
+        Ok(guard
+            .values()
+            .find(|(source, _)| source.name() == name)
+            .map(|(source, _)| source.clone()))
     }
 
     fn remove_every_item_of_source<T: ObsSourceTrait>(
         &mut self,
         source: T,
     ) -> Result<(), ObsError> {
-        let source_ptr = source.as_ptr().get_ptr();
+        let source_id = source.as_ptr().native_id();
 
         self.attached_scene_items
             .write()
             .map_err(|e| ObsError::LockError(format!("{:?}", e)))?
-            .retain(|s, _| {
-                //TODO: Maybe find a better way to utilize the HashMap's capabilities here
-                s.as_ptr().get_ptr() != source_ptr
-            });
+            .remove(&source_id);
 
         Ok(())
     }
@@ -109,10 +111,10 @@ impl SceneItemExtSceneTrait for ObsSceneRef {
             .write()
             .map_err(|e| ObsError::LockError(format!("{:?}", e)))?;
 
-        guard.retain(|_, items| {
+        guard.retain(|_, (_, items)| {
             items.retain(|item| {
                 // Keep everything except this one scene item
-                item.as_ptr().get_ptr() != scene_item.as_ptr().get_ptr()
+                item.as_ptr().native_id() != scene_item.as_ptr().native_id()
             });
             // Remove the entry if no items remain
             !items.is_empty()
@@ -133,22 +135,16 @@ impl SceneItemExtSceneTrait for ObsSceneRef {
     fn get_scene_item_ptr<T: ObsSourceTrait + Clone>(
         &self,
         source: &T,
-    ) -> Result<Vec<Arc<Box<dyn SceneItemTrait>>>, ObsError> {
+    ) -> Result<Vec<Arc<dyn SceneItemTrait>>, ObsError> {
         let guard = self
             .attached_scene_items
             .read()
             .map_err(|e| ObsError::LockError(format!("{:?}", e)))?;
 
         let res = guard
-            .iter()
-            .find_map(|(s, scene_item_pointers)| {
-                if s.as_ptr().get_ptr() == source.as_ptr().get_ptr() {
-                    Some(scene_item_pointers.clone())
-                } else {
-                    None
-                }
-            })
-            .unwrap_or_else(Vec::new);
+            .get(&source.as_ptr().native_id())
+            .map(|(_, scene_items)| scene_items.clone())
+            .unwrap_or_default();
 
         Ok(res)
     }

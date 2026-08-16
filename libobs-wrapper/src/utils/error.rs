@@ -70,6 +70,11 @@ pub enum ObsError {
     /// Failed to send/receive on a runtime channel
     RuntimeChannelError(String),
 
+    /// The bounded OBS actor queue is full.
+    RuntimeQueueFull {
+        capacity: usize,
+    },
+
     /// Attempted to call a OBS runtime function from outside the OBS thread.
     /// This error should NEVER occur. If you are not using the runtime manually or have the "enable_runtime" feature enabled
     /// then please report this to the crate maintainer as this indicates a bug in the crate.
@@ -115,6 +120,7 @@ impl Display for ObsError {
             ObsError::SignalDataError(e) => write!(f, "Signal data error: {}", e),
             ObsError::EnumConversionError(e) => write!(f, "Enum conversion error: {}", e),
             ObsError::RuntimeChannelError(e) => write!(f, "Runtime channel error: {}", e),
+            ObsError::RuntimeQueueFull { capacity } => write!(f, "OBS runtime queue is full (capacity: {}). Batch work or retry later.", capacity),
             ObsError::InvalidDll => write!(f, "A dummy DLL was loaded instead of the real libobs DLL. Make sure you bootstrap properly with libobs-bootstrapper"),
             #[cfg(feature="enable_runtime")]
             ObsError::RuntimeOutsideThread => write!(f, "Attempted to call a OBS runtime function from outside the OBS thread. This is a bug in the crate!"),

@@ -36,20 +36,18 @@
 //!
 //! For more examples refer to the [examples](https://github.com/libobs-rs/libobs-rs/tree/main/examples) directory in the repository.
 
+mod registry;
+
 use std::{
-    collections::HashMap,
     ffi::CStr,
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, Condvar, Mutex, RwLock},
     thread::ThreadId,
 };
 
 #[cfg(target_os = "linux")]
 use crate::utils::initialization::PlatformType;
 use crate::{
-    data::{
-        object::ObsObjectTrait,
-        output::{ObsOutputTrait, ObsOutputTraitSealed, ObsReplayBufferOutputRef},
-    },
+    data::output::{ObsOutputTrait, ObsOutputTraitSealed, ObsReplayBufferOutputRef},
     display::{ObsDisplayCreationData, ObsDisplayRef},
 };
 use crate::{
@@ -65,52 +63,90 @@ use crate::{
 };
 use getters0::Getters;
 use libobs::{audio_output, video_output};
+use registry::ObjectRegistry;
 
-lazy_static::lazy_static! {
-    pub(crate) static ref OBS_THREAD_ID: Mutex<Option<ThreadId>> = Mutex::new(None);
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ObsRuntimeState {
+    Idle,
+    Starting,
+    Active(ThreadId),
+    ShuttingDown,
 }
 
-pub(crate) type GeneralStorage<T> = Arc<RwLock<Vec<Arc<Box<T>>>>>;
+lazy_static::lazy_static! {
+    static ref OBS_RUNTIME_STATE: (Mutex<ObsRuntimeState>, Condvar) =
+        (Mutex::new(ObsRuntimeState::Idle), Condvar::new());
+}
 
-/// Interface to the OBS context. Only one context
-/// can exist across all threads and any attempt to
-/// create a new context while there is an existing
-/// one will error.
+pub(crate) fn reserve_runtime_slot() -> Result<(), ObsError> {
+    let (lock, changed) = &*OBS_RUNTIME_STATE;
+    let mut state = lock.lock().map_err(|_| ObsError::MutexFailure)?;
+    loop {
+        match *state {
+            ObsRuntimeState::Idle => {
+                *state = ObsRuntimeState::Starting;
+                return Ok(());
+            }
+            ObsRuntimeState::ShuttingDown => {
+                state = changed.wait(state).map_err(|_| ObsError::MutexFailure)?;
+            }
+            ObsRuntimeState::Starting | ObsRuntimeState::Active(_) => {
+                return Err(ObsError::ThreadFailure);
+            }
+        }
+    }
+}
+
+pub(crate) fn activate_runtime_slot(thread_id: ThreadId) -> Result<(), ObsError> {
+    let (lock, _) = &*OBS_RUNTIME_STATE;
+    let mut state = lock.lock().map_err(|_| ObsError::MutexFailure)?;
+    if *state != ObsRuntimeState::Starting {
+        return Err(ObsError::ThreadFailure);
+    }
+    *state = ObsRuntimeState::Active(thread_id);
+    Ok(())
+}
+
+pub(crate) fn begin_runtime_shutdown() {
+    let (lock, _) = &*OBS_RUNTIME_STATE;
+    match lock.lock() {
+        Ok(mut state) => {
+            if matches!(*state, ObsRuntimeState::Active(_)) {
+                *state = ObsRuntimeState::ShuttingDown;
+            }
+        }
+        Err(poisoned) => {
+            let mut state = poisoned.into_inner();
+            *state = ObsRuntimeState::ShuttingDown;
+        }
+    }
+}
+
+pub(crate) fn release_runtime_slot() -> Result<(), ObsError> {
+    let (lock, changed) = &*OBS_RUNTIME_STATE;
+    let mut state = lock.lock().map_err(|_| ObsError::MutexFailure)?;
+    *state = ObsRuntimeState::Idle;
+    changed.notify_all();
+    Ok(())
+}
+
+/// Interface to the process-global OBS context.
 ///
-/// Note that the order of the struct values is
-/// important! OBS is super specific about how it
-/// does everything. Things are freed early to
-/// latest from top to bottom.
+/// Context-level native objects are owned by an internal registry. Each native handle
+/// retains the runtime independently, so correctness does not depend on Rust struct
+/// field declaration order.
 #[derive(Debug, Getters, Clone)]
 #[skip_new]
 pub struct ObsContext {
-    /// Stores startup info for safe-keeping. This
-    /// prevents any use-after-free as these do not
-    /// get copied in libobs.
+    /// Keeps C-referenced startup configuration alive for the OBS lifetime.
     startup_info: Arc<RwLock<StartupInfo>>,
-    #[get_mut]
-    // Key is display id, value is the display fixed in heap
-    displays: Arc<RwLock<HashMap<usize, ObsDisplayRef>>>,
 
-    /// Outputs must be stored in order to prevent
-    /// early freeing.
-    #[allow(dead_code)]
-    #[get_mut]
-    outputs: GeneralStorage<dyn ObsOutputTrait>,
-
-    #[get_mut]
-    scenes: Arc<RwLock<Vec<ObsSceneRef>>>,
-
-    // Filters are on the level of the context because they are not scene-specific
-    #[get_mut]
-    filters: Arc<RwLock<Vec<ObsFilterRef>>>,
+    #[skip_getter]
+    objects: Arc<ObjectRegistry>,
 
     #[skip_getter]
     _obs_modules: Arc<ObsModules>,
 
-    /// This struct must be the last element which makes sure
-    /// that everything else has been freed already before the runtime
-    /// shuts down
     runtime: ObsRuntime,
 
     #[cfg(target_os = "linux")]
@@ -193,10 +229,7 @@ impl ObsContext {
 
         Ok(Self {
             _obs_modules: Arc::new(obs_modules),
-            displays: Default::default(),
-            outputs: Default::default(),
-            scenes: Default::default(),
-            filters: Default::default(),
+            objects: Arc::new(ObjectRegistry::default()),
             runtime: runtime.clone(),
             startup_info: Arc::new(RwLock::new(info)),
             #[cfg(target_os = "linux")]
@@ -262,17 +295,7 @@ impl ObsContext {
             return Err(ObsError::ResetVideoFailureGraphicsModule);
         }
 
-        let has_active_outputs = {
-            self.outputs
-                .read()
-                .map_err(|_| {
-                    ObsError::LockError("Failed to acquire read lock on outputs".to_string())
-                })?
-                .iter()
-                .any(|output| output.is_active().unwrap_or_default())
-        };
-
-        if has_active_outputs {
+        if self.objects.any_output_active()? {
             return Err(ObsError::ResetVideoFailureOutputActive);
         }
 
@@ -346,12 +369,7 @@ impl ObsContext {
         match output {
             Ok(x) => {
                 let tmp = x.clone();
-                self.outputs
-                    .write()
-                    .map_err(|_| {
-                        ObsError::LockError("Failed to acquire write lock on outputs".to_string())
-                    })?
-                    .push(Arc::new(Box::new(x)));
+                self.objects.add_output(x)?;
                 Ok(tmp)
             }
 
@@ -365,12 +383,7 @@ impl ObsContext {
         match output {
             Ok(x) => {
                 let tmp = x.clone();
-                self.outputs
-                    .write()
-                    .map_err(|_| {
-                        ObsError::LockError("Failed to acquire write lock on outputs".to_string())
-                    })?
-                    .push(Arc::new(Box::new(x)));
+                self.objects.add_output(x)?;
                 Ok(tmp)
             }
 
@@ -390,12 +403,7 @@ impl ObsContext {
         match filter {
             Ok(x) => {
                 let tmp = x.clone();
-                self.filters
-                    .write()
-                    .map_err(|_| {
-                        ObsError::LockError("Failed to acquire write lock on filters".to_string())
-                    })?
-                    .push(x);
+                self.objects.add_filter(x)?;
                 Ok(tmp)
             }
 
@@ -486,7 +494,7 @@ impl ObsContext {
                                 log::warn!("Could not get display from surface handle on wayland. Make sure your wayland client is at least version 1.23. Error: {:?}", e);
                             } else {
                                 let display_from_surface = display_from_surface.unwrap();
-                                if display_from_surface != display.0 {
+                                if display_from_surface != display.as_ptr() {
                                     return Err(ObsError::DisplayCreationError(
                             "Provided surface handle's Wayland display does not match the NixDisplay's Wayland display.".to_string(),
                         ));
@@ -501,14 +509,7 @@ impl ObsContext {
         let display = ObsDisplayRef::new(data, self.runtime.clone())
             .map_err(|e| ObsError::DisplayCreationError(e.to_string()))?;
 
-        let id = display.id();
-        self.displays
-            .write()
-            .map_err(|_| {
-                ObsError::LockError("Failed to acquire write lock on displays".to_string())
-            })?
-            .insert(id, display.clone());
-
+        self.objects.add_display(display.clone())?;
         Ok(display)
     }
 
@@ -517,67 +518,26 @@ impl ObsContext {
     }
 
     pub fn remove_display_by_id(&mut self, id: usize) -> Result<(), ObsError> {
-        self.displays
-            .write()
-            .map_err(|_| {
-                ObsError::LockError("Failed to acquire write lock on displays".to_string())
-            })?
-            .remove(&id);
-
-        Ok(())
+        self.objects.remove_display(id)
     }
 
     pub fn get_display_by_id(&self, id: usize) -> Result<Option<ObsDisplayRef>, ObsError> {
-        let d = self
-            .displays
-            .read()
-            .map_err(|_| {
-                ObsError::LockError("Failed to acquire read lock on displays".to_string())
-            })?
-            .get(&id)
-            .cloned();
-
-        Ok(d)
+        self.objects.display(id)
     }
 
-    pub fn get_output(
-        &mut self,
-        name: &str,
-    ) -> Result<Option<Arc<Box<dyn ObsOutputTrait>>>, ObsError> {
-        let o = self
-            .outputs
-            .read()
-            .map_err(|_| ObsError::LockError("Failed to acquire read lock on outputs".to_string()))?
-            .iter()
-            .find(|x| x.name().to_string().as_str() == name)
-            .cloned();
-
-        Ok(o)
+    pub fn get_output(&self, name: &str) -> Result<Option<Arc<dyn ObsOutputTrait>>, ObsError> {
+        self.objects.output(name)
     }
 
-    pub fn update_output(&mut self, name: &str, settings: ObsData) -> Result<(), ObsError> {
-        match self
-            .outputs
-            .read()
-            .map_err(|_| ObsError::LockError("Failed to acquire read lock on outputs".to_string()))?
-            .iter()
-            .find(|x| x.name().to_string().as_str() == name)
-        {
-            Some(output) => output.update_settings(settings),
-            None => Err(ObsError::OutputNotFound),
-        }
+    pub fn update_output(&self, name: &str, settings: ObsData) -> Result<(), ObsError> {
+        self.objects
+            .output(name)?
+            .ok_or(ObsError::OutputNotFound)?
+            .update_settings(settings)
     }
 
-    pub fn get_filter(&mut self, name: &str) -> Result<Option<ObsFilterRef>, ObsError> {
-        let f = self
-            .filters
-            .read()
-            .map_err(|_| ObsError::LockError("Failed to acquire read lock on filters".to_string()))?
-            .iter()
-            .find(|x| x.name().to_string().as_str() == name)
-            .cloned();
-
-        Ok(f)
+    pub fn get_filter(&self, name: &str) -> Result<Option<ObsFilterRef>, ObsError> {
+        self.objects.filter(name)
     }
 
     /// Creates a new scene
@@ -602,10 +562,7 @@ impl ObsContext {
         let scene = ObsSceneRef::new(name.into(), self.runtime.clone())?;
 
         let tmp = scene.clone();
-        self.scenes
-            .write()
-            .map_err(|_| ObsError::LockError("Failed to acquire write lock on scenes".to_string()))?
-            .push(scene);
+        self.objects.add_scene(scene)?;
 
         if let Some(channel) = channel {
             tmp.set_to_channel(channel)?;
@@ -613,16 +570,8 @@ impl ObsContext {
         Ok(tmp)
     }
 
-    pub fn get_scene(&mut self, name: &str) -> Result<Option<ObsSceneRef>, ObsError> {
-        let r = self
-            .scenes
-            .read()
-            .map_err(|_| ObsError::LockError("Failed to acquire read lock on scenes".to_string()))?
-            .iter()
-            .find(|x| x.name().to_string().as_str() == name)
-            .cloned();
-
-        Ok(r)
+    pub fn get_scene(&self, name: &str) -> Result<Option<ObsSceneRef>, ObsError> {
+        self.objects.scene(name)
     }
 
     pub fn source_builder<T: ObsSourceBuilder, K: Into<ObsString> + Send + Sync>(

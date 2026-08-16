@@ -81,7 +81,11 @@ impl<T: ObsSourceTrait + Clone> ObsSceneItemRef<T> {
             runtime: runtime.clone(),
         };
 
-        let scene_item_ptr = SmartPointerSendable::new(scene_item_ptr.0, Arc::new(drop_guard));
+        let scene_item_ptr = SmartPointerSendable::new(
+            scene_item_ptr.0,
+            Arc::new(drop_guard),
+            runtime.native_registry(),
+        );
 
         Ok(Self {
             underlying_source: source,
@@ -303,7 +307,7 @@ where
 
 impl<T: ObsSourceTrait + Clone> PartialEq for ObsSceneItemRef<T> {
     fn eq(&self, other: &Self) -> bool {
-        self.scene_item_ptr.get_ptr() == other.scene_item_ptr.get_ptr()
+        self.scene_item_ptr.native_id() == other.scene_item_ptr.native_id()
     }
 }
 
@@ -311,6 +315,6 @@ impl<T: ObsSourceTrait + Clone> Eq for ObsSceneItemRef<T> {}
 
 impl<T: ObsSourceTrait + Clone> Hash for ObsSceneItemRef<T> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.scene_item_ptr.get_ptr().hash(state);
+        self.scene_item_ptr.native_id().hash(state);
     }
 }

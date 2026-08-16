@@ -25,3 +25,6 @@ mod bindings {
 }
 
 pub use bindings::*;
+
+/// Exact OBS Studio/libobs version represented by the vendored headers.
+pub const SUPPORTED_OBS_VERSION: &str = include_str!("../OBS_VERSION");

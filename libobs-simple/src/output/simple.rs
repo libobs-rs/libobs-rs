@@ -9,29 +9,20 @@
 //!
 //! ```no_run
 //! use libobs_simple::output::simple::{SimpleOutputBuilder, X264Preset};
-//! use libobs_simple::quick_start::quick_start;
-//! use libobs_wrapper::{context::ObsContext, utils::StartupInfo, data::video::ObsVideoInfoBuilder};
+//! use libobs_wrapper::{data::video::ObsVideoInfoBuilder, utils::{ObsPath, StartupInfo}};
 //!
-//! #[tokio::main]
-//! async fn main() {
-//! let context = StartupInfo::new()
-//!     .set_video_info(
-//!           ObsVideoInfoBuilder::new()
-//!             // Configure video info as need
-//!             .build()
-//!      ).start()
-//!       .unwrap()
-//!     
-//!     let output = SimpleOutputBuilder::new(context, "./recording.mp4")
+//! fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     let context = StartupInfo::new()
+//!         .set_video_info(ObsVideoInfoBuilder::new().build())
+//!         .start()?;
+//!
+//!     let _output = SimpleOutputBuilder::new(context, "recording", ObsPath::new("./recording.mp4"))
 //!         .video_bitrate(6000)
 //!         .audio_bitrate(160)
 //!         .x264_encoder(X264Preset::VeryFast)
-//!         .build()
-//!         .unwrap();
+//!         .build()?;
 //!
-//!     // Add sources here (for more docs, look [this](https://github.com/libobs-rs/libobs-rs/blob/main/examples/monitor-capture/src/main.rs) example
-//!
-//!     println!("Output created!");
+//!     Ok(())
 //! }
 //! ```
 

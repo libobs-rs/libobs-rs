@@ -10,6 +10,7 @@ fn main() {
     println!("cargo:rerun-if-changed=headers/vec4.c");
     println!("cargo:rerun-if-changed=headers/window_capture.h");
     println!("cargo:rerun-if-changed=Cargo.toml");
+    println!("cargo:rerun-if-changed=OBS_VERSION");
     println!("cargo:rerun-if-env-changed=LIBOBS_PATH");
 
     let target_family = env::var("CARGO_CFG_TARGET_FAMILY").unwrap_or_default();
@@ -23,25 +24,7 @@ fn main() {
         println!("cargo:rustc-link-search=native={}", manifest_dir);
         println!("cargo:rustc-link-lib=dylib=obs");
     } else if target_os == "linux" {
-        /*
-        let header = include_str!("./headers/obs/obs-config.h");
-        let mut major = "";
-        let mut minor = "";
-        let mut patch = "";
-        for line in header.lines() {
-            if line.starts_with("#define LIBOBS_API_MAJOR_VER") {
-                major = line.split_whitespace().last().unwrap();
-            } else if line.starts_with("#define LIBOBS_API_MINOR_VER") {
-                minor = line.split_whitespace().last().unwrap();
-            } else if line.starts_with("#define LIBOBS_API_PATCH_VER") {
-                patch = line.split_whitespace().last().unwrap();
-            }
-        }
-
-        let version = format!("{}.{}.{}", major, minor, patch);
-        */
-
-        let version = "30.0.0"; // Manually set for now, update when updating obs-studio version
+        let version = include_str!("OBS_VERSION").trim();
         pkg_config::Config::new()
             .atleast_version(version)
             .probe("libobs")

@@ -1,11 +1,16 @@
 use anyhow::bail;
-use cargo_obs_build::get_meta_info;
+use cargo_obs_build::{get_lib_obs_version, get_meta_info};
 
 use crate::args::InstallArgs;
 
 pub fn linux_obs_system_install(opts: InstallArgs) -> anyhow::Result<()> {
     let mut tag = opts.tag;
     get_meta_info(&mut None, &mut tag)?;
+
+    if tag.is_none() {
+        let (major, minor, patch) = get_lib_obs_version()?;
+        tag = Some(format!("{major}.{minor}.{patch}"));
+    }
 
     if !opts.skip_check {
         // Check if system is Ubuntu/Debian based

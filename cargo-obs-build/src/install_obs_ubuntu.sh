@@ -31,11 +31,12 @@ git clone --recursive "$OBS_REPO" $TEMP_DIR
 cd $TEMP_DIR
 
 git fetch --tags
-LATEST_TAG=$(git describe --tags --abbrev=0)
 
-OBS_BUILD_TAG="${OBS_BUILD_TAG:-$LATEST_TAG}"
+if [[ -z "${OBS_BUILD_TAG:-}" ]]; then
+    echo "OBS_BUILD_TAG must be provided by cargo-obs-build so the installed OBS version matches the bindings." >&2
+    exit 1
+fi
 
-# Get the latest stable tag
 echo "Building OBS Studio version: $OBS_BUILD_TAG"
 git checkout $OBS_BUILD_TAG
 git submodule update --init --recursive

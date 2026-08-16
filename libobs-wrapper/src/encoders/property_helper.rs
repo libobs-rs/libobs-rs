@@ -7,8 +7,8 @@ use crate::{
     data::{
         output::{ObsOutputRef, ObsOutputTrait},
         properties::{
-            ObsProperty, ObsPropertyObject, ObsPropertyObjectPrivate, _ObsPropertiesDropGuard,
-            property_ptr_to_struct,
+            _ObsPropertiesDropGuard, property_ptr_to_struct, ObsProperty, ObsPropertyObject,
+            ObsPropertyObjectPrivate,
         },
         ObsData,
     },
@@ -156,7 +156,11 @@ impl ObsPropertyObjectPrivate for StructName {
             self.runtime.clone(),
         ));
 
-        Ok(SmartPointerSendable::new(property_ptr.0, drop_guard))
+        Ok(SmartPointerSendable::new(
+            property_ptr.0,
+            drop_guard,
+            self.runtime.native_registry(),
+        ))
     }
 
     fn get_properties_by_id_raw<T: Into<ObsString> + Sync + Send>(
@@ -181,6 +185,10 @@ impl ObsPropertyObjectPrivate for StructName {
 
         let drop_guard = Arc::new(_ObsPropertiesDropGuard::new(ptr.clone(), runtime.clone()));
 
-        Ok(SmartPointerSendable::new(ptr.0, drop_guard))
+        Ok(SmartPointerSendable::new(
+            ptr.0,
+            drop_guard,
+            runtime.native_registry(),
+        ))
     }
 }

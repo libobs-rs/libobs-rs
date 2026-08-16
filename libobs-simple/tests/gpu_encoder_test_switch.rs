@@ -183,7 +183,7 @@ impl ReproState {
                 VideoEncoderInfo::new(
                     encoder_type.to_obs_encoder_type(),
                     encoder_name.as_str(),
-                    Some(encoder_settings.clone()),
+                    Some(encoder_settings.try_clone().unwrap()),
                     None,
                 ),
                 self.obs_context.runtime().clone(),

@@ -231,7 +231,7 @@ pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsObjectTrait<*mut libobs::obs
         let output_ptr = self.as_ptr();
         let runtime = self.runtime().clone();
 
-        let mut rx = if should_pause {
+        let rx = if should_pause {
             self.signals().on_pause()?
         } else {
             self.signals().on_unpause()?
@@ -296,8 +296,8 @@ pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsObjectTrait<*mut libobs::obs
             )));
         }
 
-        let mut rx = self.signals().on_stop()?;
-        let mut rx_deactivate = self.signals().on_deactivate()?;
+        let rx = self.signals().on_stop()?;
+        let rx_deactivate = self.signals().on_deactivate()?;
 
         let runtime = self.runtime().clone();
         run_with_obs!(runtime, (output_ptr), move || {

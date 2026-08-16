@@ -4,16 +4,16 @@ use std::{
 };
 
 use crate::{
-    context::ObsContext, enums::ObsLogLevel, logger::internal_log_global, run_with_obs,
-    runtime::ObsRuntime, unsafe_send::Sendable, utils::StartupPaths,
+    context::ObsContext, enums::ObsLogLevel, logger::internal_log_global, runtime::ObsRuntime,
+    utils::StartupPaths,
 };
 use libobs::obs_module_failure_info;
 
 pub struct ObsModules {
     paths: StartupPaths,
 
-    /// A pointer to the module failure info structure.
-    info: Option<Sendable<obs_module_failure_info>>,
+    /// Module names copied out of OBS-owned failure data during initialization.
+    failed_modules: Vec<String>,
     pub(crate) runtime: Option<ObsRuntime>,
 }
 
@@ -21,7 +21,7 @@ impl Debug for ObsModules {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ObsModules")
             .field("paths", &self.paths)
-            .field("info", &"(internal obs_module_failure_info)")
+            .field("failed_modules", &self.failed_modules)
             .finish()
     }
 }
@@ -128,7 +128,7 @@ impl ObsModules {
 
         Self {
             paths: paths.clone(),
-            info: None,
+            failed_modules: Vec::new(),
             runtime: None,
         }
     }
@@ -153,7 +153,15 @@ impl ObsModules {
             "---------------------------------".to_string(),
         );
         libobs::obs_post_load_modules();
-        self.info = Some(Sendable(failure_info));
+        self.failed_modules.clear();
+        for i in 0..failure_info.count {
+            let module = failure_info.failed_modules.add(i);
+            if !module.is_null() && !(*module).is_null() {
+                self.failed_modules
+                    .push(CStr::from_ptr(*module).to_string_lossy().into_owned());
+            }
+        }
+        libobs::obs_module_failure_info_free(&mut failure_info);
 
         self.log_if_failed();
     }
@@ -162,21 +170,13 @@ impl ObsModules {
     #[allow(unknown_lints)]
     #[allow(ensure_obs_call_in_runtime)]
     unsafe fn log_if_failed(&self) {
-        if self.info.as_ref().is_none_or(|x| x.0.count == 0) {
+        if self.failed_modules.is_empty() {
             return;
-        }
-
-        let info = &self.info.as_ref().unwrap().0;
-        let mut failed_modules = Vec::new();
-        for i in 0..info.count {
-            let module = info.failed_modules.add(i);
-            let plugin_name = CStr::from_ptr(*module);
-            failed_modules.push(plugin_name.to_string_lossy());
         }
 
         internal_log_global(
             ObsLogLevel::Warning,
-            format!("Failed to load modules: {}", failed_modules.join(", ")),
+            format!("Failed to load modules: {}", self.failed_modules.join(", ")),
         );
     }
 }
@@ -184,43 +184,22 @@ impl ObsModules {
 impl Drop for ObsModules {
     fn drop(&mut self) {
         log::trace!("Dropping ObsModules and removing module paths...");
-
-        let paths = self.paths.clone();
-        let runtime = self.runtime.take().unwrap();
-
-        #[cfg(any(
-            not(feature = "no_blocking_drops"),
-            test,
-            feature = "__test_environment",
-            not(feature = "enable_runtime")
-        ))]
-        {
-            let data_path = paths.libobs_data_path().clone();
-            let r = run_with_obs!(runtime, (data_path), move || unsafe {
-                // Safety: This is running in the OBS thread, so it's safe to call this here and the pointer is valid.
+        let Some(runtime) = self.runtime.take() else {
+            return;
+        };
+        let data_path = self.paths.libobs_data_path().clone();
+        let cleanup_runtime = runtime.clone();
+        runtime.defer_obs_cleanup(move || {
+            let result = cleanup_runtime.run_with_obs_result(move || unsafe {
+                // SAFETY: This closure is explicitly executed through the OBS runtime.
                 libobs::obs_remove_data_path(data_path.as_ptr().0);
             });
-
-            if std::thread::panicking() {
-                return;
+            if let Err(err) = result {
+                log::error!(
+                    "Failed to remove the OBS data path during cleanup: {:?}",
+                    err
+                );
             }
-
-            r.unwrap();
-        }
-
-        #[cfg(all(
-            feature = "no_blocking_drops",
-            not(test),
-            not(feature = "__test_environment"),
-            feature = "enable_runtime"
-        ))]
-        {
-            let _ = tokio::task::spawn_blocking(move || {
-                run_with_obs!(runtime, move || unsafe {
-                    libobs::obs_remove_data_path(paths.libobs_data_path().as_ptr().0);
-                })
-                .unwrap();
-            });
-        }
+        });
     }
 }

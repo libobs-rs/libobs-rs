@@ -12,9 +12,6 @@ use libobs_simple::sources::windows::WindowCaptureSourceBuilder;
 #[cfg(target_family = "windows")]
 use libobs_window_helper::{WindowInfo, WindowSearchMode};
 
-#[cfg(target_family = "windows")]
-use libobs_wrapper::unsafe_send::Sendable;
-
 #[allow(dead_code)]
 fn parse_ffmpeg_duration(duration: &str) -> anyhow::Result<f64> {
     let parts: Vec<&str> = duration.split(':').collect();
@@ -164,12 +161,12 @@ pub async fn assert_motion(path: &str, min_variance: f64) {
 
 #[allow(dead_code)]
 #[cfg(target_family = "windows")]
-pub fn find_notepad() -> Option<Sendable<WindowInfo>> {
+pub fn find_notepad() -> Option<WindowInfo> {
     let windows =
         WindowCaptureSourceBuilder::get_windows(WindowSearchMode::ExcludeMinimized).unwrap();
     println!("{:?}", windows);
     windows.into_iter().find(|w| {
-        w.0.class
+        w.class
             .as_ref()
             .is_some_and(|e| e.to_lowercase().contains("notepad"))
     })

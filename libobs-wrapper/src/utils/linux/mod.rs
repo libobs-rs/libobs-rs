@@ -44,19 +44,9 @@ impl Drop for LinuxGlibLoop {
             self.glib_loop.quit();
         }
 
-        if let Some(handle) = self.handle.take() {
-            let r = handle.join();
-            if std::thread::panicking() {
-                if let Err(e) = r {
-                    log::error!(
-                        "[libobs-wrapper]: Thread panicked while dropping LinuxGlibLoop: {:?}",
-                        e
-                    );
-                }
-            } else {
-                r.unwrap();
-            }
-        }
+        // Dropping a JoinHandle detaches the helper thread. `quit()` above requests
+        // prompt termination, but a Rust destructor must not wait indefinitely for it.
+        drop(self.handle.take());
     }
 }
 
