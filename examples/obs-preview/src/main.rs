@@ -28,8 +28,6 @@ use libobs_wrapper::data::video::ObsVideoInfoBuilder;
 use libobs_wrapper::display::{
     ObsDisplayCreationData, ObsDisplayRef, ObsWindowHandle, ShowHideTrait, WindowPositionTrait,
 };
-use libobs_wrapper::sources::ObsSourceBuilder;
-use libobs_wrapper::sources::ObsSourceTrait;
 use libobs_wrapper::unsafe_send::Sendable;
 use libobs_wrapper::{context::ObsContext, utils::StartupInfo};
 use winit::application::ApplicationHandler;
@@ -40,6 +38,7 @@ use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use winit::window::{Window, WindowId};
+use libobs_wrapper::sources::{ObsSourceBuilder, ObsSourceTrait};
 
 struct SignalThreadGuard {
     should_exit: Arc<AtomicBool>,
@@ -157,7 +156,7 @@ impl ObsInner {
         let obs_handle = {
             if let RawWindowHandle::Xlib(handle) = hwnd {
                 //TODO check if this is actually u32
-                ObsWindowHandle::new_from_x11(context.runtime(), handle.window as u32).unwrap()
+                ObsWindowHandle::new_from_x11(context.runtime(), handle.window as u32)?
             } else if let RawWindowHandle::Wayland(handle) = hwnd {
                 ObsWindowHandle::new_from_wayland(handle.surface.as_ptr() as *mut _)
             } else {
@@ -230,12 +229,6 @@ impl ApplicationHandler for App {
         let _ = self.window.write().unwrap().replace(Sendable(window));
     }
 
-    fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
-        println!("Stopping output...");
-        // The obs context is dropped here before the window / event loop is closed!
-        let mut inner = self.obs.write().unwrap().take().unwrap();
-        inner.context.remove_display(&inner.display).unwrap();
-    }
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         let window = self.window.read().unwrap();
         if window.is_none() {
@@ -346,11 +339,17 @@ impl ApplicationHandler for App {
             _ => (),
         }
     }
+    fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
+        println!("Stopping output...");
+        // The obs context is dropped here before the window / event loop is closed!
+        let mut inner = self.obs.write().unwrap().take().unwrap();
+        inner.context.remove_display(&inner.display).unwrap();
+    }
 }
 
 pub fn main() -> anyhow::Result<()> {
     env_logger::init();
-    let event_loop = EventLoop::new().unwrap();
+    let event_loop = EventLoop::new()?;
 
     let mut app = App {
         window: Arc::new(RwLock::new(None)),
