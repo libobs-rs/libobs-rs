@@ -66,6 +66,8 @@ or [libobs-wrapper](./libobs-wrapper/README.md).
 ## Documentation
 - [Bootstrap Options](./docs/bootstrap_options.md)
 - [How it Works](./docs/how_it_works.md)
+- [v10 Migration](./docs/v10_migration.md)
+- [Capability Discovery Example](./examples/capability-discovery)
 
 ## Disclaimer
 

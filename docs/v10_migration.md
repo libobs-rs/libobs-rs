@@ -1,28 +1,84 @@
 # libobs-wrapper v10 migration
 
-Version 10 is an intentional architecture-breaking release focused on native lifetime and threading safety.
+Version 10 is an intentional architecture-breaking release focused on native lifetime, threading, and API safety. The post-refactor audit tightened several v10 boundaries further; code written against early v10 snapshots may need the changes below.
 
 ## Runtime and cleanup
 
-The default runtime is now a bounded actor and no longer depends on Tokio. `no_blocking_drops` remains as a compatibility feature name but cleanup is always deferred to the OBS actor. `run_with_obs!` now preserves structured `ObsError` values instead of converting them to `InvocationError(String)`.
+The default runtime is a bounded actor and no longer depends on Tokio. `no_blocking_drops` remains as a compatibility feature name, but cleanup is always deferred to the OBS actor.
 
-## Native handles
+Normal actor submissions are bounded for both synchronous and fire-and-forget calls. Saturation returns `ObsError::RuntimeQueueFull` instead of blocking for queue capacity. Runtime shutdown/failure is distinguished by structured errors such as `RuntimePanicked`, `RuntimeMismatch`, and `RuntimeReentrantBlocking` rather than stringifying actor failures into `InvocationError`.
 
-`Sendable` and `SmartPointerSendable` can no longer be constructed by downstream safe code. Owned native handles are backed by `NativeObjectId` entries in the runtime registry. Code that only compared raw pointers should compare `native_id()` instead.
+Initialization and actor execution are panic-contained. Native cleanup is attempted before `obs_shutdown()` even after an actor command panic, and partial startup rolls back process-global OBS state.
 
-Signal payloads that previously exposed a sendable callback raw pointer now expose `SignalObjectId`. It is an identity token, not a dereferenceable pointer.
+## Native handles and `ObsObjectTrait`
+
+`ObsObjectTrait<K>` is now `ObsObjectTrait`. The native pointer type is a hidden implementation detail. Safe downstream code should use the concrete high-level object types and `object_id()` when stable identity/hash comparison is needed.
+
+`NativeObjectId` is runtime-scoped. Do not persist its diagnostic sequence value or treat it as a pointer/address.
+
+Public safe `as_ptr()`/`get_ptr()` escape hatches have been removed from ordinary wrapper objects. `Sendable` is crate-private, and managed native pointers can only be extracted through an explicitly unsafe, doc-hidden integration seam. This intentionally breaks code that used wrapper internals as a general way to make arbitrary pointer-shaped values `Send` or `Sync`.
+
+If an advanced integration genuinely needs the process-global audio/video output pointer, `ObsContext::get_audio_ptr()` and `get_video_ptr()` remain explicit `unsafe` APIs and return raw pointers. The caller is responsible for the native lifetime, reference-counting, and threading rules.
+
+## Runtime affinity
+
+Objects remember the runtime that owns them. Operations that combine objects now reject cross-runtime values with `ObsError::RuntimeMismatch`. This applies to scene/source/filter relationships and output/encoder attachment paths.
 
 ## Signals
 
-Signal subscription methods return `SignalReceiver<T>` rather than `tokio::sync::broadcast::Receiver<T>`. Synchronous code can use `recv`, `blocking_recv`, or `try_recv`. Each subscriber queue is bounded; if a subscriber falls behind, new events for that subscriber are dropped rather than blocking OBS callbacks or growing memory without bound. Async applications can bridge the receiver at their application boundary instead of making Tokio part of the wrapper core.
+Signal subscription methods return `SignalReceiver<T>` rather than `tokio::sync::broadcast::Receiver<T>`. Synchronous code can use `recv`, `blocking_recv`, or `try_recv`. Each subscriber queue is bounded; if a subscriber falls behind, new events for that subscriber are dropped rather than blocking OBS callbacks or growing memory without bound.
 
-## `ObsData`
+Signal pointer fields are exposed only as `SignalObjectId`, which is an opaque callback identity and never a dereferenceable native pointer. Callback connection is atomic at the actor-command boundary so failed construction cannot leave stale userdata registered in C.
+
+## `ObsData`, strings, and properties
 
 `ObsData` no longer implements `Clone`, because cloning requires a fallible native/JSON round-trip. Use `data.try_clone()?` when an independent mutable copy is required. `ImmutableObsData` remains cheaply cloneable.
 
+`ObsString::as_ptr()` is no longer part of the safe public API. Use `as_c_str()` for ordinary C-string interop.
+
+Legacy typed property access remains available, but generic discovery should prefer the owned `PropertyMetadata` model described below. Property-type mismatch is reported as `ObsError::PropertyTypeMismatch`.
+
+## Scene and display handles
+
+Scene and scene-item pointer accessors are internal. Use `object_id()` for identity. Display render callbacks now own per-display userdata rather than relying on a process-global position map.
+
+Raw native window constructors are unsafe:
+
+```rust,ignore
+let hwnd = unsafe { ObsWindowHandle::new_from_handle(raw_hwnd) };
+let wayland = unsafe { ObsWindowHandle::new_from_wayland(raw_wl_surface) };
+```
+
+The supplied native handle must remain valid for every OBS display created from it and must obey the GUI toolkit's thread-affinity rules.
+
+`ObsTransformInfo::get_bounds_type()` now returns `Option<ObsBoundsType>` so an enum value added by a newer libobs does not panic older wrapper code.
+
+## Generic capability discovery
+
+Applications no longer need to hard-code installed OBS plugins/features. `ObsContext` provides:
+
+```rust,ignore
+let capabilities = obs.capabilities()?;
+for source in capabilities.source_types() {
+    println!("{}: {:?}", source.id(), source.kind());
+}
+
+if let Some(source) = capabilities.source_types().first() {
+    for property in source.properties()? {
+        println!("{}: {:?}", property.name, property.kind);
+    }
+}
+```
+
+Separate query methods cover inputs, filters, transitions, outputs, encoders, services, output protocols, and loaded modules. Output/encoder metadata includes codecs where libobs exposes them. Source/output/encoder/service descriptors can return owned property metadata and default `ImmutableObsData` settings.
+
+Unknown property/list/category values are represented with `Unknown(...)` variants for forward compatibility. Discovery results never expose temporary libobs strings or property pointers.
+
+See [`examples/capability-discovery`](../examples/capability-discovery) for a complete executable example.
+
 ## Context and scene lookups
 
-Read-only context lookups now take `&self`. Scene source storage uses `Arc<dyn ObsSourceTrait>` rather than `Arc<Box<dyn ObsSourceTrait>>`. `get_source_mut` is deprecated because it never returned a mutable reference; use `get_source`.
+Read-only context lookups take `&self`. Scene source storage uses `Arc<dyn ObsSourceTrait>` rather than `Arc<Box<dyn ObsSourceTrait>>`. `get_source_mut` is deprecated because it never returned a mutable reference; use `get_source`.
 
 ## Windows source helpers
 

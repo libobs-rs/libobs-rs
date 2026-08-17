@@ -391,6 +391,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "capability-discovery"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "libobs-wrapper",
+]
+
+[[package]]
 name = "cargo-obs-build"
 version = "3.0.0"
 dependencies = [
