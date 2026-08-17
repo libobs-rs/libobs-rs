@@ -1,11 +1,11 @@
 //! Opaque transport and native-handle types used at the OBS actor seam.
 //!
 //! Downstream safe Rust cannot manufacture a `Send`/`Sync` wrapper for arbitrary
-//! values. Owned native handles are represented by a runtime-registry ID rather than
-//! carrying the raw OBS pointer in every clone.
+//! values. Owned native handles carry their native address in a shared lifetime lease,
+//! while the runtime registry tracks only opaque identity/liveness for diagnostics.
 
 use std::{
-    collections::HashMap,
+    collections::HashSet,
     fmt,
     marker::PhantomData,
     sync::{
@@ -82,13 +82,16 @@ impl NativeObjectId {
     }
 }
 
-/// Registry owned by the OBS runtime. Native addresses live here rather than inside
-/// every public wrapper clone.
+/// Registry owned by the OBS runtime.
+///
+/// It intentionally stores only opaque identities. Native addresses belong to the shared
+/// handle lease, so an already-live handle never performs a fallible registry lookup to
+/// recover its own pointer.
 #[derive(Debug)]
 pub(crate) struct NativeObjectRegistry {
     runtime_id: u64,
     next_id: AtomicU64,
-    entries: RwLock<HashMap<NativeObjectId, usize>>,
+    entries: RwLock<HashSet<NativeObjectId>>,
 }
 
 impl Default for NativeObjectRegistry {
@@ -100,13 +103,13 @@ impl Default for NativeObjectRegistry {
         Self {
             runtime_id,
             next_id: AtomicU64::new(1),
-            entries: RwLock::new(HashMap::new()),
+            entries: RwLock::new(HashSet::new()),
         }
     }
 }
 
 impl NativeObjectRegistry {
-    pub(crate) fn register<P: NativePointer>(&self, pointer: P) -> NativeObjectId {
+    pub(crate) fn register(&self) -> NativeObjectId {
         let id = NativeObjectId {
             runtime: self.runtime_id,
             object: self.next_id.fetch_add(1, Ordering::Relaxed),
@@ -115,7 +118,7 @@ impl NativeObjectRegistry {
             .entries
             .write()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        entries.insert(id, pointer.into_addr());
+        entries.insert(id);
         id
     }
 
@@ -125,19 +128,6 @@ impl NativeObjectRegistry {
             .write()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         entries.remove(&id);
-    }
-
-    fn resolve<P: NativePointer>(&self, id: NativeObjectId) -> P {
-        let entries = self
-            .entries
-            .read()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let address = *entries
-            .get(&id)
-            .expect("native handle registry invariant violated");
-        // Safety: registration and resolution use the same sealed pointer type at the
-        // `SmartPointerSendable<P>` boundary, and the lease keeps the entry alive.
-        unsafe { P::from_addr(address) }
     }
 
     pub(crate) fn len(&self) -> usize {
@@ -155,6 +145,7 @@ impl NativeObjectRegistry {
 #[derive(Debug)]
 struct NativeHandleLease {
     id: NativeObjectId,
+    address: usize,
     registry: Arc<NativeObjectRegistry>,
     // Kept alive until after unregister. Dropping the guard schedules the actual
     // native release on the OBS actor.
@@ -183,10 +174,11 @@ impl<P: NativePointer> SmartPointerSendable<P> {
         drop_guard: Arc<dyn ObsDropGuard>,
         registry: Arc<NativeObjectRegistry>,
     ) -> Self {
-        let id = registry.register(ptr);
+        let id = registry.register();
         Self {
             lease: Arc::new(NativeHandleLease {
                 id,
+                address: ptr.into_addr(),
                 registry,
                 _drop_guard: drop_guard,
             }),
@@ -198,11 +190,17 @@ impl<P: NativePointer> SmartPointerSendable<P> {
         self.lease.id
     }
 
-    /// Resolve the native pointer while this handle keeps its runtime registry entry
-    /// alive. Dereferencing or retaining the pointer beyond the handle lifetime remains
-    /// subject to the usual raw-pointer safety rules.
+    /// Returns the native pointer retained by this handle's lease.
+    ///
+    /// The registry tracks identity/liveness for diagnostics, but an already-live handle
+    /// does not re-resolve its own pointer through the registry. That makes the lease
+    /// itself the source of truth for pointer validity and removes an impossible-state
+    /// panic from every FFI call site.
     pub(crate) fn get_ptr(&self) -> P {
-        self.lease.registry.resolve(self.lease.id)
+        // Safety: `address` was produced from a `P` when this lease was constructed.
+        // `P` is sealed to raw pointer types, and the lease retains the native drop guard
+        // until after its final handle is gone.
+        unsafe { P::from_addr(self.lease.address) }
     }
 
     /// Returns the underlying native pointer for advanced FFI integrations.
@@ -251,6 +249,7 @@ impl<P: NativePointer> std::hash::Hash for SmartPointerSendable<P> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::AtomicUsize;
 
     #[derive(Debug)]
     struct NoopGuard;
@@ -273,6 +272,87 @@ mod tests {
 
         // The no-op test guard intentionally does not own the allocation.
         unsafe { drop(Box::from_raw(raw)) };
+    }
+
+    #[test]
+    fn live_handle_pointer_does_not_depend_on_registry_lookup() {
+        let registry = Arc::new(NativeObjectRegistry::default());
+        let raw = Box::into_raw(Box::new(7_u32));
+        let handle = SmartPointerSendable::new(raw, Arc::new(NoopGuard), registry.clone());
+
+        // Simulate diagnostic registry state being unavailable. Pointer validity is a
+        // property of the lease, not of a second map lookup.
+        registry.unregister(handle.native_id());
+        assert_eq!(registry.len(), 0);
+        assert_eq!(handle.get_ptr(), raw);
+
+        drop(handle);
+        unsafe { drop(Box::from_raw(raw)) };
+    }
+
+    #[test]
+    fn final_lease_unregisters_before_releasing_native_guard_exactly_once() {
+        #[derive(Debug)]
+        struct ObservingGuard {
+            registry: Arc<NativeObjectRegistry>,
+            drops: Arc<AtomicUsize>,
+        }
+
+        impl ObsDropGuard for ObservingGuard {}
+
+        impl Drop for ObservingGuard {
+            fn drop(&mut self) {
+                assert_eq!(
+                    self.registry.len(),
+                    0,
+                    "native identity must be unregistered before native cleanup begins"
+                );
+                self.drops.fetch_add(1, Ordering::SeqCst);
+            }
+        }
+
+        let registry = Arc::new(NativeObjectRegistry::default());
+        let drops = Arc::new(AtomicUsize::new(0));
+        let raw = Box::into_raw(Box::new(99_u32));
+        let handle = SmartPointerSendable::new(
+            raw,
+            Arc::new(ObservingGuard {
+                registry: registry.clone(),
+                drops: drops.clone(),
+            }),
+            registry.clone(),
+        );
+        let clones = (0..16).map(|_| handle.clone()).collect::<Vec<_>>();
+
+        drop(handle);
+        assert_eq!(drops.load(Ordering::SeqCst), 0);
+        drop(clones);
+        assert_eq!(drops.load(Ordering::SeqCst), 1);
+        assert_eq!(registry.len(), 0);
+
+        unsafe { drop(Box::from_raw(raw)) };
+    }
+
+    #[test]
+    fn registry_returns_to_baseline_after_clone_drop_stress() {
+        let registry = Arc::new(NativeObjectRegistry::default());
+        let mut allocations = Vec::new();
+
+        for value in 0..512_u32 {
+            let raw = Box::into_raw(Box::new(value));
+            allocations.push(raw);
+            let handle = SmartPointerSendable::new(raw, Arc::new(NoopGuard), registry.clone());
+            let clones = (0..8).map(|_| handle.clone()).collect::<Vec<_>>();
+            assert_eq!(registry.len(), 1);
+            drop(handle);
+            assert_eq!(registry.len(), 1);
+            drop(clones);
+            assert_eq!(registry.len(), 0);
+        }
+
+        for raw in allocations {
+            unsafe { drop(Box::from_raw(raw)) };
+        }
     }
 
     #[test]

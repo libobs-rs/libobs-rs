@@ -44,7 +44,11 @@ struct WindowUserData {
 
 /// Update color space using userdata owned by the message thread.
 ///
-/// The message thread keeps an `Arc<WindowUserData>` alive for the complete window
+/// # Safety
+///
+/// `window` must be a live HWND created by this window manager, and its `GWLP_USERDATA`
+/// must either be null or point to the `WindowUserData` retained by the message thread.
+/// The message thread keeps that `Arc<WindowUserData>` alive for the complete window
 /// lifetime. Cloning the native handle while holding the mutex leases the OBS display
 /// for the duration of this callback, so teardown can race without a use-after-free.
 unsafe fn update_color_space_from_userdata(window: HWND) {
