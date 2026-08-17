@@ -1,5 +1,8 @@
 use anyhow::Result;
-use libobs_wrapper::{data::ObsDataGetters, utils::StartupInfo};
+use libobs_wrapper::{
+    data::{ObsDataGetters, ObsDataSetters, object::ObsObjectTrait},
+    utils::StartupInfo,
+};
 
 fn main() -> Result<()> {
     let obs = StartupInfo::new().start()?;
@@ -59,6 +62,21 @@ fn main() -> Result<()> {
 
     println!("\nProtocols: {:?}", capabilities.protocols());
     println!("Loaded modules: {}", capabilities.modules().len());
+
+    // Discovery descriptors are actionable: callers can start from plugin defaults,
+    // change settings generically, and create a typed managed object without hard-coding
+    // raw libobs calls. This block simply skips when image-source is not installed.
+    if let Some(color_type) = obs.source_type("color_source_v3")? {
+        let mut settings = color_type.default_settings_mut()?;
+        settings.set_int("width", 640)?.set_int("height", 360)?;
+        let source = obs.create_source(&color_type, "discovered-color", Some(settings))?;
+        println!(
+            "Created {} from discovered type {} (object {:?})",
+            source.name(),
+            color_type.id(),
+            source.object_id()
+        );
+    }
 
     Ok(())
 }

@@ -8,11 +8,14 @@ use std::{collections::HashSet, ffi::CStr, os::raw::c_char, ptr};
 
 use crate::{
     context::ObsContext,
-    data::ImmutableObsData,
+    data::{output::ObsOutputRef, ImmutableObsData, ObsData, ObsDataPointers},
+    encoders::{audio::ObsAudioEncoder, video::ObsVideoEncoder},
     run_with_obs,
     runtime::ObsRuntime,
+    services::ObsServiceRef,
+    sources::{ObsFilterRef, ObsSourceRef},
     unsafe_send::Sendable,
-    utils::{ObsError, ObsString},
+    utils::{ObjectInfo, ObsError, ObsString},
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -63,6 +66,12 @@ impl SourceTypeInfo {
     pub fn default_settings(&self) -> Result<Option<ImmutableObsData>, ObsError> {
         default_settings(&self.runtime, &self.id, libobs::obs_get_source_defaults)
     }
+
+    /// Returns an owned mutable copy of this type's defaults. If libobs reports no
+    /// defaults, an empty settings object for the same runtime is returned.
+    pub fn default_settings_mut(&self) -> Result<ObsData, ObsError> {
+        mutable_default_settings(&self.runtime, &self.id, libobs::obs_get_source_defaults)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -97,6 +106,11 @@ impl OutputTypeInfo {
 
     pub fn default_settings(&self) -> Result<Option<ImmutableObsData>, ObsError> {
         default_settings(&self.runtime, &self.id, libobs::obs_output_defaults)
+    }
+
+    /// Returns a mutable settings object initialized from this output type's defaults.
+    pub fn default_settings_mut(&self) -> Result<ObsData, ObsError> {
+        mutable_default_settings(&self.runtime, &self.id, libobs::obs_output_defaults)
     }
 }
 
@@ -138,6 +152,11 @@ impl EncoderTypeInfo {
     pub fn default_settings(&self) -> Result<Option<ImmutableObsData>, ObsError> {
         default_settings(&self.runtime, &self.id, libobs::obs_encoder_defaults)
     }
+
+    /// Returns a mutable settings object initialized from this encoder type's defaults.
+    pub fn default_settings_mut(&self) -> Result<ObsData, ObsError> {
+        mutable_default_settings(&self.runtime, &self.id, libobs::obs_encoder_defaults)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -162,6 +181,11 @@ impl ServiceTypeInfo {
 
     pub fn default_settings(&self) -> Result<Option<ImmutableObsData>, ObsError> {
         default_settings(&self.runtime, &self.id, libobs::obs_service_defaults)
+    }
+
+    /// Returns a mutable settings object initialized from this service type's defaults.
+    pub fn default_settings_mut(&self) -> Result<ObsData, ObsError> {
+        mutable_default_settings(&self.runtime, &self.id, libobs::obs_service_defaults)
     }
 }
 
@@ -435,6 +459,143 @@ impl ObsContext {
 
     pub fn source_type(&self, id: &str) -> Result<Option<SourceTypeInfo>, ObsError> {
         Ok(self.source_types()?.into_iter().find(|info| info.id == id))
+    }
+
+    pub fn output_type(&self, id: &str) -> Result<Option<OutputTypeInfo>, ObsError> {
+        Ok(self.output_types()?.into_iter().find(|info| info.id == id))
+    }
+
+    pub fn encoder_type(&self, id: &str) -> Result<Option<EncoderTypeInfo>, ObsError> {
+        Ok(self.encoder_types()?.into_iter().find(|info| info.id == id))
+    }
+
+    pub fn service_type(&self, id: &str) -> Result<Option<ServiceTypeInfo>, ObsError> {
+        Ok(self.service_types()?.into_iter().find(|info| info.id == id))
+    }
+
+    /// Creates a typed source from a discovered source descriptor. Filters use
+    /// [`ObsContext::create_filter`] so callers cannot accidentally lose filter semantics.
+    pub fn create_source(
+        &self,
+        source_type: &SourceTypeInfo,
+        name: impl Into<ObsString>,
+        settings: Option<ObsData>,
+    ) -> Result<ObsSourceRef, ObsError> {
+        self.runtime().ensure_same_runtime(&source_type.runtime)?;
+        if source_type.kind == SourceKind::Filter {
+            return Err(capability_kind_mismatch(
+                &source_type.id,
+                "source/input/transition",
+                "filter",
+            ));
+        }
+        ensure_settings_runtime(self.runtime(), settings.as_ref())?;
+        ObsSourceRef::new_from_info(
+            ObjectInfo::new(source_type.id.as_str(), name, settings, None),
+            self.runtime().clone(),
+        )
+    }
+
+    /// Creates and registers a typed filter from a discovered filter descriptor.
+    pub fn create_filter(
+        &mut self,
+        filter_type: &SourceTypeInfo,
+        name: impl Into<ObsString>,
+        settings: Option<ObsData>,
+    ) -> Result<ObsFilterRef, ObsError> {
+        self.runtime().ensure_same_runtime(&filter_type.runtime)?;
+        if filter_type.kind != SourceKind::Filter {
+            return Err(capability_kind_mismatch(
+                &filter_type.id,
+                "filter",
+                &format!("{:?}", filter_type.kind),
+            ));
+        }
+        ensure_settings_runtime(self.runtime(), settings.as_ref())?;
+        self.obs_filter(ObjectInfo::new(
+            filter_type.id.as_str(),
+            name,
+            settings,
+            None,
+        ))
+    }
+
+    /// Creates and registers an output from a discovered output descriptor.
+    pub fn create_output(
+        &mut self,
+        output_type: &OutputTypeInfo,
+        name: impl Into<ObsString>,
+        settings: Option<ObsData>,
+    ) -> Result<ObsOutputRef, ObsError> {
+        self.runtime().ensure_same_runtime(&output_type.runtime)?;
+        ensure_settings_runtime(self.runtime(), settings.as_ref())?;
+        self.output(ObjectInfo::new(
+            output_type.id.as_str(),
+            name,
+            settings,
+            None,
+        ))
+    }
+
+    /// Creates a video encoder from a discovered encoder descriptor.
+    pub fn create_video_encoder(
+        &self,
+        encoder_type: &EncoderTypeInfo,
+        name: impl Into<ObsString>,
+        settings: Option<ObsData>,
+    ) -> Result<std::sync::Arc<ObsVideoEncoder>, ObsError> {
+        self.runtime().ensure_same_runtime(&encoder_type.runtime)?;
+        if encoder_type.kind != EncoderKind::Video {
+            return Err(capability_kind_mismatch(
+                &encoder_type.id,
+                "video encoder",
+                &format!("{:?}", encoder_type.kind),
+            ));
+        }
+        ensure_settings_runtime(self.runtime(), settings.as_ref())?;
+        ObsVideoEncoder::new_from_info(
+            ObjectInfo::new(encoder_type.id.as_str(), name, settings, None),
+            self.runtime().clone(),
+        )
+    }
+
+    /// Creates an audio encoder from a discovered encoder descriptor.
+    pub fn create_audio_encoder(
+        &self,
+        encoder_type: &EncoderTypeInfo,
+        name: impl Into<ObsString>,
+        settings: Option<ObsData>,
+        mixer_index: usize,
+    ) -> Result<std::sync::Arc<ObsAudioEncoder>, ObsError> {
+        self.runtime().ensure_same_runtime(&encoder_type.runtime)?;
+        if encoder_type.kind != EncoderKind::Audio {
+            return Err(capability_kind_mismatch(
+                &encoder_type.id,
+                "audio encoder",
+                &format!("{:?}", encoder_type.kind),
+            ));
+        }
+        ensure_settings_runtime(self.runtime(), settings.as_ref())?;
+        ObsAudioEncoder::new_from_info(
+            ObjectInfo::new(encoder_type.id.as_str(), name, settings, None),
+            mixer_index,
+            self.runtime().clone(),
+        )
+    }
+
+    /// Creates a managed streaming service from a discovered service descriptor.
+    pub fn create_service(
+        &self,
+        service_type: &ServiceTypeInfo,
+        name: impl Into<ObsString>,
+        settings: Option<ObsData>,
+    ) -> Result<std::sync::Arc<ObsServiceRef>, ObsError> {
+        self.runtime().ensure_same_runtime(&service_type.runtime)?;
+        ensure_settings_runtime(self.runtime(), settings.as_ref())?;
+        ObsServiceRef::new_from_info(
+            ObjectInfo::new(service_type.id.as_str(), name, settings, None),
+            self.runtime().clone(),
+        )
     }
 
     pub fn capabilities(&self) -> Result<ObsCapabilities, ObsError> {
@@ -751,6 +912,42 @@ fn default_settings(
             ptr,
             runtime.clone(),
         )))
+    }
+}
+
+fn mutable_default_settings(
+    runtime: &ObsRuntime,
+    id: &str,
+    getter: DefaultsFn,
+) -> Result<ObsData, ObsError> {
+    let id = ObsString::new(id);
+    // Safety: the defaults callback is invoked on the OBS actor and returns an owned
+    // obs_data_t reference when non-null.
+    let ptr = run_with_obs!(runtime, (id), move || unsafe {
+        Sendable(getter(id.as_ptr().0))
+    })?;
+    if ptr.0.is_null() {
+        ObsData::new(runtime.clone())
+    } else {
+        Ok(ObsData::from_raw_pointer(ptr, runtime.clone()))
+    }
+}
+
+fn ensure_settings_runtime(
+    runtime: &ObsRuntime,
+    settings: Option<&ObsData>,
+) -> Result<(), ObsError> {
+    if let Some(settings) = settings {
+        runtime.ensure_same_runtime(settings.runtime())?;
+    }
+    Ok(())
+}
+
+fn capability_kind_mismatch(id: &str, expected: &str, actual: &str) -> ObsError {
+    ObsError::CapabilityKindMismatch {
+        id: id.to_owned(),
+        expected: expected.to_owned(),
+        actual: actual.to_owned(),
     }
 }
 

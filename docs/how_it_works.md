@@ -20,16 +20,18 @@ The core wrapper has no Tokio dependency and remains synchronous to downstream c
 
 ### Native object registry and identity
 
-Owned OBS objects are represented internally by a runtime-owned registry. A managed handle contains:
+Owned OBS objects use a self-contained shared native lease plus a runtime-owned identity registry. A managed handle contains:
 
-- a sealed native pointer type known only to wrapper internals;
+- an opaque native address whose pointer type is sealed to wrapper internals;
 - a runtime-scoped `NativeObjectId` made from a process runtime epoch plus an object sequence;
-- a registry lease; and
+- a reference to the runtime identity/liveness registry; and
 - the native release guard.
+
+An already-live handle never looks its pointer back up in the registry. The lease itself is the source of truth for the native address and lifetime, while the registry tracks only opaque IDs for identity and diagnostics. This removes a formerly panic-based registry-resolution invariant from ordinary FFI calls.
 
 Safe downstream code cannot construct an ID or native handle from an integer or pointer. A stale ID from a previous context cannot compare equal to an object created by a later context, even when their per-runtime sequence numbers are the same.
 
-The final lease unregisters the pointer before the release guard schedules native destruction. Every native guard owns an `ObsRuntime` clone, so the actor and registry remain alive until all native cleanup that can still be required has been accepted. `ObsContext` also has an internal high-level object registry for scenes, outputs, filters, and displays; this is ownership bookkeeping, not a global native-pointer map.
+The final lease unregisters its opaque ID before the release guard schedules native destruction. Every native guard owns an `ObsRuntime` clone, so the actor and registry remain alive until all native cleanup that can still be required has been accepted. `ObsContext` also has an internal high-level object registry for scenes, outputs, filters, and displays; this is ownership bookkeeping, not a global native-pointer map.
 
 ### First-class object model and runtime affinity
 
@@ -61,9 +63,9 @@ Display rendering follows the same rule: per-display render state is owned by th
 - `loaded_modules()`; and
 - `capabilities()` for one aggregate snapshot.
 
-Source/output/encoder/service descriptors can query generic properties and default settings. Property trees are copied recursively into owned `PropertyMetadata`/`PropertyKind` values and destroyed on the OBS actor before the result crosses the thread boundary. Lists, paths, numeric controls, groups, frame-rate metadata, and other common property kinds are represented directly. Unknown future property/category enum values are preserved as `Unknown(...)` rather than panicking.
+Source/output/encoder/service descriptors can query generic properties and default settings. `default_settings_mut()` creates an owned mutable settings object initialized from plugin defaults, and descriptor-aware `ObsContext::create_source`, `create_filter`, `create_output`, `create_video_encoder`, `create_audio_encoder`, and `create_service` methods turn discovery results directly into runtime-affine typed handles. Outputs can retain and attach an `ObsServiceRef` with `set_service`. Property trees are copied recursively into owned `PropertyMetadata`/`PropertyKind` values and destroyed on the OBS actor before the result crosses the thread boundary. Lists, paths, numeric controls, groups, frame-rate metadata, and other common property kinds are represented directly. Unknown future property/category enum values are preserved as `Unknown(...)` rather than panicking.
 
-Discovery descriptors retain the owning runtime so later `properties()` or `default_settings()` calls cannot run after shutdown.
+Discovery descriptors retain the owning runtime so later property/default queries and typed creation can verify runtime affinity before reaching FFI.
 
 See [`examples/capability-discovery`](../examples/capability-discovery) for an end-to-end introspection example.
 
@@ -83,5 +85,5 @@ The bootstrapper installs compatible runtime binaries. `cargo-obs-build` resolve
 4. **Create** — native objects are created on the actor and registered under runtime-scoped opaque IDs.
 5. **Operate** — safe wrappers dispatch typed work to the bounded actor queue and verify runtime affinity where objects interact.
 6. **Observe** — callback glue copies event data into bounded per-object signal hubs.
-7. **Destroy** — final leases unregister native objects and enqueue actor-thread cleanup.
+7. **Destroy** — final leases unregister opaque identities and enqueue actor-thread cleanup.
 8. **Shutdown** — after the final runtime owner goes away, accepted work/cleanup is drained and `obs_shutdown()` runs on the actor.

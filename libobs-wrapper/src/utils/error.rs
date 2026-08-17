@@ -88,6 +88,13 @@ pub enum ObsError {
     /// An object from a different OBS runtime/context was passed to this operation.
     RuntimeMismatch,
 
+    /// A discovered OBS type was used with an incompatible typed creation operation.
+    CapabilityKindMismatch {
+        id: String,
+        expected: String,
+        actual: String,
+    },
+
     /// A blocking operation was requested recursively from the OBS actor thread.
     RuntimeReentrantBlocking,
 
@@ -141,6 +148,7 @@ impl Display for ObsError {
             ObsError::RuntimeQueueFull { capacity } => write!(f, "OBS runtime queue is full (capacity: {}). Batch work or retry later.", capacity),
             ObsError::RuntimePanicked => write!(f, "The OBS actor panicked and has been shut down."),
             ObsError::RuntimeMismatch => write!(f, "The operation mixed objects owned by different OBS runtimes."),
+            ObsError::CapabilityKindMismatch { id, expected, actual } => write!(f, "Discovered OBS type '{id}' has kind '{actual}', but this operation requires '{expected}'."),
             ObsError::RuntimeReentrantBlocking => write!(f, "A blocking operation cannot wait for an OBS callback from the OBS actor thread."),
             ObsError::InvalidDll => write!(f, "A dummy DLL was loaded instead of the real libobs DLL. Make sure you bootstrap properly with libobs-bootstrapper"),
             #[cfg(feature="enable_runtime")]

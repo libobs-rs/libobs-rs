@@ -7,10 +7,11 @@ A safe, ergonomic Rust wrapper around the OBS (Open Broadcaster Software) Studio
 ## Features
 
 - **Actor Runtime**: Uses one bounded dedicated-thread actor for libobs calls, with backpressure for fire-and-forget work
-- **Resource Safety**: Native objects live in a runtime-owned registry and wrapper clones carry opaque IDs/leases rather than owned raw pointers
+- **Resource Safety**: Native objects live in shared lifetime leases; a runtime-owned registry tracks opaque identities without serving as a fallible pointer lookup table
 - **Non-blocking Cleanup**: Destructors enqueue native release operations without requiring Tokio or panicking on runtime shutdown
 - **Per-object Signals**: Signal subscriptions are owned by each object; callback-only pointers are exposed as opaque identities
 - **Runtime Bootstrapping**: Optional automatic download and setup of OBS binaries at runtime (functionality moved to [libobs-bootstrapper](https://crates.io/crates/libobs-bootstrapper))
+- **Runtime Discovery**: Inspect plugin source/output/encoder/service types, properties, defaults, and create typed objects from discovered descriptors
 - **Scene Management**: Create and manipulate scenes, sources, and outputs
 - **Video Recording**: Configure and record video with various encoders
 - **Audio Support**: Configure audio sources and encoders

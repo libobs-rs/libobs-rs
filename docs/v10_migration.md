@@ -70,7 +70,24 @@ if let Some(source) = capabilities.source_types().first() {
 }
 ```
 
-Separate query methods cover inputs, filters, transitions, outputs, encoders, services, output protocols, and loaded modules. Output/encoder metadata includes codecs where libobs exposes them. Source/output/encoder/service descriptors can return owned property metadata and default `ImmutableObsData` settings.
+Separate query methods cover inputs, filters, transitions, outputs, encoders, services, output protocols, and loaded modules. Output/encoder metadata includes codecs where libobs exposes them. Source/output/encoder/service descriptors can return owned property metadata and default `ImmutableObsData` settings. They also expose `default_settings_mut()` for an editable copy of plugin defaults.
+
+Discovery is now directly actionable. Descriptor-aware creation methods keep type IDs and runtime affinity together:
+
+```rust,ignore
+let color = obs.source_type("color_source_v3")?.expect("plugin available");
+let mut settings = color.default_settings_mut()?;
+settings.set_int("width", 1280)?.set_int("height", 720)?;
+let source = obs.create_source(&color, "Background", Some(settings))?;
+
+let service_ty = obs.service_type("rtmp_custom")?.expect("plugin available");
+let service = obs.create_service(&service_ty, "Stream", None)?;
+let output_ty = obs.output_type("rtmp_output")?.expect("plugin available");
+let mut output = obs.create_output(&output_ty, "RTMP", None)?;
+output.set_service(service)?;
+```
+
+Equivalent typed creation methods exist for filters and audio/video encoders. Passing a descriptor from another runtime, or using an encoder/source descriptor with the wrong category, returns a structured error before native creation.
 
 Unknown property/list/category values are represented with `Unknown(...)` variants for forward compatibility. Discovery results never expose temporary libobs strings or property pointers.
 
