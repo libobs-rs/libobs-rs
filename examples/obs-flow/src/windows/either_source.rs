@@ -10,7 +10,7 @@ use libobs_simple::sources::{
 };
 use libobs_wrapper::{
     context::ObsContext,
-    scenes::{ObsSceneRef, SceneItemExtSceneTrait, SceneItemTrait},
+    scenes::{ObsSceneRef, SceneItemTrait},
 };
 
 pub fn either_source(context: ObsContext, mut scene: ObsSceneRef) -> anyhow::Result<()> {
@@ -37,7 +37,7 @@ pub fn either_source(context: ObsContext, mut scene: ObsSceneRef) -> anyhow::Res
         ObsEitherSource::Right(source)
     };
 
-    let mut scene_item = scene.add_source(source)?;
+    let mut scene_item = scene.add(source)?;
 
     // Now you can just use the scene item as usual
     scene_item.fit_source_to_screen()?;
@@ -67,11 +67,9 @@ pub fn either_source(context: ObsContext, mut scene: ObsSceneRef) -> anyhow::Res
     // Wait for hooked event (in a real application you probably want to do this in a separate thread)
     // receiver.recv()?;
 
-    // And we can also remove the scene item again.
-    // Note: This will only be removed if the last reference of the SceneItem is dropped
-    // If you are keeping references to this scene item like in a thread, you'll need to make sure
-    // that these references get dropped as well.
-    scene.remove_scene_item(scene_item)?;
+    // And we can also remove the scene item again immediately. Existing Rust handles remain
+    // valid managed references, but the item is detached from its scene at this point.
+    scene.remove_item(&scene_item)?;
 
     Ok(())
 }

@@ -1,6 +1,6 @@
 use getters0::Getters;
 
-#[derive(Debug, Clone, Copy, Getters)]
+#[derive(Debug, Clone, Copy, PartialEq, Getters)]
 pub struct Vec2 {
     #[get_mut]
     x: f32,

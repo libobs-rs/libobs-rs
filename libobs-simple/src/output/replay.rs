@@ -282,7 +282,7 @@ impl ReplayBufferBuilder {
             None,
         );
 
-        let mut output = self.context.replay_buffer(output_info)?;
+        let output = self.context.replay_buffer(output_info)?;
 
         // Create and configure video encoder (with hardware fallback)
         let video_encoder_type = self.select_video_encoder_type(&self.settings.video_encoder)?;

@@ -5,7 +5,7 @@ use duplicate::duplicate_item;
 use crate::{
     context::ObsContext,
     data::{
-        output::{ObsOutputRef, ObsOutputTrait},
+        output::ObsOutputTrait,
         properties::{
             _ObsPropertiesDropGuard, property_ptr_to_struct, ObsProperty, ObsPropertyObject,
             ObsPropertyObjectPrivate,
@@ -87,7 +87,7 @@ impl StructName {
 impl ObsAudioEncoderBuilder {
     pub fn apply_to_context(
         self,
-        output: &mut dyn ObsOutputTrait,
+        output: &dyn ObsOutputTrait,
         name: &str,
         settings: Option<ObsData>,
         hotkey_data: Option<ObsData>,
@@ -103,7 +103,7 @@ impl ObsAudioEncoderBuilder {
 impl ObsVideoEncoderBuilder {
     pub fn set_to_output(
         self,
-        output: &mut ObsOutputRef,
+        output: &dyn ObsOutputTrait,
         name: &str,
     ) -> Result<Arc<ObsVideoEncoder>, ObsError> {
         let e_id: ObsString = self.encoder_id.into();

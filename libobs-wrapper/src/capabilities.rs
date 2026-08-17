@@ -12,6 +12,7 @@ use crate::{
     encoders::{audio::ObsAudioEncoder, video::ObsVideoEncoder},
     run_with_obs,
     runtime::ObsRuntime,
+    scenes::{ObsSceneItemRef, ObsSceneRef},
     services::ObsServiceRef,
     sources::{ObsFilterRef, ObsSourceRef},
     unsafe_send::Sendable,
@@ -406,6 +407,31 @@ pub struct FrameRate {
 pub struct FrameRateRange {
     pub min: FrameRate,
     pub max: FrameRate,
+}
+
+impl ObsSceneRef {
+    /// Creates a source from a discovered descriptor and adds it directly to this scene.
+    pub fn add_discovered_source(
+        &mut self,
+        source_type: &SourceTypeInfo,
+        name: impl Into<ObsString>,
+        settings: Option<ObsData>,
+    ) -> Result<ObsSceneItemRef<ObsSourceRef>, ObsError> {
+        self.runtime().ensure_same_runtime(&source_type.runtime)?;
+        if source_type.kind == SourceKind::Filter {
+            return Err(capability_kind_mismatch(
+                &source_type.id,
+                "source/input/transition",
+                "filter",
+            ));
+        }
+        ensure_settings_runtime(self.runtime(), settings.as_ref())?;
+        let source = ObsSourceRef::new_from_info(
+            ObjectInfo::new(source_type.id.as_str(), name, settings, None),
+            self.runtime().clone(),
+        )?;
+        self.add(source)
+    }
 }
 
 impl ObsContext {

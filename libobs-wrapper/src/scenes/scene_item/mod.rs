@@ -3,12 +3,16 @@
 mod traits;
 pub use traits::SceneItemExtSceneTrait;
 
-use std::{fmt::Debug, hash::Hash, sync::Arc};
+use std::{
+    fmt::Debug,
+    hash::Hash,
+    sync::{Arc, Mutex},
+};
 
 use libobs::{obs_scene_item, obs_transform_info, obs_video_info};
 
 use crate::{
-    enums::ObsBoundsType,
+    enums::{ObsBoundsType, ObsOrderMovement},
     graphics::Vec2,
     impl_obs_drop,
     macros::trait_with_optional_send_sync,
@@ -23,16 +27,27 @@ use crate::{
 #[derive(Debug)]
 pub(super) struct _ObsSceneItemDropGuard {
     scene_item: Sendable<*mut obs_scene_item>,
+    removed: Arc<Mutex<bool>>,
     runtime: ObsRuntime,
 }
 
 impl ObsDropGuard for _ObsSceneItemDropGuard {}
-impl_obs_drop!(_ObsSceneItemDropGuard, (scene_item), move || unsafe {
-    // Safety: The pointer is valid as long as we are in the runtime and the guard is alive.
-    // Because scene item is attached to a scene, we first remove it from the scene and then release it.
-    libobs::obs_sceneitem_remove(scene_item.0);
-    // Release is called under the hood
-});
+impl_obs_drop!(
+    _ObsSceneItemDropGuard,
+    (scene_item, removed),
+    move || unsafe {
+        // Safety: construction takes an explicit native scene-item reference. Remove the item from
+        // its scene at most once, then release the reference owned by this managed handle.
+        let mut removed = removed
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if !*removed {
+            libobs::obs_sceneitem_remove(scene_item.0);
+            *removed = true;
+        }
+        libobs::obs_sceneitem_release(scene_item.0);
+    }
+);
 
 #[derive(Debug, Clone)]
 /// Holds the specific source that was added to the scene and its scene item.
@@ -41,6 +56,7 @@ impl_obs_drop!(_ObsSceneItemDropGuard, (scene_item), move || unsafe {
 pub struct ObsSceneItemRef<T: ObsSourceTrait + Clone> {
     // Drop the scene item first...
     scene_item_ptr: SmartPointerSendable<*mut obs_scene_item>,
+    removed: Arc<Mutex<bool>>,
     runtime: ObsRuntime,
     // Then the scene
     // Note: Ideally, we'd want to keep the whole ObsScene struct, however
@@ -74,12 +90,19 @@ impl<T: ObsSourceTrait + Clone> ObsSceneItemRef<T> {
             if ptr.is_null() {
                 Err(ObsError::NullPointer(None))
             } else {
+                unsafe {
+                    // Safety: `ptr` is a live item returned by obs_scene_add. The managed handle
+                    // owns this added reference until its drop guard releases it.
+                    libobs::obs_sceneitem_addref(ptr);
+                }
                 Ok(Sendable(ptr))
             }
         })??;
 
+        let removed = Arc::new(Mutex::new(false));
         let drop_guard = _ObsSceneItemDropGuard {
             scene_item: scene_item_ptr.clone(),
+            removed: removed.clone(),
             runtime: runtime.clone(),
         };
 
@@ -93,6 +116,7 @@ impl<T: ObsSourceTrait + Clone> ObsSceneItemRef<T> {
             underlying_source: source,
             _scene_ptr: scene.as_ptr().clone(),
             scene_item_ptr,
+            removed,
             runtime,
         })
     }
@@ -102,6 +126,8 @@ trait_with_optional_send_sync! {
     pub trait SceneItemTrait: Debug {
         #[doc(hidden)]
         fn __native_handle(&self) -> &SmartPointerSendable<*mut obs_scene_item>;
+        #[doc(hidden)]
+        fn __removed_flag(&self) -> &Arc<Mutex<bool>>;
         fn runtime(&self) -> ObsRuntime;
 
         fn object_id(&self) -> crate::unsafe_send::NativeObjectId {
@@ -109,6 +135,34 @@ trait_with_optional_send_sync! {
         }
         fn inner_source_dyn(&self) -> &dyn ObsSourceTrait;
         fn inner_source_dyn_mut(&mut self) -> &mut dyn ObsSourceTrait;
+
+        /// Removes this item from its scene immediately while keeping the typed handle valid
+        /// until its final Rust reference is dropped. Repeated calls are harmless.
+        fn remove_from_scene(&self) -> Result<(), ObsError> {
+            let mut removed = self
+                .__removed_flag()
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if *removed {
+                return Ok(());
+            }
+            let self_ptr = self.__native_handle().clone();
+            run_with_obs!(self.runtime(), (self_ptr), move || unsafe {
+                // Safety: the managed item owns a native reference, so removal cannot invalidate
+                // the pointer until the drop guard later releases that reference.
+                libobs::obs_sceneitem_remove(self_ptr.get_ptr());
+            })?;
+            *removed = true;
+            Ok(())
+        }
+
+        /// Whether this item has been explicitly removed from its scene.
+        fn is_removed(&self) -> bool {
+            *self
+                .__removed_flag()
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+        }
 
         /// Gets the transform info of the given source in this scene.
         fn get_transform_info(&self) -> Result<ObsTransformInfo, ObsError> {
@@ -258,6 +312,112 @@ trait_with_optional_send_sync! {
             Ok(true)
         }
 
+        /// Returns whether the item is visible.
+        fn is_visible(&self) -> Result<bool, ObsError> {
+            let self_ptr = self.__native_handle().clone();
+            run_with_obs!(self.runtime(), (self_ptr), move || unsafe {
+                // Safety: the managed item retains a native reference for the actor call.
+                libobs::obs_sceneitem_visible(self_ptr.get_ptr())
+            })
+        }
+
+        /// Shows or hides the item.
+        fn set_visible(&self, visible: bool) -> Result<(), ObsError> {
+            let self_ptr = self.__native_handle().clone();
+            run_with_obs!(self.runtime(), (self_ptr), move || unsafe {
+                // Safety: the managed item retains a native reference for the actor call.
+                let _ = libobs::obs_sceneitem_set_visible(self_ptr.get_ptr(), visible);
+            })
+        }
+
+        /// Returns whether the item transform is locked.
+        fn is_locked(&self) -> Result<bool, ObsError> {
+            let self_ptr = self.__native_handle().clone();
+            run_with_obs!(self.runtime(), (self_ptr), move || unsafe {
+                // Safety: the managed item retains a native reference for the actor call.
+                libobs::obs_sceneitem_locked(self_ptr.get_ptr())
+            })
+        }
+
+        /// Locks or unlocks the item transform.
+        fn set_locked(&self, locked: bool) -> Result<(), ObsError> {
+            let self_ptr = self.__native_handle().clone();
+            run_with_obs!(self.runtime(), (self_ptr), move || unsafe {
+                // Safety: the managed item retains a native reference for the actor call.
+                let _ = libobs::obs_sceneitem_set_locked(self_ptr.get_ptr(), locked);
+            })
+        }
+
+        /// Returns the clockwise rotation in degrees.
+        fn rotation(&self) -> Result<f32, ObsError> {
+            let self_ptr = self.__native_handle().clone();
+            run_with_obs!(self.runtime(), (self_ptr), move || unsafe {
+                // Safety: the managed item retains a native reference for the actor call.
+                libobs::obs_sceneitem_get_rot(self_ptr.get_ptr())
+            })
+        }
+
+        /// Sets the clockwise rotation in degrees.
+        fn set_rotation(&self, degrees: f32) -> Result<(), ObsError> {
+            let self_ptr = self.__native_handle().clone();
+            run_with_obs!(self.runtime(), (self_ptr), move || unsafe {
+                // Safety: the managed item retains a native reference for the actor call.
+                libobs::obs_sceneitem_set_rot(self_ptr.get_ptr(), degrees);
+            })
+        }
+
+        /// Returns the item's zero-based order position within its scene.
+        fn order_position(&self) -> Result<i32, ObsError> {
+            let self_ptr = self.__native_handle().clone();
+            run_with_obs!(self.runtime(), (self_ptr), move || unsafe {
+                // Safety: the managed item retains a native reference for the actor call.
+                libobs::obs_sceneitem_get_order_position(self_ptr.get_ptr())
+            })
+        }
+
+        /// Moves the item to an absolute order position within its scene.
+        fn set_order_position(&self, position: i32) -> Result<(), ObsError> {
+            if position < 0 {
+                return Err(ObsError::InvalidOperation(
+                    "Scene item order position cannot be negative".to_string(),
+                ));
+            }
+            let self_ptr = self.__native_handle().clone();
+            run_with_obs!(self.runtime(), (self_ptr), move || unsafe {
+                // Safety: the managed item retains a native reference for the actor call.
+                libobs::obs_sceneitem_set_order_position(self_ptr.get_ptr(), position);
+            })
+        }
+
+        /// Moves the item relative to the other items in its scene.
+        fn move_order(&self, movement: ObsOrderMovement) -> Result<(), ObsError> {
+            let self_ptr = self.__native_handle().clone();
+            run_with_obs!(self.runtime(), (self_ptr), move || unsafe {
+                // Safety: the managed item retains a native reference for the actor call.
+                libobs::obs_sceneitem_set_order(self_ptr.get_ptr(), movement as libobs::obs_order_movement);
+            })
+        }
+
+        /// Preferred shorthand for [`SceneItemTrait::get_source_position`].
+        fn position(&self) -> Result<Vec2, ObsError> {
+            self.get_source_position()
+        }
+
+        /// Preferred shorthand for [`SceneItemTrait::set_source_position`].
+        fn set_position(&self, position: Vec2) -> Result<(), ObsError> {
+            self.set_source_position(position)
+        }
+
+        /// Preferred shorthand for [`SceneItemTrait::get_source_scale`].
+        fn scale(&self) -> Result<Vec2, ObsError> {
+            self.get_source_scale()
+        }
+
+        /// Preferred shorthand for [`SceneItemTrait::set_source_scale`].
+        fn set_scale(&self, scale: Vec2) -> Result<(), ObsError> {
+            self.set_source_scale(scale)
+        }
+
         /// Sets the scale of the given source in this scene.
         fn set_source_scale(&self, scale: Vec2) -> Result<(), ObsError> {
             let self_ptr = self.__native_handle().clone();
@@ -279,6 +439,10 @@ trait_with_optional_send_sync! {
 impl<T: ObsSourceTrait + Clone> SceneItemTrait for ObsSceneItemRef<T> {
     fn __native_handle(&self) -> &SmartPointerSendable<*mut obs_scene_item> {
         &self.scene_item_ptr
+    }
+
+    fn __removed_flag(&self) -> &Arc<Mutex<bool>> {
+        &self.removed
     }
 
     fn runtime(&self) -> ObsRuntime {

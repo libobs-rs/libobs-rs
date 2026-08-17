@@ -169,8 +169,46 @@ impl ObsSceneRef {
         self.name.clone()
     }
 
+    pub fn runtime(&self) -> &ObsRuntime {
+        &self.runtime
+    }
+
     pub fn signals(&self) -> Arc<ObsSceneSignals> {
         self.signals.clone()
+    }
+
+    /// Adds an existing typed source and returns its managed scene-item handle.
+    pub fn add<T>(&mut self, source: T) -> Result<ObsSceneItemRef<T>, ObsError>
+    where
+        T: ObsSourceTrait + Clone + 'static,
+    {
+        SceneItemExtSceneTrait::add_source(self, source)
+    }
+
+    /// Creates a source from `SourceInfo`, adds it, and returns the typed scene-item handle.
+    pub fn add_new_source(
+        &mut self,
+        info: crate::utils::SourceInfo,
+    ) -> Result<ObsSceneItemRef<crate::sources::ObsSourceRef>, ObsError> {
+        SceneItemExtSceneTrait::add_and_create_source(self, info)
+    }
+
+    /// Removes a managed item immediately without consuming handles held by the caller.
+    pub fn remove_item<T: SceneItemTrait + ?Sized>(&mut self, item: &T) -> Result<(), ObsError> {
+        SceneItemExtSceneTrait::remove_item(self, item)
+    }
+
+    /// Returns all managed scene items for a source.
+    pub fn items_for_source<T>(&self, source: &T) -> Result<Vec<Arc<dyn SceneItemTrait>>, ObsError>
+    where
+        T: ObsSourceTrait + Clone,
+    {
+        SceneItemExtSceneTrait::items_for_source(self, source)
+    }
+
+    /// Removes every managed item from this scene.
+    pub fn clear(&mut self) -> Result<(), ObsError> {
+        SceneItemExtSceneTrait::remove_all_sources(self)
     }
 }
 

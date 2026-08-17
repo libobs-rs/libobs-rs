@@ -24,7 +24,7 @@ pub fn test_output_with_encoders() {
     // Create output
     let output_name = "output";
     let output_info = OutputInfo::new("ffmpeg_muxer", output_name, Some(output_settings), None);
-    let mut output = context.output(output_info).unwrap();
+    let output = context.output(output_info).unwrap();
 
     // Set up video encoder
     let mut video_settings = context.data().unwrap();
@@ -52,7 +52,7 @@ pub fn test_output_with_encoders() {
         .unwrap();
 
     encoder.set_settings(video_settings);
-    encoder.set_to_output(&mut output, "video_encoder").unwrap();
+    encoder.set_to_output(&output, "video_encoder").unwrap();
 
     // Set up audio encoder
     let mut audio_settings = context.data().unwrap();

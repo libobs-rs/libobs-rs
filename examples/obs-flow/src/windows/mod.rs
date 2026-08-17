@@ -17,7 +17,7 @@ use libobs_wrapper::{
         ObsDataSetters, object::ObsObjectTrait, output::ObsOutputTrait,
         properties::ObsPropertyObject,
     },
-    scenes::{SceneItemExtSceneTrait, SceneItemTrait},
+    scenes::SceneItemTrait,
     sources::ObsSourceRef,
     utils::{ObsPath, StartupInfo},
 };
@@ -36,11 +36,11 @@ pub fn main() -> anyhow::Result<()> {
     either_source(context.clone(), scene.clone())?;
 
     // Add a output
-    let mut output = context
+    let output = context
         .simple_output_builder("obs-flow-output", ObsPath::new("obs-flow-example.mp4"))
         .build()?;
 
-    let mut replay_output = context
+    let replay_output = context
         .replay_buffer_builder("obs-flow-replay-buffer", ObsPath::from_relative("."))
         .build()?;
 
@@ -51,7 +51,7 @@ pub fn main() -> anyhow::Result<()> {
             .source_builder::<MonitorCaptureSourceBuilder, _>("Display name")?
             .add_to_scene(&mut scene)?;
 
-        scene.remove_scene_item(scene_item)?;
+        scene.remove_item(&scene_item)?;
     }
 
     // dropping (and removing) source again for demo purposes
