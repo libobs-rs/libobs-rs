@@ -4,7 +4,7 @@ A library and CLI tool for building and installing libOBS binaries. It automatic
 
 Note: On Linux, you must build OBS Studio from source and install it manually. This can be automatically be done by `cargo-obs-build` on `Ubuntu`, just run `cargo-obs-build install`. For other platforms refer to these [Build Instructions For Linux](https://github.com/obsproject/obs-studio/wiki/Build-Instructions-For-Linux).
 
-For Windows and macOS, this tool will download prebuilt binaries.
+Prebuilt archive download is currently supported for Windows targets. macOS targets are detected explicitly and rejected rather than accidentally downloading Windows ARM64 artifacts; Linux uses a system/source libobs installation.
 
 ## Usage
 
@@ -27,7 +27,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [build-dependencies]
-cargo-obs-build = { version = "1.2.4", default-features = false }
+cargo-obs-build = { version = "3", default-features = false }
 ```
 
 **Simple Usage (Recommended)**:
@@ -55,6 +55,8 @@ fn main() {
 
     let config = ObsBuildConfig {
         out_dir: target_dir,
+        // Optional explicit Cargo target triple. In build.rs, TARGET is detected automatically.
+        target: None,
         browser: true, // Include browser support
         ..Default::default()
     };
@@ -84,7 +86,8 @@ libobs-cache-dir = "../obs-build" # Optional, defaults to "obs-build", relative 
 
 ## Features
 
-- **Automatic Version Detection**: Automatically selects the correct OBS version based on your `libobs` crate version
+- **Canonical Version Detection**: Uses the exact OBS version represented by the checked-in `libobs/OBS_VERSION` file
+- **Target-Aware Resolution**: Uses Cargo `TARGET` (or an explicit target) so host and target architecture cannot be confused
 - **Smart Caching**:
   - Downloads are cached to avoid re-downloading binaries
   - GitHub API responses are cached to prevent rate limiting

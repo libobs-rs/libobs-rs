@@ -9,8 +9,7 @@ use download::DownloadStatus;
 use extract::ExtractStatus;
 use futures_core::Stream;
 use futures_util::{StreamExt, pin_mut};
-use lazy_static::lazy_static;
-use libobs::{LIBOBS_API_MAJOR_VER, LIBOBS_API_MINOR_VER, LIBOBS_API_PATCH_VER};
+use libobs::LIBOBS_API_MAJOR_VER;
 use tokio::{fs::File, io::AsyncWriteExt, process::Command};
 
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -68,12 +67,7 @@ pub enum BootstrapStatus {
 /// [Example project](https://github.com/libobs-rs/libobs-rs/tree/main/examples/download-at-runtime)
 pub struct ObsBootstrapper {}
 
-lazy_static! {
-    pub(crate) static ref LIBRARY_OBS_VERSION: String = format!(
-        "{}.{}.{}",
-        LIBOBS_API_MAJOR_VER, LIBOBS_API_MINOR_VER, LIBOBS_API_PATCH_VER
-    );
-}
+pub(crate) const LIBRARY_OBS_VERSION: &str = libobs::SUPPORTED_OBS_VERSION;
 
 pub const UPDATER_SCRIPT: &str = include_str!("./updater.ps1");
 

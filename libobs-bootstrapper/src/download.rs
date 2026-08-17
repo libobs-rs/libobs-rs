@@ -72,7 +72,7 @@ pub(crate) fn select_latest_compatible_release(
     latest.ok_or_else(|| {
         ObsBootstrapError::InvalidFormatError(format!(
             "Finding a matching obs version for {}",
-            *LIBRARY_OBS_VERSION
+            LIBRARY_OBS_VERSION
         ))
     })
 }

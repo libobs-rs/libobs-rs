@@ -10,9 +10,10 @@ use std::{
 use util::{copy_to_dir, delete_all_except};
 use walkdir::WalkDir;
 
-use lib_version::get_lib_obs_version;
+pub use lib_version::get_lib_obs_version;
 
 use download::download_binaries;
+use target::{ObsTarget, ObsTargetOs};
 use zip::ZipArchive;
 
 pub use metadata::get_meta_info;
@@ -22,6 +23,7 @@ mod git;
 mod lib_version;
 mod lock;
 mod metadata;
+mod target;
 mod util;
 
 /// Check if we're running in a CI environment
@@ -79,6 +81,10 @@ pub struct ObsBuildConfig {
     /// The directory the libobs binaries should be installed to (this is typically your `target/debug` or `target/release` directory)
     pub out_dir: PathBuf,
 
+    /// Cargo target triple to prepare OBS for. When omitted, `TARGET` is used in
+    /// build scripts and the host triple is used by the CLI.
+    pub target: Option<String>,
+
     /// The location where the OBS Studio binaries should be downloaded to. If this is set to None, it defaults to reading the `Cargo.toml` metadata. If no metadata is set, it defaults to `obs-build`.
     pub cache_dir: Option<PathBuf>,
 
@@ -111,6 +117,7 @@ impl Default for ObsBuildConfig {
     fn default() -> Self {
         Self {
             out_dir: PathBuf::from("obs-out"),
+            target: None,
             cache_dir: None,
             repo_id: None,
             override_zip: None,
@@ -169,17 +176,11 @@ pub fn install() -> anyhow::Result<()> {
 /// - Locking to prevent concurrent builds
 /// - Copying binaries to the target directory
 pub fn build_obs_binaries(config: ObsBuildConfig) -> anyhow::Result<()> {
-    //TODO For build scripts, we should actually check the TARGET env var instead of just erroring out on linux, but I don't think anyone will be cross-compiling
-
-    if cfg!(target_os = "linux") {
-        // The case for the "install" subcommand is handled before calling this function
-        return Err(anyhow::anyhow!("Building OBS Studio from source is required on Linux. You can install binaries by running `cargo-obs-build install` separately before building your project."));
-    }
-
     let ObsBuildConfig {
         mut cache_dir,
         repo_id,
         out_dir,
+        target,
         rebuild,
         browser,
         mut tag,
@@ -187,6 +188,23 @@ pub fn build_obs_binaries(config: ObsBuildConfig) -> anyhow::Result<()> {
         skip_compatibility_check,
         remove_pdbs,
     } = config;
+
+    let target = ObsTarget::detect(target.as_deref())?;
+    match target.os {
+        ObsTargetOs::Linux => {
+            return Err(anyhow::anyhow!(
+                "Target `{}` requires a system/source libobs installation; cargo-obs-build does not download Linux archives",
+                target.triple()
+            ));
+        }
+        ObsTargetOs::MacOs => {
+            return Err(anyhow::anyhow!(
+                "Target `{}` is macOS; Windows OBS archives are not valid for this target and macOS prebuilt support is not implemented yet",
+                target.triple()
+            ));
+        }
+        ObsTargetOs::Windows => {}
+    }
 
     // Get metadata which may update cache_dir and tag
     metadata::get_meta_info(&mut cache_dir, &mut tag)?;
@@ -284,7 +302,7 @@ pub fn build_obs_binaries(config: ObsBuildConfig) -> anyhow::Result<()> {
         }
     }
 
-    let repo_dir = cache_dir.join(&tag);
+    let repo_dir = cache_dir.join(&tag).join(target.cache_key());
     let repo_exists = repo_dir.is_dir();
 
     if !repo_exists {
@@ -307,7 +325,14 @@ pub fn build_obs_binaries(config: ObsBuildConfig) -> anyhow::Result<()> {
         debug!("Fetching {} version of OBS Studio...", tag);
 
         let release = fetch_release(&repo_id, &Some(tag.clone()), &cache_dir)?;
-        build_obs(release, &build_out, browser, remove_pdbs, override_zip)?;
+        build_obs(
+            release,
+            &target,
+            &build_out,
+            browser,
+            remove_pdbs,
+            override_zip,
+        )?;
 
         File::create(&success_file)?;
         drop(lock);
@@ -327,6 +352,7 @@ pub fn build_obs_binaries(config: ObsBuildConfig) -> anyhow::Result<()> {
 
 fn build_obs(
     release: ReleaseInfo,
+    target: &ObsTarget,
     build_out: &Path,
     include_browser: bool,
     remove_pdbs: bool,
@@ -337,7 +363,7 @@ fn build_obs(
     let obs_path = if let Some(e) = override_zip {
         e
     } else {
-        download_binaries(build_out, &release)?
+        download_binaries(build_out, &release, target)?
     };
 
     let obs_archive = File::open(&obs_path)?;

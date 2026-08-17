@@ -32,7 +32,7 @@ jobs:
         with:
           path: |
             ${{ github.workspace }}/obs-install
-          key: ${{ runner.os }}-obs-studio-${{ hashFiles('.github/workflows/validation.yml') }}-v3
+          key: ${{ runner.os }}-obs-studio-${{ hashFiles('libobs/OBS_VERSION', '.github/workflows/validation.yml') }}-v4
           restore-keys: |
             ${{ runner.os }}-obs-studio-
 
@@ -56,11 +56,11 @@ jobs:
           git clone --recursive https://github.com/obsproject/obs-studio.git /tmp/obs-studio
           cd /tmp/obs-studio
 
-          # Get the latest stable tag
+          # Build the exact OBS version represented by the vendored headers.
           git fetch --tags
-          LATEST_TAG=$(git describe --tags --abbrev=0)
-          echo "Building OBS Studio version: $LATEST_TAG"
-          git checkout $LATEST_TAG
+          OBS_VERSION=$(cat "${{ github.workspace }}/libobs/OBS_VERSION")
+          echo "Building OBS Studio version: $OBS_VERSION"
+          git checkout "$OBS_VERSION"
           git submodule update --init --recursive
 
           # Configure build with CMAKE_INSTALL_PREFIX to workspace directory
