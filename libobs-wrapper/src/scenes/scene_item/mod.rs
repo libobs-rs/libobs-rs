@@ -24,6 +24,46 @@ use crate::{
     utils::{ObsDropGuard, ObsError},
 };
 
+/// Pixel crop applied to a scene item before its transform is evaluated.
+///
+/// Values map directly to libobs's left/top/right/bottom scene-item crop. Positive values
+/// remove pixels from the corresponding edge of the underlying source.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ObsSceneItemCrop {
+    pub left: i32,
+    pub top: i32,
+    pub right: i32,
+    pub bottom: i32,
+}
+
+impl ObsSceneItemCrop {
+    pub const fn new(left: i32, top: i32, right: i32, bottom: i32) -> Self {
+        Self {
+            left,
+            top,
+            right,
+            bottom,
+        }
+    }
+}
+
+impl From<ObsSceneItemCrop> for libobs::obs_sceneitem_crop {
+    fn from(value: ObsSceneItemCrop) -> Self {
+        Self {
+            left: value.left,
+            top: value.top,
+            right: value.right,
+            bottom: value.bottom,
+        }
+    }
+}
+
+impl From<libobs::obs_sceneitem_crop> for ObsSceneItemCrop {
+    fn from(value: libobs::obs_sceneitem_crop) -> Self {
+        Self::new(value.left, value.top, value.right, value.bottom)
+    }
+}
+
 #[derive(Debug)]
 pub(super) struct _ObsSceneItemDropGuard {
     scene_item: Sendable<*mut obs_scene_item>,
@@ -321,6 +361,35 @@ trait_with_optional_send_sync! {
             })
         }
 
+        /// Returns the explicit pixel crop applied to this scene item.
+        fn crop(&self) -> Result<ObsSceneItemCrop, ObsError> {
+            let self_ptr = self.__native_handle().clone();
+            run_with_obs!(self.runtime(), (self_ptr), move || unsafe {
+                // Safety: the managed item retains a native reference for the actor call. The
+                // output structure is initialized even if libobs unexpectedly declines to write.
+                let mut crop = libobs::obs_sceneitem_crop {
+                    left: 0,
+                    top: 0,
+                    right: 0,
+                    bottom: 0,
+                };
+                libobs::obs_sceneitem_get_crop(self_ptr.get_ptr(), &mut crop);
+                ObsSceneItemCrop::from(crop)
+            })
+        }
+
+        /// Replaces the explicit left/top/right/bottom pixel crop for this scene item.
+        /// Negative edge values are clamped to zero by libobs.
+        fn set_crop(&self, crop: ObsSceneItemCrop) -> Result<(), ObsError> {
+            let self_ptr = self.__native_handle().clone();
+            run_with_obs!(self.runtime(), (self_ptr), move || unsafe {
+                // Safety: the managed item retains a native reference for the actor call and the
+                // converted crop value lives for the complete native setter invocation.
+                let crop: libobs::obs_sceneitem_crop = crop.into();
+                libobs::obs_sceneitem_set_crop(self_ptr.get_ptr(), &crop);
+            })
+        }
+
         /// Shows or hides the item.
         fn set_visible(&self, visible: bool) -> Result<(), ObsError> {
             let self_ptr = self.__native_handle().clone();
@@ -487,5 +556,29 @@ impl<T: ObsSourceTrait + Clone> Eq for ObsSceneItemRef<T> {}
 impl<T: ObsSourceTrait + Clone> Hash for ObsSceneItemRef<T> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.scene_item_ptr.native_id().hash(state);
+    }
+}
+
+#[cfg(test)]
+mod crop_tests {
+    use super::ObsSceneItemCrop;
+
+    #[test]
+    fn obs_scene_item_crop_round_trips_native_layout() {
+        let crop = ObsSceneItemCrop::new(1, 2, 3, 4);
+        let native: libobs::obs_sceneitem_crop = crop.into();
+        assert_eq!(native.left, 1);
+        assert_eq!(native.top, 2);
+        assert_eq!(native.right, 3);
+        assert_eq!(native.bottom, 4);
+        assert_eq!(ObsSceneItemCrop::from(native), crop);
+    }
+
+    #[test]
+    fn obs_scene_item_crop_default_is_uncropped() {
+        assert_eq!(
+            ObsSceneItemCrop::default(),
+            ObsSceneItemCrop::new(0, 0, 0, 0)
+        );
     }
 }

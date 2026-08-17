@@ -120,7 +120,7 @@ Unknown property/list/category values are represented with `Unknown(...)` varian
 
 Legacy `ObsContextEncoders::{best,available}_{video,audio}_encoder(s)` discovery is deprecated; use `ObsContext::capabilities()` with `select_video_encoder()` / `select_audio_encoder()` instead. Output attachment getters now use `attached_*` names; the old `get_current_*` methods remain deprecated compatibility shims.
 
-Scenes also expose inherent `add`, `remove_item`, `items_for_source`, and `clear` methods. `remove_item(&item)` now detaches immediately; a scene-item handle owns a native reference so cloned handles cannot become dangling merely because the item was removed from the scene. Position/scale shorthand plus rotation, visibility, locking, and ordering operations are available on `SceneItemTrait`.
+Scenes also expose inherent `add`, `remove_item`, `items_for_source`, and `clear` methods. `remove_item(&item)` now detaches immediately; a scene-item handle owns a native reference so cloned handles cannot become dangling merely because the item was removed from the scene. Position/scale shorthand plus rotation, explicit `ObsSceneItemCrop` edge cropping, visibility, locking, and ordering operations are available on `SceneItemTrait`.
 
 See [`examples/capability-discovery`](../examples/capability-discovery) for a complete executable example.
 
