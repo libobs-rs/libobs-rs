@@ -330,6 +330,7 @@ impl ReplayBufferBuilder {
 
     fn get_encoder_preset(&self, encoder: &VideoEncoder) -> Option<&str> {
         match encoder {
+            VideoEncoder::Auto(_) => None,
             VideoEncoder::X264(preset) => Some(preset.as_str()),
             VideoEncoder::Hardware { preset, .. } => Some(preset.as_str()),
             VideoEncoder::Custom(_) => None,

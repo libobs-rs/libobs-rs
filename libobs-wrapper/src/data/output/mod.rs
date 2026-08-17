@@ -1,3 +1,19 @@
+//! Managed OBS outputs and validated output composition.
+//!
+//! # Which level should I use?
+//!
+//! Prefer [`ObsOutputPipelineBuilder`] when creating a complete encoded output: it validates the
+//! selected output flags, codecs, protocol/service, audio mixer indices, and runtime affinity before
+//! native creation.
+//!
+//! Use [`ObsOutputComposition`] / [`ObsOutputTrait`] when an application intentionally needs to
+//! inspect or replace encoder/service attachments on an existing output. Attachment storage and
+//! lifecycle serialization are implementation details; public callers work through behavior only.
+//!
+//! Pair this module with [`crate::capabilities`] to choose concrete implementations from the OBS
+//! plugins available at runtime. For conventional recording or RTMP streaming, `libobs-simple`
+//! provides a shorter opinionated path.
+
 use libobs::obs_output;
 use std::collections::HashMap;
 use std::ptr;
@@ -188,6 +204,22 @@ impl ObsOutputTraitSealed for ObsOutputRef {
             signal_manager: Arc::new(signal_manager),
         })
     }
+
+    fn video_encoder_slot(&self) -> &Arc<RwLock<Option<Arc<ObsVideoEncoder>>>> {
+        &self.curr_video_encoder
+    }
+
+    fn audio_encoder_slots(&self) -> &Arc<RwLock<HashMap<usize, Arc<ObsAudioEncoder>>>> {
+        &self.audio_encoders
+    }
+
+    fn service_slot(&self) -> &Arc<RwLock<Option<Arc<ObsServiceRef>>>> {
+        &self.service
+    }
+
+    fn configuration_lock(&self) -> &Arc<Mutex<()>> {
+        &self.configuration_lock
+    }
 }
 
 impl ObsObjectTraitPrivate for ObsOutputRef {
@@ -265,22 +297,6 @@ impl ObsObjectTrait for ObsOutputRef {
 impl ObsOutputTrait for ObsOutputRef {
     fn signals(&self) -> &Arc<ObsOutputSignals> {
         &self.signal_manager
-    }
-
-    fn video_encoder_slot(&self) -> &Arc<RwLock<Option<Arc<ObsVideoEncoder>>>> {
-        &self.curr_video_encoder
-    }
-
-    fn audio_encoder_slots(&self) -> &Arc<RwLock<HashMap<usize, Arc<ObsAudioEncoder>>>> {
-        &self.audio_encoders
-    }
-
-    fn service_slot(&self) -> &Arc<RwLock<Option<Arc<ObsServiceRef>>>> {
-        &self.service
-    }
-
-    fn configuration_lock(&self) -> &Arc<Mutex<()>> {
-        &self.configuration_lock
     }
 }
 

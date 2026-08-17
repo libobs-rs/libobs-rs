@@ -82,16 +82,14 @@ impl ObsOutputComposition {
 trait_with_optional_send_sync! {
     pub(crate) trait ObsOutputTraitSealed: Debug {
         /// Creates a new output reference from the given output info and runtime.
-        ///
-        /// # Arguments
-        /// * `output` - The output information containing ID, name, and optional settings
-        /// * `runtime` - The OBS runtime instance
-        ///
-        /// # Returns
-        /// A Result containing the new ObsOutputRef or an error
         fn new(output: OutputInfo, runtime: ObsRuntime) -> Result<Self, ObsError>
         where
             Self: Sized;
+
+        fn video_encoder_slot(&self) -> &Arc<RwLock<Option<Arc<ObsVideoEncoder>>>>;
+        fn audio_encoder_slots(&self) -> &Arc<RwLock<HashMap<usize, Arc<ObsAudioEncoder>>>>;
+        fn service_slot(&self) -> &Arc<RwLock<Option<Arc<ObsServiceRef>>>>;
+        fn configuration_lock(&self) -> &Arc<Mutex<()>>;
     }
 }
 
@@ -100,14 +98,6 @@ pub trait ObsOutputTrait:
     ObsOutputTraitSealed + ObsObjectTrait<Native = *mut libobs::obs_output_t>
 {
     fn signals(&self) -> &Arc<ObsOutputSignals>;
-
-    #[doc(hidden)]
-    fn video_encoder_slot(&self) -> &Arc<RwLock<Option<Arc<ObsVideoEncoder>>>>;
-    #[doc(hidden)]
-    fn audio_encoder_slots(&self) -> &Arc<RwLock<HashMap<usize, Arc<ObsAudioEncoder>>>>;
-    #[doc(hidden)]
-    fn service_slot(&self) -> &Arc<RwLock<Option<Arc<ObsServiceRef>>>>;
-    fn configuration_lock(&self) -> &Arc<Mutex<()>>;
 
     #[doc(hidden)]
     fn native_output_flags(&self) -> Result<u32, ObsError> {

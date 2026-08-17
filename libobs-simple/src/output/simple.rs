@@ -5,8 +5,6 @@
 //!
 //! # Example
 //!
-//! # Example
-//!
 //! ```no_run
 //! use libobs_simple::output::simple::{SimpleOutputBuilder, X264Preset};
 //! use libobs_wrapper::{data::video::ObsVideoInfoBuilder, utils::{ObsPath, StartupInfo}};
@@ -27,14 +25,17 @@
 //! ```
 
 use libobs_wrapper::{
-    context::ObsContext,
-    data::{
-        output::{ObsOutputRef, ObsOutputTrait},
-        ObsData, ObsDataSetters,
+    capabilities::{
+        EncoderTypeInfo, ObsCapabilities, OutputCapabilities, OutputCompatibilityRequest,
     },
+    context::ObsContext,
+    data::{output::ObsOutputRef, ObsData, ObsDataSetters},
     encoders::{ObsAudioEncoderType, ObsVideoEncoderType},
-    utils::{AudioEncoderInfo, ObsError, ObsPath, ObsString, OutputInfo, VideoEncoderInfo},
+    settings::PropertyValue,
+    utils::{ObsError, ObsPath, ObsString},
 };
+
+use super::configure::set_if_supported;
 
 /// Preset for x264 software encoder
 #[derive(Debug, Clone, Copy)]
@@ -96,6 +97,9 @@ impl HardwarePreset {
 /// Video encoder configuration
 #[derive(Debug, Clone)]
 pub enum VideoEncoder {
+    /// Automatically select an encoder for this codec, preferring hardware and falling back
+    /// to a software implementation when the current OBS installation has no hardware option.
+    Auto(HardwareCodec),
     /// x264 software encoder
     X264(X264Preset),
     /// Hardware encoder (NVENC/AMF/QSV), codec chosen generically at runtime
@@ -125,22 +129,70 @@ impl HardwareCodec {
     }
 }
 
-pub(crate) fn select_video_encoder_type(
-    context: &ObsContext,
+fn video_encoder_descriptor(
+    capabilities: &ObsCapabilities,
     encoder: &VideoEncoder,
-) -> Result<ObsVideoEncoderType, ObsError> {
+) -> Result<EncoderTypeInfo, ObsError> {
     match encoder {
-        VideoEncoder::X264(_) => Ok(ObsVideoEncoderType::OBS_X264),
-        VideoEncoder::Custom(encoder_type) => Ok(encoder_type.clone()),
-        VideoEncoder::Hardware { codec, .. } => context
-            .capabilities()?
+        VideoEncoder::Auto(codec) | VideoEncoder::Hardware { codec, .. } => capabilities
             .select_video_encoder()
             .codec(codec.codec_name())
             .prefer_hardware()
             .best_available()
-            .map(|encoder| ObsVideoEncoderType::from(encoder.id()))
+            .cloned()
             .ok_or(ObsError::NoAvailableEncoders),
+        VideoEncoder::X264(_) => capabilities
+            .encoders()
+            .iter()
+            .find(|candidate| candidate.id() == "obs_x264")
+            .cloned()
+            .ok_or(ObsError::NoAvailableEncoders),
+        VideoEncoder::Custom(encoder_type) => {
+            let id = ObsString::from(encoder_type.clone()).to_string();
+            capabilities
+                .encoders()
+                .iter()
+                .find(|candidate| candidate.id() == id)
+                .cloned()
+                .ok_or(ObsError::NoAvailableEncoders)
+        }
     }
+}
+
+pub(crate) fn select_video_encoder_type(
+    context: &ObsContext,
+    encoder: &VideoEncoder,
+) -> Result<ObsVideoEncoderType, ObsError> {
+    let capabilities = context.capabilities()?;
+    let descriptor = video_encoder_descriptor(&capabilities, encoder)?;
+    Ok(ObsVideoEncoderType::from(descriptor.id()))
+}
+
+fn audio_encoder_descriptor(
+    capabilities: &ObsCapabilities,
+    encoder: &AudioEncoder,
+) -> Result<EncoderTypeInfo, ObsError> {
+    if let AudioEncoder::Custom(encoder_type) = encoder {
+        let id = ObsString::from(encoder_type.clone()).to_string();
+        return capabilities
+            .encoders()
+            .iter()
+            .find(|candidate| candidate.id() == id)
+            .cloned()
+            .ok_or(ObsError::NoAvailableEncoders);
+    }
+
+    let codec = match encoder {
+        AudioEncoder::AAC => "aac",
+        AudioEncoder::Opus => "opus",
+        AudioEncoder::Custom(_) => unreachable!(),
+    };
+    capabilities
+        .select_audio_encoder()
+        .codec(codec)
+        .best_available()
+        .cloned()
+        .ok_or(ObsError::NoAvailableEncoders)
 }
 
 /// Audio encoder configuration
@@ -290,7 +342,7 @@ impl SimpleOutputBuilder {
             settings: OutputSettings {
                 video_bitrate: 6000,
                 audio_bitrate: 160,
-                video_encoder: VideoEncoder::X264(X264Preset::VeryFast),
+                video_encoder: VideoEncoder::Auto(HardwareCodec::H264),
                 audio_encoder: AudioEncoder::AAC,
                 custom_encoder_settings: None,
                 path: path.into(),
@@ -332,6 +384,13 @@ impl SimpleOutputBuilder {
         self
     }
 
+    /// Uses automatic codec-based encoder selection. Hardware implementations are preferred,
+    /// while software encoders remain a transparent fallback.
+    pub fn auto_video_encoder(mut self, codec: HardwareCodec) -> Self {
+        self.settings.video_encoder = VideoEncoder::Auto(codec);
+        self
+    }
+
     /// Sets the video encoder to x264.
     pub fn x264_encoder(mut self, preset: X264Preset) -> Self {
         self.settings.video_encoder = VideoEncoder::X264(preset);
@@ -344,97 +403,128 @@ impl SimpleOutputBuilder {
         self
     }
 
-    /// Builds and returns the configured output.
-    pub fn build(mut self) -> Result<ObsOutputRef, ObsError> {
-        // Determine the output type based on format
+    /// Builds a validated recording graph using the concrete capabilities available at runtime.
+    pub fn build(self) -> Result<ObsOutputRef, ObsError> {
         let output_id = match self.settings.format {
             OutputFormat::HybridMP4 => "mp4_output",
             OutputFormat::HybridMov => "mov_output",
             _ => "ffmpeg_muxer",
         };
 
-        // Create output settings
-        let mut output_settings = self.context.data()?;
-        output_settings.set_string("path", self.settings.path.clone().build())?;
+        let capabilities = self.context.capabilities()?;
+        let video_type = video_encoder_descriptor(&capabilities, &self.settings.video_encoder)?;
+        let audio_type = audio_encoder_descriptor(&capabilities, &self.settings.audio_encoder)?;
 
+        let mut compatibility = OutputCompatibilityRequest::new()
+            .output_id(output_id)
+            .require_output_capabilities(
+                OutputCapabilities::ENCODED | OutputCapabilities::VIDEO | OutputCapabilities::AUDIO,
+            );
+        if let Some(codec) = video_type.codec() {
+            compatibility = compatibility.video_codec(codec);
+        }
+        if let Some(codec) = audio_type.codec() {
+            compatibility = compatibility.audio_codec(codec);
+        }
+        let output_type = capabilities
+            .best_output_plan(&compatibility)
+            .map_err(|report| ObsError::NoCompatibleOutputGraph {
+                summary: report.summary(),
+            })?
+            .output()
+            .clone();
+
+        let mut output_settings = output_type.default_settings_mut()?;
+        output_settings.set_string("path", self.settings.path.clone().build())?;
         if let Some(ref muxer_settings) = self.settings.custom_muxer_settings {
             output_settings.set_string("muxer_settings", muxer_settings.as_str())?;
         }
 
-        // Create the output
-        let output_info = OutputInfo::new(
-            output_id,
-            self.settings.name.clone(),
-            Some(output_settings),
-            None,
-        );
-
-        let output = self.context.output(output_info)?;
-
-        // Create and configure video encoder (with hardware fallback)
-        let video_encoder_type =
-            select_video_encoder_type(&self.context, &self.settings.video_encoder)?;
-        let mut video_settings = self.context.data()?;
-
-        self.configure_video_encoder(&mut video_settings)?;
-
-        let video_encoder_info = VideoEncoderInfo::new(
-            video_encoder_type,
+        let mut video_settings = video_type.default_settings_mut()?;
+        self.configure_video_encoder(&video_type, &mut video_settings)?;
+        let video_encoder = self.context.create_video_encoder(
+            &video_type,
             format!("{}_video_encoder", self.settings.name),
             Some(video_settings),
-            None,
-        );
+        )?;
 
-        output.create_and_set_video_encoder(video_encoder_info)?;
-
-        // Create and configure audio encoder
-        let audio_encoder_type = match &self.settings.audio_encoder {
-            AudioEncoder::AAC => ObsAudioEncoderType::FFMPEG_AAC,
-            AudioEncoder::Opus => ObsAudioEncoderType::FFMPEG_OPUS,
-            AudioEncoder::Custom(encoder_type) => encoder_type.clone(),
-        };
-
-        log::trace!("Selected audio encoder: {:?}", audio_encoder_type);
-        let mut audio_settings = self.context.data()?;
-        audio_settings.set_string("rate_control", "CBR")?;
-        audio_settings.set_int("bitrate", self.settings.audio_bitrate as i64)?;
-
-        let audio_encoder_info = AudioEncoderInfo::new(
-            audio_encoder_type,
+        let mut audio_settings = audio_type.default_settings_mut()?;
+        let audio_schema = audio_type.settings_schema_for(&audio_settings)?;
+        set_if_supported(
+            &audio_schema,
+            &mut audio_settings,
+            "rate_control",
+            PropertyValue::String("CBR".into()),
+        )?;
+        set_if_supported(
+            &audio_schema,
+            &mut audio_settings,
+            "bitrate",
+            PropertyValue::Integer(i64::from(self.settings.audio_bitrate)),
+        )?;
+        let audio_encoder = self.context.create_audio_encoder(
+            &audio_type,
             format!("{}_audio_encoder", self.settings.name),
             Some(audio_settings),
-            None,
-        );
+            0,
+        )?;
 
-        log::trace!("Creating audio encoder with info: {:?}", audio_encoder_info);
-        output.create_and_set_audio_encoder(audio_encoder_info, 0)?;
-
-        Ok(output)
+        Ok(self
+            .context
+            .output_pipeline(
+                &output_type,
+                self.settings.name.clone(),
+                Some(output_settings),
+            )
+            .video_encoder(video_encoder)
+            .audio_encoder(0, audio_encoder)
+            .build()?
+            .into_output())
     }
 
     fn get_encoder_preset(&self, encoder: &VideoEncoder) -> Option<&str> {
         match encoder {
+            VideoEncoder::Auto(_) => None,
             VideoEncoder::X264(preset) => Some(preset.as_str()),
             VideoEncoder::Hardware { preset, .. } => Some(preset.as_str()),
             VideoEncoder::Custom(_) => None,
         }
     }
 
-    fn configure_video_encoder(&self, settings: &mut ObsData) -> Result<(), ObsError> {
-        // Set rate control to CBR
-        settings.set_string("rate_control", "CBR")?;
-        settings.set_int("bitrate", self.settings.video_bitrate as i64)?;
-
-        // Set preset if available
+    fn configure_video_encoder(
+        &self,
+        encoder_type: &EncoderTypeInfo,
+        settings: &mut ObsData,
+    ) -> Result<(), ObsError> {
+        let schema = encoder_type.settings_schema_for(settings)?;
+        set_if_supported(
+            &schema,
+            settings,
+            "rate_control",
+            PropertyValue::String("CBR".into()),
+        )?;
+        set_if_supported(
+            &schema,
+            settings,
+            "bitrate",
+            PropertyValue::Integer(i64::from(self.settings.video_bitrate)),
+        )?;
         if let Some(preset) = self.get_encoder_preset(&self.settings.video_encoder) {
-            settings.set_string("preset", preset)?;
+            set_if_supported(
+                &schema,
+                settings,
+                "preset",
+                PropertyValue::String(preset.into()),
+            )?;
         }
-
-        // Apply custom encoder settings if provided (mainly for x264)
         if let Some(ref custom) = self.settings.custom_encoder_settings {
-            settings.set_string("x264opts", custom.as_str())?;
+            set_if_supported(
+                &schema,
+                settings,
+                "x264opts",
+                PropertyValue::String(custom.clone()),
+            )?;
         }
-
         Ok(())
     }
 }

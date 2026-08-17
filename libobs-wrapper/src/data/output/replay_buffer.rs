@@ -46,6 +46,38 @@ impl ObsOutputTraitSealed for ObsReplayBufferOutputRef {
             output,
         })
     }
+
+    fn video_encoder_slot(
+        &self,
+    ) -> &std::sync::Arc<
+        std::sync::RwLock<Option<std::sync::Arc<crate::encoders::video::ObsVideoEncoder>>>,
+    > {
+        self.output.video_encoder_slot()
+    }
+
+    fn audio_encoder_slots(
+        &self,
+    ) -> &std::sync::Arc<
+        std::sync::RwLock<
+            std::collections::HashMap<
+                usize,
+                std::sync::Arc<crate::encoders::audio::ObsAudioEncoder>,
+            >,
+        >,
+    > {
+        self.output.audio_encoder_slots()
+    }
+
+    fn service_slot(
+        &self,
+    ) -> &std::sync::Arc<std::sync::RwLock<Option<std::sync::Arc<crate::services::ObsServiceRef>>>>
+    {
+        self.output.service_slot()
+    }
+
+    fn configuration_lock(&self) -> &std::sync::Arc<std::sync::Mutex<()>> {
+        self.output.configuration_lock()
+    }
 }
 
 forward_obs_object_impl!(ObsReplayBufferOutputRef, output, *mut libobs::obs_output);
