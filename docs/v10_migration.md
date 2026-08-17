@@ -80,23 +80,45 @@ let mut settings = color.default_settings_mut()?;
 settings.set_int("width", 1280)?.set_int("height", 720)?;
 let source = obs.create_source(&color, "Background", Some(settings))?;
 
+let capabilities = obs.capabilities()?;
+let video_ty = capabilities
+    .select_video_encoder()
+    .codec("h264")
+    .prefer_hardware()
+    .best_available()
+    .expect("H.264 encoder available");
+let audio_ty = capabilities
+    .select_audio_encoder()
+    .codec("aac")
+    .best_available()
+    .expect("AAC encoder available");
+let output_ty = capabilities
+    .select_output()
+    .protocol("RTMP")
+    .video_codec("h264")
+    .audio_codec("aac")
+    .best_available()
+    .expect("compatible RTMP output available");
+
 let service_ty = obs.service_type("rtmp_custom")?.expect("plugin available");
 let service = obs.create_service(&service_ty, "Stream", None)?;
-let output_ty = obs.output_type("rtmp_output")?.expect("plugin available");
-let output = obs.create_output(&output_ty, "RTMP", None)?;
-output.apply_composition(
-    ObsOutputComposition::new()
-        .with_video_encoder(video_encoder)
-        .with_audio_encoder(0, audio_encoder)
-        .with_service(service),
-)?;
+let video_encoder = obs.create_video_encoder(video_ty, "Video", None)?;
+let audio_encoder = obs.create_audio_encoder(audio_ty, "Audio", None, 0)?;
+let pipeline = obs
+    .output_pipeline(output_ty, "RTMP", None)
+    .video_encoder(video_encoder)
+    .audio_encoder(0, audio_encoder)
+    .service(service)
+    .build()?;
 ```
 
 Equivalent typed creation methods exist for filters and audio/video encoders. Passing a descriptor from another runtime, or using an encoder/source descriptor with the wrong category, returns a structured error before native creation.
 
 Unknown property/list/category values are represented with `Unknown(...)` variants for forward compatibility. Discovery results never expose temporary libobs strings or property pointers.
 
-`ObsOutputComposition` represents the complete managed encoder/service wiring for an output. Applying it validates runtime affinity before native mutation and detaches components omitted from the desired state. Individual `set_*`/`clear_*` methods remain available and now work through shared output handles.
+`ObsOutputPipelineBuilder` is now the preferred complete-output path. It validates output flags, required components, runtime affinity, mixer indices, encoder codecs, and service protocol before creating or mutating the output. `ObsOutputComposition` remains the lower-level desired-state wiring mechanism underneath it.
+
+Legacy `ObsContextEncoders::{best,available}_{video,audio}_encoder(s)` discovery is deprecated; use `ObsContext::capabilities()` with `select_video_encoder()` / `select_audio_encoder()` instead. Output attachment getters now use `attached_*` names; the old `get_current_*` methods remain deprecated compatibility shims.
 
 Scenes also expose inherent `add`, `remove_item`, `items_for_source`, and `clear` methods. `remove_item(&item)` now detaches immediately; a scene-item handle owns a native reference so cloned handles cannot become dangling merely because the item was removed from the scene. Position/scale shorthand plus rotation, visibility, locking, and ordering operations are available on `SceneItemTrait`.
 

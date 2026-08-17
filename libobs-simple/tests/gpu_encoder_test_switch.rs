@@ -15,9 +15,7 @@ use libobs_wrapper::{
     data::{
         object::ObsObjectTrait, output::ObsOutputTrait, video::ObsVideoInfoBuilder, ObsDataSetters,
     },
-    encoders::{
-        audio::ObsAudioEncoder, video::ObsVideoEncoder, ObsContextEncoders, ObsVideoEncoderType,
-    },
+    encoders::{audio::ObsAudioEncoder, video::ObsVideoEncoder, ObsVideoEncoderType},
     enums::ObsScaleType,
     scenes::ObsSceneItemRef,
     utils::{AudioEncoderInfo, ObsPath, OutputInfo, VideoEncoderInfo},
@@ -224,12 +222,16 @@ impl ReproState {
 #[test]
 fn test_encoder_switch() {
     let mut state = ReproState::new();
+    let nvenc_id: libobs_wrapper::utils::ObsString =
+        EncoderType::NvEnc.to_obs_encoder_type().into();
     let has_nvidia = state
         .obs_context
-        .available_video_encoders()
+        .capabilities()
         .unwrap()
+        .select_video_encoder()
+        .matches()
         .iter()
-        .any(|info| info.get_encoder_id() == &EncoderType::NvEnc.to_obs_encoder_type());
+        .any(|info| info.id() == nvenc_id.to_string());
 
     for i in 0..ROUNDS {
         state.simulate_recording(

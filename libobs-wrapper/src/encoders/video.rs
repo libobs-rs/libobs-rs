@@ -119,7 +119,7 @@ impl ObsVideoEncoder {
     /// This is only needed once for global video context
     /// # Safety
     /// The handler pointer must be a valid pointer to a video_output that lives as long as this function call.
-    pub unsafe fn set_video_context(&mut self, handler: *mut video_output) -> Result<(), ObsError> {
+    pub unsafe fn set_video_context(&self, handler: *mut video_output) -> Result<(), ObsError> {
         let handler = Sendable(handler);
         let self_ptr = self.__native_handle();
         run_with_obs!(self.runtime, (handler, self_ptr), move || {
