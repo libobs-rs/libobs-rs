@@ -150,7 +150,7 @@ impl ObsTransformInfoBuilder {
     }
 
     /// Builds the `ObsTransformInfo` instance and keeps values that have not been set the same.
-    pub fn build_with_fallback<T: SceneItemTrait>(
+    pub fn build_with_fallback<T: SceneItemTrait + ?Sized>(
         self,
         scene_item: &T,
     ) -> Result<ObsTransformInfo, ObsError> {

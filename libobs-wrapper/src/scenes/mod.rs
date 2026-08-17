@@ -1,17 +1,31 @@
-//! This module is important, as it holds the scene items and scenes themselves.
-//! Scenes are essential, as they hold the sources which are then being rendered in the output.
-//! You'll need to add sources to the scenes if you want to have an output that is not black.
-//! You can also use the `libobs-simple` crate to simplify the creation of ObsSourceRefs.
+//! Scenes, managed scene items, native OBS groups, ordering, and transform state.
+//!
+//! [`ObsSceneRef`] is the scene-level entry point. Add typed sources with [`ObsSceneRef::add`], inspect
+//! actual bottom-to-top libobs order with [`ObsSceneRef::items_in_order`], and create native groups
+//! with [`ObsSceneRef::create_group`].
+//!
+//! Scene-item behavior is exposed through [`SceneItemTrait`]: position/scale/rotation, bounds, edge
+//! crop, scale filtering, blending, visibility, locking, order, and complete transform/state
+//! snapshots. Ordinary source insertion returns [`ObsSceneItemRef<T>`], preserving the source type.
+//! [`ObsSceneItemHandle`] is the type-erased managed handle used when libobs itself replaces an item.
+//!
+//! # Group identity semantics
+//!
+//! libobs reuses child objects when moving them into/out of a group, but *ungrouping the whole group*
+//! creates replacement parent-scene items. [`ObsSceneGroupRef::ungroup`] models that explicitly by
+//! returning [`ObsUngroupedItem`] mappings and marking replaced child handles removed.
 
 mod transform_info;
 pub use transform_info::*;
 
+mod group;
 mod scene_drop_guards;
 mod scene_item;
 
 mod filter_traits;
 pub use filter_traits::*;
 
+pub use group::*;
 pub use scene_item::*;
 
 use std::collections::HashMap;
@@ -36,7 +50,7 @@ use crate::{
 struct _NoOpDropGuard;
 impl ObsDropGuard for _NoOpDropGuard {}
 
-type SceneItemsBySource = Arc<
+pub(super) type SceneItemsBySource = Arc<
     RwLock<
         HashMap<
             NativeObjectId,
@@ -53,6 +67,7 @@ type SceneItemsBySource = Arc<
 pub struct ObsSceneRef {
     name: ObsString,
     attached_scene_items: SceneItemsBySource,
+    attached_groups: group::SceneGroups,
     attached_filters: Arc<RwLock<Vec<ObsFilterGuardPair>>>,
     runtime: ObsRuntime,
     signals: Arc<ObsSceneSignals>,
@@ -98,6 +113,7 @@ impl ObsSceneRef {
             name,
             scene,
             attached_scene_items: Arc::new(RwLock::new(HashMap::new())),
+            attached_groups: Arc::new(RwLock::new(Vec::new())),
             attached_filters: Arc::new(RwLock::new(Vec::new())),
             runtime,
             signals,
@@ -208,7 +224,8 @@ impl ObsSceneRef {
 
     /// Removes every managed item from this scene.
     pub fn clear(&mut self) -> Result<(), ObsError> {
-        SceneItemExtSceneTrait::remove_all_sources(self)
+        SceneItemExtSceneTrait::remove_all_sources(self)?;
+        self.clear_groups()
     }
 }
 

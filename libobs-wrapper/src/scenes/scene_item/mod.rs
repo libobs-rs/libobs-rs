@@ -10,9 +10,12 @@ use std::{
 };
 
 use libobs::{obs_scene_item, obs_transform_info, obs_video_info};
+use num_traits::FromPrimitive;
 
 use crate::{
-    enums::{ObsBoundsType, ObsOrderMovement},
+    enums::{
+        ObsAlignment, ObsBlendMethod, ObsBlendMode, ObsBoundsType, ObsOrderMovement, ObsScaleType,
+    },
     graphics::Vec2,
     impl_obs_drop,
     macros::trait_with_optional_send_sync,
@@ -64,6 +67,33 @@ impl From<libobs::obs_sceneitem_crop> for ObsSceneItemCrop {
     }
 }
 
+/// Complete render-transform state for one scene item. Unlike [`ObsTransformInfo`], this also
+/// includes edge crop, scaling filter, and blending state stored outside `obs_transform_info`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ObsSceneItemTransformSnapshot {
+    pub position: Vec2,
+    pub scale: Vec2,
+    pub alignment: ObsAlignment,
+    pub rotation: f32,
+    pub bounds: Vec2,
+    pub bounds_type: ObsBoundsType,
+    pub bounds_alignment: ObsAlignment,
+    pub crop_to_bounds: bool,
+    pub crop: ObsSceneItemCrop,
+    pub scale_filter: ObsScaleType,
+    pub blend_method: ObsBlendMethod,
+    pub blend_mode: ObsBlendMode,
+}
+
+/// Restorable scene-item state including transform, visibility, locking and native z-order.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ObsSceneItemStateSnapshot {
+    pub transform: ObsSceneItemTransformSnapshot,
+    pub visible: bool,
+    pub locked: bool,
+    pub order_position: i32,
+}
+
 #[derive(Debug)]
 pub(super) struct _ObsSceneItemDropGuard {
     scene_item: Sendable<*mut obs_scene_item>,
@@ -89,6 +119,40 @@ impl_obs_drop!(
     }
 );
 
+/// Wraps one explicit native scene-item reference in the managed lifetime lease used by all
+/// scene-item handle types. The caller must already own one `obs_sceneitem_addref` reference.
+pub(super) fn wrap_owned_scene_item_ref(
+    scene_item: Sendable<*mut obs_scene_item>,
+    runtime: ObsRuntime,
+) -> (SmartPointerSendable<*mut obs_scene_item>, Arc<Mutex<bool>>) {
+    let removed = Arc::new(Mutex::new(false));
+    let drop_guard = _ObsSceneItemDropGuard {
+        scene_item: scene_item.clone(),
+        removed: removed.clone(),
+        runtime: runtime.clone(),
+    };
+    let handle = SmartPointerSendable::new(
+        scene_item.0,
+        Arc::new(drop_guard),
+        runtime.native_registry(),
+    );
+    (handle, removed)
+}
+
+pub(super) fn scene_item_native_handle<T: SceneItemTrait + ?Sized>(
+    item: &T,
+) -> SmartPointerSendable<*mut obs_scene_item> {
+    item.__native_handle().clone()
+}
+
+pub(super) fn mark_scene_item_removed<T: SceneItemTrait + ?Sized>(item: &T) {
+    let mut removed = item
+        .__removed_flag()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    *removed = true;
+}
+
 #[derive(Debug, Clone)]
 /// Holds the specific source that was added to the scene and its scene item.
 /// If this struct is attached to the scene, it'll not be dropped as the scene
@@ -108,6 +172,32 @@ pub struct ObsSceneItemRef<T: ObsSourceTrait + Clone> {
 
     // And at last the source
     underlying_source: T,
+}
+
+/// Type-erased managed scene-item handle used when libobs itself replaces a native item, such as
+/// during group ungrouping. Ordinary source insertion still returns [`ObsSceneItemRef<T>`].
+#[derive(Debug, Clone)]
+pub struct ObsSceneItemHandle {
+    scene_item_ptr: SmartPointerSendable<*mut obs_scene_item>,
+    removed: Arc<Mutex<bool>>,
+    runtime: ObsRuntime,
+    _scene_ptr: SmartPointerSendable<*mut libobs::obs_scene_t>,
+}
+
+impl ObsSceneItemHandle {
+    pub(super) fn from_owned_native_ref(
+        item: Sendable<*mut obs_scene_item>,
+        scene_ptr: SmartPointerSendable<*mut libobs::obs_scene_t>,
+        runtime: ObsRuntime,
+    ) -> Self {
+        let (scene_item_ptr, removed) = wrap_owned_scene_item_ref(item, runtime.clone());
+        Self {
+            scene_item_ptr,
+            removed,
+            runtime,
+            _scene_ptr: scene_ptr,
+        }
+    }
 }
 
 impl<T: ObsSourceTrait + Clone> ObsSceneItemRef<T> {
@@ -163,18 +253,20 @@ impl<T: ObsSourceTrait + Clone> ObsSceneItemRef<T> {
 }
 
 trait_with_optional_send_sync! {
-    pub trait SceneItemTrait: Debug {
-        #[doc(hidden)]
+    pub(crate) trait SceneItemTraitSealed: Debug {
         fn __native_handle(&self) -> &SmartPointerSendable<*mut obs_scene_item>;
-        #[doc(hidden)]
         fn __removed_flag(&self) -> &Arc<Mutex<bool>>;
+    }
+}
+
+trait_with_optional_send_sync! {
+    #[allow(private_bounds)]
+    pub trait SceneItemTrait: SceneItemTraitSealed {
         fn runtime(&self) -> ObsRuntime;
 
         fn object_id(&self) -> crate::unsafe_send::NativeObjectId {
             self.__native_handle().native_id()
         }
-        fn inner_source_dyn(&self) -> &dyn ObsSourceTrait;
-        fn inner_source_dyn_mut(&mut self) -> &mut dyn ObsSourceTrait;
 
         /// Removes this item from its scene immediately while keeping the typed handle valid
         /// until its final Rust reference is dropped. Repeated calls are harmless.
@@ -467,6 +559,136 @@ trait_with_optional_send_sync! {
             })
         }
 
+        /// Returns the scaling filter used when this item is resized.
+        fn scale_filter(&self) -> Result<ObsScaleType, ObsError> {
+            let self_ptr = self.__native_handle().clone();
+            let raw = run_with_obs!(self.runtime(), (self_ptr), move || unsafe {
+                // Safety: the managed scene-item reference remains alive for the actor call.
+                libobs::obs_sceneitem_get_scale_filter(self_ptr.get_ptr())
+            })?;
+            ObsScaleType::from_i64(raw as i64).ok_or_else(|| {
+                ObsError::EnumConversionError(format!("unknown scene-item scale filter {raw}"))
+            })
+        }
+
+        fn set_scale_filter(&self, filter: ObsScaleType) -> Result<(), ObsError> {
+            let self_ptr = self.__native_handle().clone();
+            run_with_obs!(self.runtime(), (self_ptr), move || unsafe {
+                // Safety: the managed item remains alive and `filter` is a libobs enum value.
+                libobs::obs_sceneitem_set_scale_filter(
+                    self_ptr.get_ptr(),
+                    filter as libobs::obs_scale_type,
+                );
+            })
+        }
+
+        fn blend_method(&self) -> Result<ObsBlendMethod, ObsError> {
+            let self_ptr = self.__native_handle().clone();
+            let raw = run_with_obs!(self.runtime(), (self_ptr), move || unsafe {
+                // Safety: the managed scene-item reference remains alive for the actor call.
+                libobs::obs_sceneitem_get_blending_method(self_ptr.get_ptr())
+            })?;
+            ObsBlendMethod::from_i64(raw as i64).ok_or_else(|| {
+                ObsError::EnumConversionError(format!("unknown scene-item blend method {raw}"))
+            })
+        }
+
+        fn set_blend_method(&self, method: ObsBlendMethod) -> Result<(), ObsError> {
+            let self_ptr = self.__native_handle().clone();
+            run_with_obs!(self.runtime(), (self_ptr), move || unsafe {
+                // Safety: the managed item remains alive and `method` is a libobs enum value.
+                libobs::obs_sceneitem_set_blending_method(
+                    self_ptr.get_ptr(),
+                    method as libobs::obs_blending_method,
+                );
+            })
+        }
+
+        fn blend_mode(&self) -> Result<ObsBlendMode, ObsError> {
+            let self_ptr = self.__native_handle().clone();
+            let raw = run_with_obs!(self.runtime(), (self_ptr), move || unsafe {
+                // Safety: the managed scene-item reference remains alive for the actor call.
+                libobs::obs_sceneitem_get_blending_mode(self_ptr.get_ptr())
+            })?;
+            ObsBlendMode::from_i64(raw as i64).ok_or_else(|| {
+                ObsError::EnumConversionError(format!("unknown scene-item blend mode {raw}"))
+            })
+        }
+
+        fn set_blend_mode(&self, mode: ObsBlendMode) -> Result<(), ObsError> {
+            let self_ptr = self.__native_handle().clone();
+            run_with_obs!(self.runtime(), (self_ptr), move || unsafe {
+                // Safety: the managed item remains alive and `mode` is a libobs enum value.
+                libobs::obs_sceneitem_set_blending_mode(
+                    self_ptr.get_ptr(),
+                    mode as libobs::obs_blending_type,
+                );
+            })
+        }
+
+        /// Captures every transform-affecting scene-item property exposed by libobs.
+        fn transform_snapshot(&self) -> Result<ObsSceneItemTransformSnapshot, ObsError> {
+            let info = self.get_transform_info()?;
+            let bounds_type = info.get_bounds_type().ok_or_else(|| {
+                ObsError::EnumConversionError("unknown scene-item bounds type".into())
+            })?;
+            Ok(ObsSceneItemTransformSnapshot {
+                position: info.get_pos(),
+                scale: info.get_scale(),
+                alignment: ObsAlignment::from_bits_retain(info.get_alignment()),
+                rotation: info.get_rot(),
+                bounds: info.get_bounds(),
+                bounds_type,
+                bounds_alignment: ObsAlignment::from_bits_retain(info.get_bounds_alignment()),
+                crop_to_bounds: info.get_crop_to_bounds(),
+                crop: self.crop()?,
+                scale_filter: self.scale_filter()?,
+                blend_method: self.blend_method()?,
+                blend_mode: self.blend_mode()?,
+            })
+        }
+
+        /// Restores a transform snapshot through the same managed actor seam as individual setters.
+        fn apply_transform_snapshot(
+            &self,
+            snapshot: &ObsSceneItemTransformSnapshot,
+        ) -> Result<(), ObsError> {
+            let info = ObsTransformInfoBuilder::new()
+                .set_pos(snapshot.position)
+                .set_scale(snapshot.scale)
+                .set_alignment(snapshot.alignment)
+                .set_rot(snapshot.rotation)
+                .set_bounds(snapshot.bounds)
+                .set_bounds_type(snapshot.bounds_type)
+                .set_bounds_alignment(snapshot.bounds_alignment)
+                .set_crop_to_bounds(snapshot.crop_to_bounds)
+                .build_with_fallback(self)?;
+            self.set_transform_info(&info)?;
+            self.set_crop(snapshot.crop)?;
+            self.set_scale_filter(snapshot.scale_filter)?;
+            self.set_blend_method(snapshot.blend_method)?;
+            self.set_blend_mode(snapshot.blend_mode)
+        }
+
+        fn state_snapshot(&self) -> Result<ObsSceneItemStateSnapshot, ObsError> {
+            Ok(ObsSceneItemStateSnapshot {
+                transform: self.transform_snapshot()?,
+                visible: self.is_visible()?,
+                locked: self.is_locked()?,
+                order_position: self.order_position()?,
+            })
+        }
+
+        fn apply_state_snapshot(
+            &self,
+            snapshot: &ObsSceneItemStateSnapshot,
+        ) -> Result<(), ObsError> {
+            self.apply_transform_snapshot(&snapshot.transform)?;
+            self.set_visible(snapshot.visible)?;
+            self.set_locked(snapshot.locked)?;
+            self.set_order_position(snapshot.order_position)
+        }
+
         /// Preferred shorthand for [`SceneItemTrait::get_source_position`].
         fn position(&self) -> Result<Vec2, ObsError> {
             self.get_source_position()
@@ -505,7 +727,7 @@ trait_with_optional_send_sync! {
     }
 }
 
-impl<T: ObsSourceTrait + Clone> SceneItemTrait for ObsSceneItemRef<T> {
+impl SceneItemTraitSealed for ObsSceneItemHandle {
     fn __native_handle(&self) -> &SmartPointerSendable<*mut obs_scene_item> {
         &self.scene_item_ptr
     }
@@ -513,17 +735,27 @@ impl<T: ObsSourceTrait + Clone> SceneItemTrait for ObsSceneItemRef<T> {
     fn __removed_flag(&self) -> &Arc<Mutex<bool>> {
         &self.removed
     }
+}
 
+impl SceneItemTrait for ObsSceneItemHandle {
     fn runtime(&self) -> ObsRuntime {
         self.runtime.clone()
     }
+}
 
-    fn inner_source_dyn(&self) -> &dyn ObsSourceTrait {
-        &self.underlying_source
+impl<T: ObsSourceTrait + Clone> SceneItemTraitSealed for ObsSceneItemRef<T> {
+    fn __native_handle(&self) -> &SmartPointerSendable<*mut obs_scene_item> {
+        &self.scene_item_ptr
     }
 
-    fn inner_source_dyn_mut(&mut self) -> &mut dyn ObsSourceTrait {
-        &mut self.underlying_source
+    fn __removed_flag(&self) -> &Arc<Mutex<bool>> {
+        &self.removed
+    }
+}
+
+impl<T: ObsSourceTrait + Clone> SceneItemTrait for ObsSceneItemRef<T> {
+    fn runtime(&self) -> ObsRuntime {
+        self.runtime.clone()
     }
 }
 

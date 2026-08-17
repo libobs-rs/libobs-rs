@@ -130,11 +130,13 @@ impl SceneItemExtSceneTrait for ObsSceneRef {
 
     fn remove_item<K: SceneItemTrait + ?Sized>(&mut self, scene_item: &K) -> Result<(), ObsError> {
         self.runtime.ensure_same_runtime(&scene_item.runtime())?;
+        // Group removal needs to inspect/prune this same registry in order to invalidate child
+        // handles. Do not hold the registry lock while dispatching polymorphic removal behavior.
+        scene_item.remove_from_scene()?;
         let mut guard = self
             .attached_scene_items
             .write()
             .map_err(|e| ObsError::LockError(format!("{:?}", e)))?;
-        scene_item.remove_from_scene()?;
 
         guard.retain(|_, (_, items)| {
             items.retain(|item| {
@@ -144,6 +146,11 @@ impl SceneItemExtSceneTrait for ObsSceneRef {
             // Remove the entry if no items remain
             !items.is_empty()
         });
+        drop(guard);
+        self.attached_groups
+            .write()
+            .map_err(|e| ObsError::LockError(format!("{e:?}")))?
+            .retain(|group| group.object_id() != scene_item.object_id());
         Ok(())
     }
 
