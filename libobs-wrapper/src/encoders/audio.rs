@@ -116,7 +116,7 @@ impl ObsAudioEncoder {
     /// This is only needed once for global audio context
     /// # Safety
     /// You must ensure that the `handler` pointer is valid and lives as long as this function call.
-    pub unsafe fn set_audio_context(&mut self, handler: *mut audio_output) -> Result<(), ObsError> {
+    pub unsafe fn set_audio_context(&self, handler: *mut audio_output) -> Result<(), ObsError> {
         let handler = Sendable(handler);
         let encoder_ptr = self.encoder.clone();
 

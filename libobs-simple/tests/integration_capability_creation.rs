@@ -139,7 +139,7 @@ fn discovered_types_drive_typed_creation_and_lifecycle() {
         .expect("apply runtime-affine output composition");
     assert_eq!(
         rtmp_output
-            .get_current_service()
+            .attached_service()
             .unwrap()
             .expect("service remains attached")
             .object_id(),
@@ -147,7 +147,7 @@ fn discovered_types_drive_typed_creation_and_lifecycle() {
     );
     assert_eq!(
         rtmp_output
-            .get_current_video_encoder()
+            .attached_video_encoder()
             .unwrap()
             .expect("video encoder remains attached")
             .object_id(),
@@ -155,7 +155,7 @@ fn discovered_types_drive_typed_creation_and_lifecycle() {
     );
     assert_eq!(
         rtmp_output
-            .get_current_audio_encoder(0)
+            .attached_audio_encoder(0)
             .unwrap()
             .expect("audio encoder remains attached")
             .object_id(),
@@ -207,9 +207,9 @@ fn discovered_types_drive_typed_creation_and_lifecycle() {
     rtmp_output
         .clear_video_encoder()
         .expect("detach video encoder");
-    assert!(rtmp_output.get_current_service().unwrap().is_none());
-    assert!(rtmp_output.get_current_video_encoder().unwrap().is_none());
-    assert!(rtmp_output.get_current_audio_encoders().unwrap().is_empty());
+    assert!(rtmp_output.attached_service().unwrap().is_none());
+    assert!(rtmp_output.attached_video_encoder().unwrap().is_none());
+    assert!(rtmp_output.attached_audio_encoders().unwrap().is_empty());
 
     let mut scene = context.scene("generic-scene", None).expect("create scene");
     let item = scene

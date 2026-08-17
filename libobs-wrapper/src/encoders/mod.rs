@@ -24,13 +24,19 @@ pub use property_helper::*;
 pub mod video;
 pub use enums::*;
 
+/// Legacy encoder-builder discovery. Prefer [`ObsContext::capabilities`] plus the
+/// capability selectors, which expose codec/capability metadata and deterministic ranking.
 pub trait ObsContextEncoders {
+    #[deprecated = "Use ObsContext::capabilities()?.select_video_encoder()"]
     fn best_video_encoder(&self) -> Result<ObsVideoEncoderBuilder, ObsError>;
 
+    #[deprecated = "Use ObsContext::capabilities()?.select_audio_encoder()"]
     fn best_audio_encoder(&self) -> Result<ObsAudioEncoderBuilder, ObsError>;
 
+    #[deprecated = "Use ObsContext::capabilities()?.select_audio_encoder().matches()"]
     fn available_audio_encoders(&self) -> Result<Vec<ObsAudioEncoderBuilder>, ObsError>;
 
+    #[deprecated = "Use ObsContext::capabilities()?.select_video_encoder().matches()"]
     fn available_video_encoders(&self) -> Result<Vec<ObsVideoEncoderBuilder>, ObsError>;
 }
 
@@ -83,18 +89,18 @@ fn get_encoders_raw(
 
 impl ObsContextEncoders for ObsContext {
     fn best_video_encoder(&self) -> Result<ObsVideoEncoderBuilder, ObsError> {
-        let encoders = self.available_video_encoders()?;
-        encoders
+        get_encoders_raw(ObsEncoderType::Video, self.runtime())?
             .into_iter()
             .next()
+            .map(|id| ObsVideoEncoderBuilder::new(self.clone(), &id))
             .ok_or(ObsError::NoAvailableEncoders)
     }
 
     fn best_audio_encoder(&self) -> Result<ObsAudioEncoderBuilder, ObsError> {
-        let encoders = self.available_audio_encoders()?;
-        encoders
+        get_encoders_raw(ObsEncoderType::Audio, self.runtime())?
             .into_iter()
             .next()
+            .map(|id| ObsAudioEncoderBuilder::new(self.clone(), &id))
             .ok_or(ObsError::NoAvailableEncoders)
     }
 
