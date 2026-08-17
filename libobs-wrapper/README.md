@@ -4,6 +4,38 @@
 
 A safe, ergonomic Rust wrapper around the OBS (Open Broadcaster Software) Studio library. This crate provides a high-level interface for recording and streaming functionality using OBS's powerful capabilities, without having to deal with unsafe C/C++ code directly.
 
+## Where to start
+
+Use `libobs-wrapper` when you want the full safe OBS object model rather than an opinionated workflow. If you mainly want “record this” or “stream this”, start with [`libobs-simple`](../libobs-simple/README.md) instead.
+
+The most useful entry points are:
+
+| Task | Module / type |
+| --- | --- |
+| Start and own libobs | `utils::StartupInfo`, `context::ObsContext` |
+| Discover installed plugins/capabilities | `capabilities` |
+| Configure arbitrary plugins | `settings` + capability descriptors |
+| Create sources and filters | `sources` |
+| Compose scenes, groups and transforms | `scenes` |
+| Choose encoders/outputs/services | `capabilities`, `encoders`, `services` |
+| Build/start outputs | `data::output` |
+| Preview/render to native windows | `display` |
+| Subscribe to OBS events | per-object `signals()` / `signals` |
+| Reach raw libobs when necessary | `sys` (unsafe escape hatch) |
+
+For a detailed task-to-module map, ownership explanation, and workflows, read the [API orientation guide](../docs/api_orientation.md).
+
+### Preferred plugin-generic path
+
+When plugin IDs may vary across machines, prefer:
+
+1. `ObsContext::capabilities()` to discover what is installed.
+2. `best_output_plan` / selectors to choose by codec, protocol, and capability instead of backend ID.
+3. Descriptor `settings_schema_for` / `settings_snapshot_for` to configure arbitrary plugins from their runtime property tree.
+4. `ObsContext::output_pipeline()` to validate the complete graph before native output creation.
+
+The older typed property/builders remain useful for known plugins, but they should not be the only route to functionality.
+
 ## Features
 
 - **Actor Runtime**: Uses one bounded dedicated-thread actor for libobs calls, with backpressure for fire-and-forget work
@@ -11,9 +43,10 @@ A safe, ergonomic Rust wrapper around the OBS (Open Broadcaster Software) Studio
 - **Non-blocking Cleanup**: Destructors enqueue native release operations without requiring Tokio or panicking on runtime shutdown
 - **Per-object Signals**: Signal subscriptions are owned by each object; callback-only pointers are exposed as opaque identities
 - **Runtime Bootstrapping**: Optional automatic download and setup of OBS binaries at runtime (functionality moved to [libobs-bootstrapper](https://crates.io/crates/libobs-bootstrapper))
-- **Runtime Discovery & Selection**: Inspect plugin source/output/encoder/service metadata and select compatible encoders/outputs by codec, protocol, and capability flags
+- **Runtime Discovery & Selection**: Inspect plugin source/output/encoder/service metadata, plan compatible graphs with structured rejection diagnostics, and select by codec/protocol/capability instead of backend ID
+- **Generic Plugin Settings**: Build dynamic schemas with ranges/lists/visibility plus current/default typed values, validated through OBS property callbacks
 - **Validated Output Pipelines**: Validate codecs, protocols, runtime affinity, required components, and mixer indices before output creation, with lower-level desired-state composition still available
-- **Scene Management**: Create typed scene items from existing or discovered sources and control position, scale, rotation, edge cropping, visibility, locking, and ordering
+- **Scene Management**: Create typed scene items and native groups; inspect native order; snapshot/restore position, scale, bounds, crop, blend state, visibility, locking, and ordering
 - **Video Recording**: Configure and record video with various encoders
 - **Audio Support**: Configure audio sources and encoders
 - **Display Management**: Create and control OBS preview windows

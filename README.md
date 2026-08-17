@@ -11,6 +11,19 @@ Documentation is available [here](https://libobs-rs.github.io/libobs-docs/libobs
 
 Simple and safe video recording through libobs.
 
+## Which layer should I use?
+
+The repository deliberately separates complete OBS coverage from convenience workflows:
+
+| Crate | Use it when |
+| --- | --- |
+| **`libobs-simple`** | You want recording, RTMP streaming, replay buffers, or capture sources with sensible defaults and automatic capability selection. Start here for most applications. |
+| **`libobs-wrapper`** | You are building an OBS-like editor, custom media application, remote control, or need direct safe access to sources, scenes/groups, dynamic plugin settings, encoders, outputs, services, displays, and signals. |
+| **`libobs`** | You need raw generated FFI for functionality the safe wrapper does not expose yet. Prefer contributing a safe wrapper when the operation is generally useful. |
+| **`libobs-bootstrapper` / `cargo-obs-build`** | You need to install compatible OBS binaries at runtime / build time. |
+
+A good rule is: **`libobs-simple` chooses for you; `libobs-wrapper` exposes the choices.** See the [API orientation guide](./docs/api_orientation.md) for a task-to-module map and common workflows.
+
 Currently only tested on Windows and Linux (Ubuntu Wayland / X11). MacOS doesn't work right now, but [we are working on that](https://github.com/libobs-rs/libobs-rs/pull/53). Currently the active contributors don't have a mac unfortunately. 
 The API is currently unstable and will definitely have breaking revisions in the future.
 
@@ -57,13 +70,14 @@ More details can be found in the [cargo-obs-build documentation](./cargo-obs-bui
 
 ## Quick Start
 
-The high-level wrapper supports runtime discovery and capability-driven selection, validated output pipelines, typed source/scene composition, recording/streaming outputs, and explicit unsafe escape hatches for advanced libobs integrations.
+For a normal recorder or stream client, start with [libobs-simple](./libobs-simple/README.md). Its recording builder automatically selects a compatible H.264 encoder and its RTMP builder assembles the encoder/service/output graph for you.
 
-Examples are located in the [examples](./examples) directory.
-Documentation is also available for [libobs-simple](libobs-simple/README.md)
-or [libobs-wrapper](./libobs-wrapper/README.md).
+For plugin-generic applications, start with [libobs-wrapper](./libobs-wrapper/README.md): discover capabilities, build dynamic settings schemas, compose scenes/groups, and validate custom output pipelines without hard-coding the installed OBS plugins.
+
+Examples are located in the [examples](./examples) directory. The [API orientation guide](./docs/api_orientation.md) explains how the modules fit together and when to move from the simple layer to the full wrapper.
 
 ## Documentation
+- [API Orientation / Where to Start](./docs/api_orientation.md)
 - [Bootstrap Options](./docs/bootstrap_options.md)
 - [How it Works](./docs/how_it_works.md)
 - [v10 Migration](./docs/v10_migration.md)

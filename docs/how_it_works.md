@@ -1,6 +1,6 @@
 # How libobs-rs Works
 
-`libobs-rs` is a workspace of progressively safer layers over the OBS Studio C API. The v10 wrapper treats libobs as process-global, thread-affine native state rather than as ordinary Rust objects.
+`libobs-rs` is a workspace of progressively safer layers over the OBS Studio C API. The v10 wrapper treats libobs as process-global, thread-affine native state rather than as ordinary Rust objects. For a task-oriented map of the crates and modules, start with [API orientation](./api_orientation.md).
 
 ## Architecture
 
@@ -67,15 +67,23 @@ Source/output/encoder/service descriptors can query generic properties and defau
 
 `ObsCapabilities` also provides deterministic selectors: `select_video_encoder()`, `select_audio_encoder()`, and `select_output()`. They filter by codec, protocol, native capability flags, and deprecated/internal status. `prefer_hardware()` ranks likely hardware encoders first while preserving same-codec software fallbacks. Selection is metadata-only: no native encoder/output is created until the caller chooses a descriptor.
 
+For higher-level matching, `OutputCompatibilityRequest` describes required codecs, protocol, and output flags. `ObsCapabilities::best_output_plan()` resolves a concrete output/video/audio combination from the same metadata snapshot. If no graph works, `OutputCompatibilityReport` retains structured per-output rejection reasons plus missing-encoder diagnostics instead of collapsing the failure into “not found.”
+
 For complete outputs, `ObsContext::output_pipeline()` is the preferred high-level seam. `ObsOutputPipelineBuilder::validate()` checks runtime affinity, required/forbidden components, audio mixer bounds, encoder codecs, service protocol, and output flags before output creation or native mutation. `build()` creates the output only after validation and applies the complete `ObsOutputComposition`. The lower-level composition and individual attach/detach methods remain available for applications that intentionally manage wiring themselves. Shared output handles expose `current_composition()` plus `attached_video_encoder()`, `attached_audio_encoder()` / `attached_audio_encoders()`, and `attached_service()`.
 
 Property trees are copied recursively into owned `PropertyMetadata`/`PropertyKind` values and destroyed on the OBS actor before the result crosses the thread boundary. Lists, paths, numeric controls, groups, frame-rate metadata, and other common property kinds are represented directly. Unknown future property/category enum values are preserved as `Unknown(...)` rather than panicking.
+
+`SettingsSchema` turns that metadata into validated generic values, including scalar/list values, frame-rate options, editable-list arrays, font objects, colors, and checkable group state. Descriptor `settings_schema_for()` methods call `obs_properties_apply_settings` before snapshotting, so plugin property-modified callbacks can update enabled/visible state and list contents for the supplied settings. `settings_snapshot_for()` joins the dynamic schema with current and default typed values, giving GUI/CLI/remote-control code one form-ready view without plugin-specific Rust types. Property buttons remain action metadata because executing one requires the owning OBS object rather than an `ObsData` assignment.
 
 Discovery descriptors retain the owning runtime so later property/default queries and typed creation can verify runtime affinity before reaching FFI.
 
 ### Scene and scene-item composition
 
-`ObsSceneRef` exposes inherent `add`, `add_new_source`, `remove_item`, `items_for_source`, and `clear` operations, so normal callers do not need pointer-oriented extension names. `ObsSceneItemRef<T>` keeps the concrete source type and provides managed operations for position, scale, rotation, explicit edge cropping, visibility, locking, absolute/relative ordering, full transform updates, and fitting to the current canvas.
+`ObsSceneRef` exposes inherent `add`, `add_new_source`, `remove_item`, `items_for_source`, `items_in_order`, `create_group`, and `clear` operations, so normal callers do not need pointer-oriented extension names. `items_in_order()` reflects libobs's actual bottom-to-top order rather than registry grouping.
+
+`ObsSceneItemRef<T>` keeps the concrete source type and `SceneItemTrait` provides managed operations for position, scale, rotation, bounds/alignment, explicit edge cropping, scale filtering, blending, visibility, locking, absolute/relative ordering, and fitting to the current canvas. `transform_snapshot()` / `state_snapshot()` capture restorable render state through the same public seam used to mutate it.
+
+`ObsSceneGroupRef` wraps native OBS groups. Adding/removing individual children preserves the existing child item object, but native `obs_sceneitem_group_ungroup` creates replacement parent-scene items. The wrapper therefore returns `ObsUngroupedItem` mappings from previous `NativeObjectId` values to new managed `ObsSceneItemHandle` values and marks replaced handles removed; it never pretends a replaced pointer kept the same identity.
 
 Scene items take an explicit native reference when they are created. `remove_item(&item)` therefore detaches the item from the scene immediately while outstanding Rust clones remain valid managed references; the final handle releases the native reference exactly once. This avoids the older behavior where apparent removal could be delayed until every Rust clone happened to drop.
 
@@ -83,7 +91,7 @@ See [`examples/capability-discovery`](../examples/capability-discovery) for an e
 
 ### `libobs-simple`
 
-The convenience layer provides typed source and output builders on top of `libobs-wrapper`. It does not own a second runtime or lifetime model. Platform helpers return ordinary owned Rust values (`DisplayInfo`, `WindowInfo`, etc.) and reuse the wrapper's runtime affinity/native-handle rules.
+The convenience layer provides typed source and output builders on top of `libobs-wrapper`. It does not own a second runtime, lifetime model, or plugin-discovery implementation. The default recording path selects H.264 capability-first with hardware preference/software fallback. `simple_rtmp_stream()` similarly resolves an RTMP + H.264 + AAC graph, configures the standard RTMP service, and delegates graph validation to the wrapper pipeline. Platform helpers return ordinary owned Rust values (`DisplayInfo`, `WindowInfo`, etc.) and reuse the wrapper's runtime affinity/native-handle rules.
 
 ### `libobs-bootstrapper` and `cargo-obs-build`
 

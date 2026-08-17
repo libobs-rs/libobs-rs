@@ -36,7 +36,7 @@ Signal pointer fields are exposed only as `SignalObjectId`, which is an opaque c
 
 `ObsString::as_ptr()` is no longer part of the safe public API. Use `as_c_str()` for ordinary C-string interop.
 
-Legacy typed property access remains available, but generic discovery should prefer the owned `PropertyMetadata` model described below. Property-type mismatch is reported as `ObsError::PropertyTypeMismatch`.
+Legacy typed property access remains available, but generic discovery should prefer the owned `PropertyMetadata` model described below. New plugin-generic code can use `SettingsSchema` / `PropertyValue` for validated scalar mutation and descriptor `settings_snapshot_for()` methods for dynamic metadata plus current/default values. Property-modified callbacks are applied when building a schema for concrete settings. The older typed property APIs remain available for known-plugin workflows.
 
 ## Scene and display handles
 
@@ -112,6 +112,8 @@ let pipeline = obs
     .build()?;
 ```
 
+For multi-part output selection, `OutputCompatibilityRequest` + `ObsCapabilities::best_output_plan()` can now resolve output/video/audio choices together from codec/protocol/output-flag requirements. Failure returns `OutputCompatibilityReport` with per-output rejection reasons rather than requiring callers to reconstruct why three independent selectors did not intersect.
+
 Equivalent typed creation methods exist for filters and audio/video encoders. Passing a descriptor from another runtime, or using an encoder/source descriptor with the wrong category, returns a structured error before native creation.
 
 Unknown property/list/category values are represented with `Unknown(...)` variants for forward compatibility. Discovery results never expose temporary libobs strings or property pointers.
@@ -120,7 +122,11 @@ Unknown property/list/category values are represented with `Unknown(...)` varian
 
 Legacy `ObsContextEncoders::{best,available}_{video,audio}_encoder(s)` discovery is deprecated; use `ObsContext::capabilities()` with `select_video_encoder()` / `select_audio_encoder()` instead. Output attachment getters now use `attached_*` names; the old `get_current_*` methods remain deprecated compatibility shims.
 
-Scenes also expose inherent `add`, `remove_item`, `items_for_source`, and `clear` methods. `remove_item(&item)` now detaches immediately; a scene-item handle owns a native reference so cloned handles cannot become dangling merely because the item was removed from the scene. Position/scale shorthand plus rotation, explicit `ObsSceneItemCrop` edge cropping, visibility, locking, and ordering operations are available on `SceneItemTrait`.
+Scenes also expose inherent `add`, `remove_item`, `items_for_source`, `items_in_order`, `create_group`, and `clear` methods. `remove_item(&item)` now detaches immediately; a scene-item handle owns a native reference so cloned handles cannot become dangling merely because the item was removed from the scene. `SceneItemTrait` now covers transform snapshots, bounds/alignment, explicit crop, scale filter, blend method/mode, visibility, locking, and ordering.
+
+Native group semantics are intentionally visible: `ObsSceneGroupRef::ungroup()` returns replacement handles because libobs itself creates new parent-scene items while dissolving a group. Code that kept a child handle should use the returned `ObsUngroupedItem` mapping rather than assuming the old object ID still identifies the visible child.
+
+Output implementation storage (`configuration_lock`, encoder/service slots) and scene-item raw-handle/removal storage are now sealed details. Downstream implementations were never supported; public traits expose behavior rather than wrapper bookkeeping.
 
 See [`examples/capability-discovery`](../examples/capability-discovery) for a complete executable example.
 
