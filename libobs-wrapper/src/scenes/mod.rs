@@ -147,7 +147,7 @@ impl ObsSceneRef {
     }
 
     /// Gets the underlying source pointer of this scene, which is used internally when setting it to a channel.
-    pub fn get_scene_source_ptr(&self) -> Result<Sendable<*mut obs_source_t>, ObsError> {
+    pub(crate) fn get_scene_source_ptr(&self) -> Result<Sendable<*mut obs_source_t>, ObsError> {
         let scene_ptr = self.scene.clone();
         run_with_obs!(self.runtime, (scene_ptr), move || {
             unsafe {
@@ -157,8 +157,12 @@ impl ObsSceneRef {
         })
     }
 
-    pub fn as_ptr(&self) -> SmartPointerSendable<*mut obs_scene_t> {
+    pub(crate) fn as_ptr(&self) -> SmartPointerSendable<*mut obs_scene_t> {
         self.scene.clone()
+    }
+
+    pub fn object_id(&self) -> NativeObjectId {
+        self.scene.native_id()
     }
 
     pub fn name(&self) -> ObsString {

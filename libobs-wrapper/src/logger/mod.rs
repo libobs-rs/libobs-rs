@@ -27,23 +27,20 @@ pub(crate) unsafe extern "C" fn extern_log_callback<V>(
     args: *mut V,
     _params: *mut c_void,
 ) {
-    let level = ObsLogLevel::from_i32(log_level);
-    if level.is_none() {
+    let Some(level) = ObsLogLevel::from_i32(log_level) else {
         eprintln!("Couldn't find log level {}", log_level);
         return;
-    }
+    };
 
-    let level = level.unwrap();
-
-    let formatted = vsprintf(msg, args);
-    if formatted.is_err() {
+    let Ok(formatted) = vsprintf(msg, args) else {
         eprintln!("Failed to format log message");
         return;
-    }
+    };
 
-    let mut logger = LOGGER.lock().unwrap();
-
-    logger.log(level, formatted.unwrap());
+    let mut logger = LOGGER
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    logger.log(level, formatted);
 }
 
 pub trait ObsLogger
@@ -54,6 +51,8 @@ where
 }
 
 pub(crate) fn internal_log_global(level: ObsLogLevel, msg: String) {
-    let mut logger = LOGGER.lock().unwrap();
+    let mut logger = LOGGER
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     logger.log(level, msg);
 }

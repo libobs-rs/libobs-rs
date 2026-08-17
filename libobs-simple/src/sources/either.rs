@@ -37,11 +37,20 @@ where
     }
 }
 
-impl<A, B> ObsObjectTrait<*mut libobs::obs_source> for ObsEitherSource<A, B>
+impl<A, B> ObsObjectTrait for ObsEitherSource<A, B>
 where
     A: ObsSourceTrait + Clone + 'static,
     B: ObsSourceTrait + Clone + 'static,
 {
+    type Native = *mut libobs::obs_source;
+
+    fn __native_handle(&self) -> SmartPointerSendable<Self::Native> {
+        match self {
+            ObsEitherSource::Left(a) => a.__native_handle(),
+            ObsEitherSource::Right(b) => b.__native_handle(),
+        }
+    }
+
     fn runtime(&self) -> &libobs_wrapper::runtime::ObsRuntime {
         match self {
             ObsEitherSource::Left(a) => a.runtime(),
@@ -81,13 +90,6 @@ where
         match self {
             ObsEitherSource::Left(a) => a.update_settings(settings),
             ObsEitherSource::Right(b) => b.update_settings(settings),
-        }
-    }
-
-    fn as_ptr(&self) -> SmartPointerSendable<*mut libobs::obs_source> {
-        match self {
-            ObsEitherSource::Left(a) => a.as_ptr(),
-            ObsEitherSource::Right(b) => b.as_ptr(),
         }
     }
 }

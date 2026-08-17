@@ -24,13 +24,14 @@ const SIGNAL_QUEUE_CAPACITY: usize = 32;
 pub struct SignalObjectId(usize);
 
 impl SignalObjectId {
+    /// Construct an opaque callback identity from a callback-borrowed native pointer.
+    ///
+    /// # Safety
+    /// `ptr` must be a pointer supplied by libobs for the current callback. The returned
+    /// identity is never dereferenceable and does not extend the native object's lifetime.
     #[doc(hidden)]
-    pub fn from_raw<T>(ptr: *mut T) -> Self {
+    pub unsafe fn from_raw<T>(ptr: *mut T) -> Self {
         Self(ptr as usize)
-    }
-
-    pub fn as_usize(self) -> usize {
-        self.0
     }
 
     pub fn is_null(self) -> bool {
@@ -165,23 +166,34 @@ macro_rules! impl_signal_manager {
                         let [<$signal_name:snake _hub>] = std::sync::Arc::new(
                             $crate::signals::SignalHub::<[<__Private $signal_name:camel Type>]>::new()
                         );
-                        let ptr_for_signal = smart_ptr.clone();
-                        let hub_for_signal = [<$signal_name:snake _hub>].clone();
-                        $crate::run_with_obs!(runtime, (ptr_for_signal, hub_for_signal), move || {
-                            let handler = ($handler_getter)(ptr_for_signal);
-                            let signal = ObsString::new($signal_name);
-                            unsafe {
-                                // SAFETY: handler and signal are valid on the OBS actor;
-                                // the Arc allocation has a stable address until disconnect.
-                                libobs::signal_handler_connect(
-                                    handler,
-                                    *signal.as_ptr().get(),
-                                    Some([<$signal_name:snake _handler>]),
-                                    std::sync::Arc::as_ptr(&hub_for_signal) as *mut std::ffi::c_void,
-                                );
-                            }
-                        })?;
                     )*
+
+                    // Connect the complete manager in one actor command. A queue/shutdown
+                    // failure therefore happens before any callback userdata is registered,
+                    // eliminating partially-constructed managers with dangling C userdata.
+                    let connect_ptr = smart_ptr.clone();
+                    $(let [<$signal_name:snake _connect_hub>] = [<$signal_name:snake _hub>].clone();)*
+                    $crate::run_with_obs!(
+                        runtime,
+                        (connect_ptr, $([<$signal_name:snake _connect_hub>],)*),
+                        move || {
+                            $(
+                                let handler = ($handler_getter)(connect_ptr.clone());
+                                let signal = ObsString::new($signal_name);
+                                unsafe {
+                                    // SAFETY: handler and signal are valid on the OBS actor;
+                                    // each Arc allocation has a stable address until disconnect.
+                                    libobs::signal_handler_connect(
+                                        handler,
+                                        signal.as_c_str().as_ptr(),
+                                        Some([<$signal_name:snake _handler>]),
+                                        std::sync::Arc::as_ptr(&[<$signal_name:snake _connect_hub>])
+                                            as *mut std::ffi::c_void,
+                                    );
+                                }
+                            )*
+                        }
+                    )?;
 
                     Ok(Self {
                         pointer: smart_ptr,
@@ -219,7 +231,7 @@ macro_rules! impl_signal_manager {
                                     // the signal string and captured hub Arc remain alive for disconnect.
                                     libobs::signal_handler_disconnect(
                                         handler,
-                                        *signal.as_ptr().get(),
+                                        signal.as_c_str().as_ptr(),
                                         Some([<$signal_name:snake _handler>]),
                                         std::sync::Arc::as_ptr(&[<$signal_name:snake _hub>])
                                             as *mut std::ffi::c_void,
@@ -239,4 +251,37 @@ macro_rules! impl_signal_manager {
             }
         }
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn slow_signal_subscriber_drops_new_events_without_blocking() {
+        let hub = SignalHub::new();
+        let receiver = hub.subscribe();
+        for value in 0..(SIGNAL_QUEUE_CAPACITY + 5) {
+            hub.publish(value);
+        }
+
+        let drained: Vec<_> = (0..SIGNAL_QUEUE_CAPACITY)
+            .map(|_| receiver.try_recv().expect("queued signal"))
+            .collect();
+        assert_eq!(drained, (0..SIGNAL_QUEUE_CAPACITY).collect::<Vec<_>>());
+        assert!(matches!(receiver.try_recv(), Err(TryRecvError::Empty)));
+    }
+
+    #[test]
+    fn disconnected_signal_subscribers_are_removed() {
+        let hub = SignalHub::new();
+        let receiver = hub.subscribe();
+        drop(receiver);
+        hub.publish(1_u8);
+        let subscribers = hub
+            .subscribers
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        assert!(subscribers.is_empty());
+    }
 }

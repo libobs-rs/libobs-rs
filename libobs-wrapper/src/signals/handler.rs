@@ -28,7 +28,7 @@ macro_rules! __signals_impl_primitive_handler {
             let obs_str = $crate::utils::ObsString::new(stringify!($field_name));
             let success = libobs::calldata_get_string(
                 __internal_calldata,
-                *obs_str.as_ptr().get(),
+                obs_str.as_c_str().as_ptr(),
                 &mut $field_name as *const _ as _,
             );
             if !success || $field_name.is_null() {
@@ -54,7 +54,7 @@ macro_rules! __signals_impl_primitive_handler {
             let obs_str = $crate::utils::ObsString::new(stringify!($field_name));
             let success = libobs::calldata_get_data(
                 __internal_calldata,
-                *obs_str.as_ptr().get(),
+                obs_str.as_c_str().as_ptr(),
                 &mut $field_name as *const _ as *mut std::ffi::c_void,
                 std::mem::size_of::<$field_type>(),
             );
@@ -73,9 +73,11 @@ macro_rules! __signals_impl_primitive_handler {
             let raw = $crate::__signals_impl_primitive_handler!(__inner, $field_name, $field_type)(
                 __internal_calldata,
             )?;
-            Result::<_, $crate::utils::ObsError>::Ok(
-                $crate::signals::SignalObjectId::from_raw(raw),
-            )
+            // SAFETY: `raw` was copied from libobs callback calldata for this
+            // callback invocation. SignalObjectId stores only opaque identity.
+            Result::<_, $crate::utils::ObsError>::Ok(unsafe {
+                $crate::signals::SignalObjectId::from_raw(raw)
+            })
         }
     };
 

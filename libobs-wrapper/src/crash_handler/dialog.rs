@@ -27,23 +27,25 @@ impl ObsCrashHandler for DialogCrashHandler {
                 .title("OBS Crash Handler")
                 .show();
 
-        if let Err(e) = res {
-            eprintln!("Failed to show crash handler dialog: {e:?}");
-            return;
-        }
-
-        let res = res.unwrap();
+        let res = match res {
+            Ok(choice) => choice,
+            Err(e) => {
+                eprintln!("Failed to show crash handler dialog: {e:?}");
+                return;
+            }
+        };
         if res == Choice::No {
             return;
         }
 
         let clipboard = Clipboard::new();
-        if let Err(e) = clipboard {
-            eprintln!("Failed to create clipboard: {e:?}");
-            return;
-        }
-
-        let mut clipboard = clipboard.unwrap();
+        let mut clipboard = match clipboard {
+            Ok(clipboard) => clipboard,
+            Err(e) => {
+                eprintln!("Failed to create clipboard: {e:?}");
+                return;
+            }
+        };
         if let Err(e) = clipboard.set_text(message.clone()) {
             eprintln!("Failed to copy crash message to clipboard: {e:?}");
         }

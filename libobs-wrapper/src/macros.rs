@@ -37,12 +37,18 @@ macro_rules! impl_obs_drop {
         impl Drop for $struct_name {
             fn drop(&mut self) {
                 log::trace!("Dropping {}...", stringify!($struct_name));
-                $(let $var = $crate::unsafe_send::DeferredSend::new(self.$var.clone());)*
+                $(let $var = self.$var.clone();)*
+                // Move one Send tuple rather than accessing wrapper fields across the
+                // closure boundary. This defeats precise field capture of raw pointers
+                // without introducing a generic "make anything Send" adapter.
+                let cleanup_payload = ($($var,)*);
                 let runtime = self.runtime.clone();
                 let cleanup_runtime = runtime.clone();
                 runtime.defer_obs_cleanup(move || {
+                    // Keep the payload wrapped until it crosses the actor-call boundary so
+                    // Rust's precise closure capture cannot extract a raw pointer field.
                     let result = cleanup_runtime.run_with_obs_result(move || {
-                        $(let $var = $var.into_inner();)*
+                        let ($($var,)*) = cleanup_payload;
                         let inner_obs_drop = { $operation };
                         inner_obs_drop()
                     });
@@ -64,8 +70,6 @@ macro_rules! impl_eq_of_ptr {
     ($struct: ty) => {
         impl PartialEq for $struct {
             fn eq(&self, other: &Self) -> bool {
-                #[allow(unused_imports)]
-                use crate::data::object::ObsObjectTrait;
                 self.as_ptr().native_id() == other.as_ptr().native_id()
             }
         }
@@ -74,9 +78,27 @@ macro_rules! impl_eq_of_ptr {
 
         impl std::hash::Hash for $struct {
             fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-                #[allow(unused_imports)]
-                use crate::data::object::ObsObjectTrait;
                 self.as_ptr().native_id().hash(state);
+            }
+        }
+    };
+}
+
+/// Implements PartialEq, Eq and Hash for a managed OBS object using its opaque ID.
+macro_rules! impl_eq_of_obs_object {
+    ($struct: ty) => {
+        impl PartialEq for $struct {
+            fn eq(&self, other: &Self) -> bool {
+                crate::data::object::ObsObjectTrait::object_id(self)
+                    == crate::data::object::ObsObjectTrait::object_id(other)
+            }
+        }
+
+        impl Eq for $struct {}
+
+        impl std::hash::Hash for $struct {
+            fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+                crate::data::object::ObsObjectTrait::object_id(self).hash(state);
             }
         }
     };
@@ -135,5 +157,6 @@ macro_rules! trait_with_optional_send_sync {
 }
 
 pub(crate) use enum_from_number;
+pub(crate) use impl_eq_of_obs_object;
 pub(crate) use impl_eq_of_ptr;
 pub(crate) use trait_with_optional_send_sync;

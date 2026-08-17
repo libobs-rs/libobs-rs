@@ -68,12 +68,12 @@ pub(crate) unsafe extern "C" fn main_crash_handler<V>(
     args: *mut V,
     _params: *mut c_void,
 ) {
-    let res = vsprintf::vsprintf(format, args);
-    if res.is_err() {
+    let Ok(message) = vsprintf::vsprintf(format, args) else {
         eprintln!("Failed to format crash handler message");
         return;
-    }
-
-    let res = res.unwrap();
-    CRASH_HANDLER.lock().unwrap().handle_crash(res);
+    };
+    let handler = CRASH_HANDLER
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    handler.handle_crash(message);
 }

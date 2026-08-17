@@ -29,7 +29,10 @@ trait_with_optional_send_sync! {
 #[allow(private_bounds)]
 /// Trait representing an OBS object.
 /// A OBs object has an id, a name, `settings` and `hotkey_data`.
-pub trait ObsObjectTrait<K: NativePointer>: ObsObjectTraitPrivate {
+pub trait ObsObjectTrait: ObsObjectTraitPrivate {
+    #[doc(hidden)]
+    type Native: NativePointer;
+
     fn runtime(&self) -> &ObsRuntime;
     fn settings(&self) -> Result<ImmutableObsData, ObsError>;
     fn hotkey_data(&self) -> Result<ImmutableObsData, ObsError>;
@@ -42,7 +45,7 @@ pub trait ObsObjectTrait<K: NativePointer>: ObsObjectTraitPrivate {
 
     /// Updates the object with the current settings.
     /// For examples please take a look at the [Github repository](https://github.com/libobs-rs/libobs-rs/blob/main/examples).
-    fn create_updater<'a, T: ObsObjectUpdater<'a, K, ToUpdate = Self> + Send + Sync>(
+    fn create_updater<'a, T: ObsObjectUpdater<'a, ToUpdate = Self> + Send + Sync>(
         &'a mut self,
     ) -> Result<T, ObsError>
     where
@@ -52,7 +55,11 @@ pub trait ObsObjectTrait<K: NativePointer>: ObsObjectTraitPrivate {
         T::create_update(runtime, self)
     }
 
-    /// Creates a new reference to the drop guard.
-    /// This is useful if you are using the underlying raw pointer, make sure to store it along the drop guard
-    fn as_ptr(&self) -> SmartPointerSendable<K>;
+    /// Stable opaque identity for this native object. It is scoped to the owning runtime.
+    fn object_id(&self) -> crate::unsafe_send::NativeObjectId {
+        self.__native_handle().native_id()
+    }
+
+    #[doc(hidden)]
+    fn __native_handle(&self) -> SmartPointerSendable<Self::Native>;
 }

@@ -224,10 +224,22 @@ fn symlink_required_muxers() -> Result<(), ObsError> {
             }
         }
 
-        std::process::Command::new("ln")
-            .args(["-s", target.to_str().unwrap(), link_name.to_str().unwrap()])
+        if link_name.exists() {
+            continue;
+        }
+        let status = std::process::Command::new("ln")
+            .arg("-s")
+            .arg(&target)
+            .arg(&link_name)
             .status()
-            .expect("Failed to create symlink");
+            .map_err(|err| {
+                ObsError::PlatformInitError(format!("Failed to create symlink for {exe}: {err}"))
+            })?;
+        if !status.success() {
+            return Err(ObsError::PlatformInitError(format!(
+                "ln failed while creating symlink for {exe}: {status}"
+            )));
+        }
     }
 
     Ok(())

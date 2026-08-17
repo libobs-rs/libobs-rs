@@ -19,6 +19,7 @@ unsafe fn has_value(
         || libobs::obs_data_has_default_value(data_ptr.get_ptr(), key.as_ptr().0)
 }
 
+#[allow(private_bounds)]
 pub trait ObsDataGetters: ObsDataPointers {
     fn get_string<T: Into<ObsString> + Send + Sync>(
         &self,

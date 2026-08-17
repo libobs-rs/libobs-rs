@@ -16,39 +16,19 @@ use std::{
 
 use crate::utils::ObsDropGuard;
 
+static NEXT_RUNTIME_ID: AtomicU64 = AtomicU64::new(1);
+
 /// An opaque value transported to the OBS actor.
 ///
 /// The tuple field and constructor are crate-private, so downstream safe code cannot
 /// use this type to manufacture `Send`/`Sync` for arbitrary values.
 #[derive(Debug, Clone)]
-pub struct Sendable<T>(pub(crate) T);
-
-impl<T> Sendable<T> {
-    pub fn get(&self) -> &T {
-        &self.0
-    }
-}
+pub(crate) struct Sendable<T>(pub(crate) T);
 
 #[cfg(feature = "enable_runtime")]
 unsafe impl<T> Send for Sendable<T> {}
 #[cfg(feature = "enable_runtime")]
 unsafe impl<T> Sync for Sendable<T> {}
-
-/// Internal wrapper used only while transferring values into deferred cleanup.
-#[derive(Debug)]
-pub(crate) struct DeferredSend<T>(T);
-
-impl<T> DeferredSend<T> {
-    pub(crate) fn new(value: T) -> Self {
-        Self(value)
-    }
-
-    pub(crate) fn into_inner(self) -> T {
-        self.0
-    }
-}
-
-unsafe impl<T> Send for DeferredSend<T> {}
 
 mod native_pointer_sealed {
     pub trait Sealed {}
@@ -87,25 +67,50 @@ impl<T: 'static> NativePointer for *const T {
 
 /// Stable identity assigned by the runtime to one owned native OBS object.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct NativeObjectId(u64);
+pub struct NativeObjectId {
+    runtime: u64,
+    object: u64,
+}
 
 impl NativeObjectId {
-    pub fn as_u64(self) -> u64 {
-        self.0
+    /// Returns the per-runtime object sequence number.
+    ///
+    /// The complete `NativeObjectId` is the identity. This sequence value alone is
+    /// intentionally not globally unique and should only be used for diagnostics.
+    pub fn sequence(self) -> u64 {
+        self.object
     }
 }
 
 /// Registry owned by the OBS runtime. Native addresses live here rather than inside
 /// every public wrapper clone.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(crate) struct NativeObjectRegistry {
+    runtime_id: u64,
     next_id: AtomicU64,
     entries: RwLock<HashMap<NativeObjectId, usize>>,
 }
 
+impl Default for NativeObjectRegistry {
+    fn default() -> Self {
+        // libobs is process-global, so only one registry can be active at a time.
+        // A process-wide u64 epoch keeps copied/stale IDs from a previous context
+        // from ever comparing equal to a later native object in realistic operation.
+        let runtime_id = NEXT_RUNTIME_ID.fetch_add(1, Ordering::Relaxed);
+        Self {
+            runtime_id,
+            next_id: AtomicU64::new(1),
+            entries: RwLock::new(HashMap::new()),
+        }
+    }
+}
+
 impl NativeObjectRegistry {
     pub(crate) fn register<P: NativePointer>(&self, pointer: P) -> NativeObjectId {
-        let id = NativeObjectId(self.next_id.fetch_add(1, Ordering::Relaxed) + 1);
+        let id = NativeObjectId {
+            runtime: self.runtime_id,
+            object: self.next_id.fetch_add(1, Ordering::Relaxed),
+        };
         let mut entries = self
             .entries
             .write()
@@ -140,6 +145,10 @@ impl NativeObjectRegistry {
             .read()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .len()
+    }
+
+    pub(crate) fn runtime_id(&self) -> u64 {
+        self.runtime_id
     }
 }
 
@@ -192,8 +201,20 @@ impl<P: NativePointer> SmartPointerSendable<P> {
     /// Resolve the native pointer while this handle keeps its runtime registry entry
     /// alive. Dereferencing or retaining the pointer beyond the handle lifetime remains
     /// subject to the usual raw-pointer safety rules.
-    pub fn get_ptr(&self) -> P {
+    pub(crate) fn get_ptr(&self) -> P {
         self.lease.registry.resolve(self.lease.id)
+    }
+
+    /// Returns the underlying native pointer for advanced FFI integrations.
+    ///
+    /// # Safety
+    /// The pointer is only valid while this handle and its owning runtime remain alive.
+    /// The caller must obey libobs thread-affinity, ownership, and reference-count rules,
+    /// must not release a borrowed pointer, and must not retain callback-borrowed pointers
+    /// past their documented C lifetime.
+    #[doc(hidden)]
+    pub unsafe fn raw_ptr_unchecked(&self) -> P {
+        self.get_ptr()
     }
 }
 
@@ -252,5 +273,26 @@ mod tests {
 
         // The no-op test guard intentionally does not own the allocation.
         unsafe { drop(Box::from_raw(raw)) };
+    }
+
+    #[test]
+    fn native_ids_do_not_alias_across_runtime_registries() {
+        let first = Arc::new(NativeObjectRegistry::default());
+        let second = Arc::new(NativeObjectRegistry::default());
+        let a = Box::into_raw(Box::new(1_u8));
+        let b = Box::into_raw(Box::new(2_u8));
+        let first_handle = SmartPointerSendable::new(a, Arc::new(NoopGuard), first);
+        let second_handle = SmartPointerSendable::new(b, Arc::new(NoopGuard), second);
+
+        assert_ne!(first_handle.native_id(), second_handle.native_id());
+        assert_eq!(first_handle.native_id().sequence(), 1);
+        assert_eq!(second_handle.native_id().sequence(), 1);
+
+        drop(first_handle);
+        drop(second_handle);
+        unsafe {
+            drop(Box::from_raw(a));
+            drop(Box::from_raw(b));
+        }
     }
 }

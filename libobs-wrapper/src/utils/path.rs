@@ -35,9 +35,16 @@ impl ObsPath {
     /// If you want to create an absolute path, use
     /// `ObsPath::new`.
     pub fn from_relative(path_str: &str) -> Self {
-        let mut relative_path = env::current_exe().unwrap();
-
-        relative_path.pop();
+        let relative_path = match env::current_exe() {
+            Ok(mut path) => {
+                path.pop();
+                path
+            }
+            Err(err) => {
+                log::warn!("Could not resolve current executable for relative OBS path: {err}");
+                env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+            }
+        };
 
         let obs_path = Self {
             path: relative_path,

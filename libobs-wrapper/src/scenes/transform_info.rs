@@ -63,8 +63,8 @@ impl ObsTransformInfo {
         Vec2::from(self.0.bounds)
     }
 
-    pub fn get_bounds_type(&self) -> ObsBoundsType {
-        enum_from_number!(ObsBoundsType, self.0.bounds_type).unwrap()
+    pub fn get_bounds_type(&self) -> Option<ObsBoundsType> {
+        enum_from_number!(ObsBoundsType, self.0.bounds_type)
     }
 
     pub fn get_bounds_alignment(&self) -> u32 {
@@ -157,7 +157,8 @@ impl ObsTransformInfoBuilder {
         let current = scene_item.get_transform_info()?;
         let bounds_type = self
             .bounds_type
-            .unwrap_or_else(|| current.get_bounds_type());
+            .or_else(|| current.get_bounds_type())
+            .unwrap_or(ObsBoundsType::ScaleInner);
 
         let bounds_type = bounds_type as OsEnumType;
         Ok(ObsTransformInfo(obs_transform_info {

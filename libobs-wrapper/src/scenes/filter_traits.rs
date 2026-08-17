@@ -18,8 +18,9 @@ pub trait ObsSceneExtFilter {
 
 impl ObsSceneExtFilter for ObsSceneRef {
     fn add_scene_filter(&self, filter_ref: &ObsFilterRef) -> Result<(), ObsError> {
+        self.runtime.ensure_same_runtime(filter_ref.runtime())?;
         let source_ptr = self.get_scene_source_ptr()?;
-        let filter_ptr = filter_ref.as_ptr();
+        let filter_ptr = filter_ref.__native_handle();
 
         let mut guard = self.attached_filters.write().map_err(|_| {
             ObsError::LockError("Failed to acquire write lock on attached filters".into())
@@ -39,7 +40,7 @@ impl ObsSceneExtFilter for ObsSceneRef {
                 Arc::new(super::_NoOpDropGuard),
                 self.runtime.native_registry(),
             ),
-            filter_ref.as_ptr(),
+            filter_ref.__native_handle(),
             Some(self.as_ptr()),
             self.runtime.clone(),
         );
@@ -53,6 +54,7 @@ impl ObsSceneExtFilter for ObsSceneRef {
     }
 
     fn remove_scene_filter(&self, filter_ref: &ObsFilterRef) -> Result<(), ObsError> {
+        self.runtime.ensure_same_runtime(filter_ref.runtime())?;
         self.attached_filters
             .write()
             .map_err(|_| {
@@ -60,7 +62,8 @@ impl ObsSceneExtFilter for ObsSceneRef {
             })?
             .retain(|f| {
                 // Keep everything except this one filter
-                f.get_inner().as_ptr().native_id() != filter_ref.as_ptr().native_id()
+                f.get_inner().__native_handle().native_id()
+                    != filter_ref.__native_handle().native_id()
             });
         Ok(())
     }

@@ -201,7 +201,13 @@ impl ObsObjectTraitPrivate for ObsOutputRef {
     }
 }
 
-impl ObsObjectTrait<*mut libobs::obs_output> for ObsOutputRef {
+impl ObsObjectTrait for ObsOutputRef {
+    type Native = *mut libobs::obs_output;
+
+    fn __native_handle(&self) -> SmartPointerSendable<Self::Native> {
+        self.output.clone()
+    }
+
     fn name(&self) -> ObsString {
         self.name.clone()
     }
@@ -237,10 +243,6 @@ impl ObsObjectTrait<*mut libobs::obs_output> for ObsOutputRef {
         }
 
         inner_fn_update_settings!(self, libobs::obs_output_update, settings)
-    }
-
-    fn as_ptr(&self) -> SmartPointerSendable<*mut obs_output> {
-        self.output.clone()
     }
 }
 

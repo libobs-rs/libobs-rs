@@ -97,6 +97,18 @@ pub(crate) fn reserve_runtime_slot() -> Result<(), ObsError> {
     }
 }
 
+pub(crate) fn cancel_runtime_start() {
+    let (lock, changed) = &*OBS_RUNTIME_STATE;
+    let mut state = match lock.lock() {
+        Ok(state) => state,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    if *state == ObsRuntimeState::Starting {
+        *state = ObsRuntimeState::Idle;
+        changed.notify_all();
+    }
+}
+
 pub(crate) fn activate_runtime_slot(thread_id: ThreadId) -> Result<(), ObsError> {
     let (lock, _) = &*OBS_RUNTIME_STATE;
     let mut state = lock.lock().map_err(|_| ObsError::MutexFailure)?;
@@ -252,16 +264,20 @@ impl ObsContext {
             #[allow(ensure_obs_call_in_runtime)]
             // Safety: This is fine, it just returns a globally allocated variable
             let version = libobs::obs_get_version_string();
+            if version.is_null() {
+                return Err(ObsError::NullPointer(Some(
+                    "OBS version string".to_string(),
+                )));
+            }
             let version_cstr = CStr::from_ptr(version);
-
-            let version = version_cstr.to_string_lossy().into_owned();
-
-            Ok(version)
+            Ok(version_cstr.to_string_lossy().into_owned())
         }
     }
 
     pub fn log(&self, level: ObsLogLevel, msg: &str) {
-        let mut log = LOGGER.lock().unwrap();
+        let mut log = LOGGER
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         log.log(level, msg.to_string());
     }
 
@@ -336,24 +352,26 @@ impl ObsContext {
     ///
     /// # Safety
     /// This function is unsafe because it returns a raw pointer that must be handled carefully. Only use this pointer if you REALLY know what you are doing.
-    pub unsafe fn get_video_ptr(&self) -> Result<Sendable<*mut video_output>, ObsError> {
+    pub unsafe fn get_video_ptr(&self) -> Result<*mut video_output, ObsError> {
         // Removed safeguards here because ptr are not sendable and this OBS context should never be used across threads
         run_with_obs!(self.runtime, || unsafe {
             // Safety: This can be called as long as OBS hasn't shutdown, which it hasn't.
             Sendable(libobs::obs_get_video())
         })
+        .map(|ptr| ptr.0)
     }
 
     /// Returns a pointer to the audio output.
     ///
     /// # Safety
     /// This function is unsafe because it returns a raw pointer that must be handled carefully. Only use this pointer if you REALLY know what you are doing.
-    pub unsafe fn get_audio_ptr(&self) -> Result<Sendable<*mut audio_output>, ObsError> {
+    pub unsafe fn get_audio_ptr(&self) -> Result<*mut audio_output, ObsError> {
         // Removed safeguards here because ptr are not sendable and this OBS context should never be used across threads
         run_with_obs!(self.runtime, || unsafe {
             // Safety: This can be called as long as OBS hasn't shutdown, which it hasn't.
             Sendable(libobs::obs_get_audio())
         })
+        .map(|ptr| ptr.0)
     }
 
     pub fn data(&self) -> Result<ObsData, ObsError> {
@@ -492,8 +510,7 @@ impl ObsContext {
                             };
                             if let Err(e) = display_from_surface {
                                 log::warn!("Could not get display from surface handle on wayland. Make sure your wayland client is at least version 1.23. Error: {:?}", e);
-                            } else {
-                                let display_from_surface = display_from_surface.unwrap();
+                            } else if let Ok(display_from_surface) = display_from_surface {
                                 if display_from_surface != display.as_ptr() {
                                     return Err(ObsError::DisplayCreationError(
                             "Provided surface handle's Wayland display does not match the NixDisplay's Wayland display.".to_string(),

@@ -78,7 +78,7 @@ pub enum ObsProperty {
     ColorAlpha(ObsColorAlphaProperty),
 }
 
-pub trait ObsPropertyObjectPrivate {
+pub(crate) trait ObsPropertyObjectPrivate {
     fn get_properties_raw(
         &self,
     ) -> Result<SmartPointerSendable<*mut libobs::obs_properties_t>, ObsError>;
@@ -158,6 +158,7 @@ pub(crate) fn property_ptr_to_struct(
 }
 
 /// This trait is implemented for all obs objects that can have properties
+#[allow(private_bounds)]
 pub trait ObsPropertyObject: ObsPropertyObjectPrivate {
     /// Returns the properties of the object
     fn get_properties(&self) -> Result<HashMap<String, ObsProperty>, ObsError>;

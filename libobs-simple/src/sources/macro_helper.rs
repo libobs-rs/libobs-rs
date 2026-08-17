@@ -99,7 +99,7 @@ macro_rules! impl_custom_source {
         paste::paste! {
             libobs_wrapper::impl_signal_manager!(|ptr: libobs_wrapper::unsafe_send::SmartPointerSendable<*mut libobs::obs_source>| unsafe {
                     // Safety: This is a smart pointer, so it is fine
-                    libobs::obs_source_get_signal_handler(ptr.get_ptr())
+                    libobs::obs_source_get_signal_handler(ptr.raw_ptr_unchecked())
                 }, [<$new_source_struct Signals>] for *mut libobs::obs_source, [
             $($(#[$attr])* $signal_name: { $($inner_def)* }),*
             ]);
@@ -132,7 +132,7 @@ macro_rules! impl_custom_source {
                 fn new(source: ObsSourceRef) -> Result<Self, libobs_wrapper::utils::ObsError> {
                     use libobs_wrapper::data::object::ObsObjectTrait;
                     let source_specific_signals =
-                        $signal_struct_name::new(&source.as_ptr(), source.runtime().clone())?;
+                        $signal_struct_name::new(&source.__native_handle(), source.runtime().clone())?;
 
                     Ok(Self {
                         source,

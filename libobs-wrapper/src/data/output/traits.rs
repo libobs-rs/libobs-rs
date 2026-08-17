@@ -34,7 +34,9 @@ trait_with_optional_send_sync! {
 }
 
 #[allow(private_bounds)]
-pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsObjectTrait<*mut libobs::obs_output_t> {
+pub trait ObsOutputTrait:
+    ObsOutputTraitSealed + ObsObjectTrait<Native = *mut libobs::obs_output_t>
+{
     fn signals(&self) -> &Arc<ObsOutputSignals>;
 
     fn video_encoder(&self) -> &Arc<RwLock<Option<Arc<ObsVideoEncoder>>>>;
@@ -74,9 +76,10 @@ pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsObjectTrait<*mut libobs::obs
         if self.is_active()? {
             return Err(ObsError::OutputAlreadyActive);
         }
+        self.runtime().ensure_same_runtime(encoder.runtime())?;
 
-        let output_ptr = self.as_ptr();
-        let encoder_ptr = encoder.as_ptr();
+        let output_ptr = self.__native_handle();
+        let encoder_ptr = encoder.__native_handle();
         let runtime = self.runtime().clone();
 
         run_with_obs!(runtime, (output_ptr, encoder_ptr), move || {
@@ -121,8 +124,10 @@ pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsObjectTrait<*mut libobs::obs
             return Err(ObsError::OutputAlreadyActive);
         }
 
-        let encoder_ptr = encoder.as_ptr();
-        let output_ptr = self.as_ptr();
+        self.runtime().ensure_same_runtime(encoder.runtime())?;
+
+        let encoder_ptr = encoder.__native_handle();
+        let output_ptr = self.__native_handle();
         let runtime = self.runtime().clone();
         run_with_obs!(runtime, (output_ptr, encoder_ptr), move || {
             unsafe {
@@ -155,17 +160,17 @@ pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsObjectTrait<*mut libobs::obs
             .read()
             .map_err(|e| ObsError::LockError(e.to_string()))?
             .as_ref()
-            .map(|enc| enc.as_ptr());
+            .map(|enc| enc.__native_handle());
 
         let audio_encoder_pointers = self
             .audio_encoders()
             .read()
             .map_err(|e| ObsError::LockError(e.to_string()))?
             .values()
-            .map(|enc| enc.as_ptr())
+            .map(|enc| enc.__native_handle())
             .collect::<Vec<_>>();
 
-        let output_ptr = self.as_ptr();
+        let output_ptr = self.__native_handle();
         let runtime = self.runtime().clone();
         let res = run_with_obs!(
             runtime,
@@ -222,13 +227,16 @@ pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsObjectTrait<*mut libobs::obs
     }
 
     fn set_paused(&self, should_pause: bool) -> Result<(), ObsError> {
+        if self.runtime().is_actor_thread() {
+            return Err(ObsError::RuntimeReentrantBlocking);
+        }
         if !self.is_active()? {
             return Err(ObsError::OutputPauseFailure(Some(
                 "Output is not active.".to_string(),
             )));
         }
 
-        let output_ptr = self.as_ptr();
+        let output_ptr = self.__native_handle();
         let runtime = self.runtime().clone();
 
         let rx = if should_pause {
@@ -281,7 +289,10 @@ pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsObjectTrait<*mut libobs::obs
 
     /// Stops the output and waits for stop and deactivate signals.
     fn stop(&mut self) -> Result<(), ObsError> {
-        let output_ptr = self.as_ptr();
+        if self.runtime().is_actor_thread() {
+            return Err(ObsError::RuntimeReentrantBlocking);
+        }
+        let output_ptr = self.__native_handle();
         let runtime = self.runtime().clone();
         let output_active = run_with_obs!(runtime, (output_ptr), move || {
             unsafe {
@@ -323,7 +334,7 @@ pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsObjectTrait<*mut libobs::obs
 
     /// Returns whether the output is currently active.
     fn is_active(&self) -> Result<bool, ObsError> {
-        let output_ptr = self.as_ptr();
+        let output_ptr = self.__native_handle();
         let runtime = self.runtime().clone();
         let output_active = run_with_obs!(runtime, (output_ptr), move || {
             unsafe {

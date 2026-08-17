@@ -3,7 +3,6 @@
 use crate::{
     data::{object::ObsObjectTrait, ObsData},
     runtime::ObsRuntime,
-    unsafe_send::NativePointer,
     utils::{ObjectInfo, ObsError, ObsString},
 };
 
@@ -53,8 +52,8 @@ pub trait ObsObjectBuilder {
 /// A trait that is used to represent any struct than can update an OBS object.
 /// This can be for example a ´WindowSourceUpdater´, which updates the settings of the `WindowSourceRef`, when
 /// the `update` method is called.
-pub trait ObsObjectUpdater<'a, K: NativePointer> {
-    type ToUpdate: ObsObjectTrait<K>;
+pub trait ObsObjectUpdater<'a> {
+    type ToUpdate: ObsObjectTrait;
     fn create_update(
         runtime: ObsRuntime,
         updatable: &'a mut Self::ToUpdate,

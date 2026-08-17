@@ -50,13 +50,14 @@ impl SceneItemExtSceneTrait for ObsSceneRef {
         &mut self,
         source: T,
     ) -> Result<ObsSceneItemRef<T>, ObsError> {
+        self.runtime.ensure_same_runtime(source.runtime())?;
         let scene_item = ObsSceneItemRef::new(self, source.clone(), self.runtime.clone())?;
 
         let scene_clone = scene_item.clone();
         self.attached_scene_items
             .write()
             .map_err(|e| ObsError::LockError(format!("{:?}", e)))?
-            .entry(source.as_ptr().native_id())
+            .entry(source.__native_handle().native_id())
             .or_insert_with(|| (Arc::new(source), Vec::new()))
             .1
             .push(Arc::new(scene_clone));
@@ -95,7 +96,8 @@ impl SceneItemExtSceneTrait for ObsSceneRef {
         &mut self,
         source: T,
     ) -> Result<(), ObsError> {
-        let source_id = source.as_ptr().native_id();
+        self.runtime.ensure_same_runtime(source.runtime())?;
+        let source_id = source.__native_handle().native_id();
 
         self.attached_scene_items
             .write()
@@ -106,6 +108,7 @@ impl SceneItemExtSceneTrait for ObsSceneRef {
     }
 
     fn remove_scene_item<K: SceneItemTrait>(&mut self, scene_item: K) -> Result<(), ObsError> {
+        self.runtime.ensure_same_runtime(&scene_item.runtime())?;
         let mut guard = self
             .attached_scene_items
             .write()
@@ -114,7 +117,7 @@ impl SceneItemExtSceneTrait for ObsSceneRef {
         guard.retain(|_, (_, items)| {
             items.retain(|item| {
                 // Keep everything except this one scene item
-                item.as_ptr().native_id() != scene_item.as_ptr().native_id()
+                item.object_id() != scene_item.object_id()
             });
             // Remove the entry if no items remain
             !items.is_empty()
@@ -136,13 +139,14 @@ impl SceneItemExtSceneTrait for ObsSceneRef {
         &self,
         source: &T,
     ) -> Result<Vec<Arc<dyn SceneItemTrait>>, ObsError> {
+        self.runtime.ensure_same_runtime(source.runtime())?;
         let guard = self
             .attached_scene_items
             .read()
             .map_err(|e| ObsError::LockError(format!("{:?}", e)))?;
 
         let res = guard
-            .get(&source.as_ptr().native_id())
+            .get(&source.__native_handle().native_id())
             .map(|(_, scene_items)| scene_items.clone())
             .unwrap_or_default();
 

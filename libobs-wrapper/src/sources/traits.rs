@@ -1,6 +1,6 @@
 use crate::{
     data::object::ObsObjectTrait,
-    macros::impl_eq_of_ptr,
+    macros::impl_eq_of_obs_object,
     sources::{_ObsRemoveFilterOnDrop, ObsFilterRef, ObsSourceSignals},
     utils::ObsError,
 };
@@ -30,11 +30,11 @@ impl ObsFilterGuardPair {
 }
 
 #[allow(private_bounds)]
-pub trait ObsSourceTrait: ObsObjectTrait<*mut libobs::obs_source_t> {
+pub trait ObsSourceTrait: ObsObjectTrait<Native = *mut libobs::obs_source_t> {
     fn signals(&self) -> &Arc<ObsSourceSignals>;
 
     fn get_active_filters(&self) -> Result<Vec<ObsFilterGuardPair>, ObsError>;
     fn apply_filter(&self, filter: &ObsFilterRef) -> Result<(), ObsError>;
 }
 
-impl_eq_of_ptr!(dyn ObsSourceTrait);
+impl_eq_of_obs_object!(dyn ObsSourceTrait);

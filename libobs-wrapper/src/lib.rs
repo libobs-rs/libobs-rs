@@ -9,6 +9,7 @@
 
 #![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 
+pub mod capabilities;
 pub mod context;
 pub mod crash_handler;
 pub mod data;
@@ -20,6 +21,7 @@ pub mod runtime;
 pub mod scenes;
 pub mod signals;
 pub mod sources;
+#[doc(hidden)]
 pub mod unsafe_send;
 pub mod utils;
 

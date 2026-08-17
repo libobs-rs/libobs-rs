@@ -42,7 +42,7 @@ impl ImmutableObsData {
         })
     }
 
-    pub fn from_raw_pointer(data: Sendable<*mut obs_data_t>, runtime: ObsRuntime) -> Self {
+    pub(crate) fn from_raw_pointer(data: Sendable<*mut obs_data_t>, runtime: ObsRuntime) -> Self {
         ImmutableObsData {
             ptr: SmartPointerSendable::new(
                 data.0,
