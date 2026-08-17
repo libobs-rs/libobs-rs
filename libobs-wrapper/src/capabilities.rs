@@ -4,7 +4,12 @@
 //! from this module are owned Rust snapshots; no callback-borrowed or temporary libobs
 //! pointer escapes into safe downstream code.
 
-use std::{collections::HashSet, ffi::CStr, os::raw::c_char, ptr};
+use std::{
+    collections::{HashMap, HashSet},
+    ffi::CStr,
+    os::raw::{c_char, c_void},
+    ptr,
+};
 
 use crate::{
     context::ObsContext,
@@ -32,6 +37,33 @@ pub enum EncoderKind {
     Audio,
     Video,
     Unknown(i64),
+}
+
+bitflags::bitflags! {
+    /// Capability flags reported by libobs for an encoder type.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+    pub struct EncoderCapabilities: u32 {
+        const DEPRECATED = libobs::OBS_ENCODER_CAP_DEPRECATED;
+        const PASS_TEXTURE = libobs::OBS_ENCODER_CAP_PASS_TEXTURE;
+        const DYNAMIC_BITRATE = libobs::OBS_ENCODER_CAP_DYN_BITRATE;
+        const INTERNAL = libobs::OBS_ENCODER_CAP_INTERNAL;
+        const ROI = libobs::OBS_ENCODER_CAP_ROI;
+        const SCALING = libobs::OBS_ENCODER_CAP_SCALING;
+    }
+}
+
+bitflags::bitflags! {
+    /// Capability flags reported by libobs for an output type. Unknown future bits are retained.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+    pub struct OutputCapabilities: u32 {
+        const VIDEO = libobs::OBS_OUTPUT_VIDEO;
+        const AUDIO = libobs::OBS_OUTPUT_AUDIO;
+        const ENCODED = libobs::OBS_OUTPUT_ENCODED;
+        const SERVICE = libobs::OBS_OUTPUT_SERVICE;
+        const MULTI_TRACK_AUDIO = libobs::OBS_OUTPUT_MULTI_TRACK_AUDIO;
+        const CAN_PAUSE = libobs::OBS_OUTPUT_CAN_PAUSE;
+        const MULTI_TRACK_VIDEO = libobs::OBS_OUTPUT_MULTI_TRACK_VIDEO;
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -81,6 +113,8 @@ pub struct OutputTypeInfo {
     display_name: Option<String>,
     video_codecs: Vec<String>,
     audio_codecs: Vec<String>,
+    protocols: Vec<String>,
+    flags: u32,
     runtime: ObsRuntime,
 }
 
@@ -99,6 +133,34 @@ impl OutputTypeInfo {
 
     pub fn audio_codecs(&self) -> &[String] {
         &self.audio_codecs
+    }
+
+    pub fn protocols(&self) -> &[String] {
+        &self.protocols
+    }
+
+    pub fn flags(&self) -> u32 {
+        self.flags
+    }
+
+    pub(crate) fn runtime(&self) -> &ObsRuntime {
+        &self.runtime
+    }
+
+    pub fn capability_flags(&self) -> OutputCapabilities {
+        OutputCapabilities::from_bits_retain(self.flags)
+    }
+
+    pub fn supports_video_codec(&self, codec: &str) -> bool {
+        capability_list_supports(&self.video_codecs, codec)
+    }
+
+    pub fn supports_audio_codec(&self, codec: &str) -> bool {
+        capability_list_supports(&self.audio_codecs, codec)
+    }
+
+    pub fn supports_protocol(&self, protocol: &str) -> bool {
+        capability_list_supports(&self.protocols, protocol)
     }
 
     pub fn properties(&self) -> Result<Vec<PropertyMetadata>, ObsError> {
@@ -144,6 +206,39 @@ impl EncoderTypeInfo {
 
     pub fn capabilities(&self) -> u32 {
         self.capabilities
+    }
+
+    pub fn capability_flags(&self) -> EncoderCapabilities {
+        EncoderCapabilities::from_bits_retain(self.capabilities)
+    }
+
+    pub fn is_deprecated(&self) -> bool {
+        self.capability_flags()
+            .contains(EncoderCapabilities::DEPRECATED)
+    }
+
+    pub fn is_internal(&self) -> bool {
+        self.capability_flags()
+            .contains(EncoderCapabilities::INTERNAL)
+    }
+
+    /// Returns whether this encoder is likely hardware-accelerated.
+    ///
+    /// libobs does not expose one universal hardware bit. Passing textures is a strong
+    /// signal for zero-copy hardware encoders; the fallback ID check covers common
+    /// hardware plugins that do not advertise that capability. This is a preference
+    /// heuristic only and is never used to exclude software fallbacks.
+    pub fn is_likely_hardware_accelerated(&self) -> bool {
+        if self
+            .capability_flags()
+            .contains(EncoderCapabilities::PASS_TEXTURE)
+        {
+            return true;
+        }
+        let id = self.id.to_ascii_lowercase();
+        ["nvenc", "qsv", "amf", "vaapi", "videotoolbox"]
+            .iter()
+            .any(|marker| id.contains(marker))
     }
 
     pub fn properties(&self) -> Result<Vec<PropertyMetadata>, ObsError> {
@@ -240,6 +335,182 @@ impl ObsCapabilities {
     }
     pub fn modules(&self) -> &[ModuleInfo] {
         &self.modules
+    }
+
+    /// Starts a deterministic selection over discovered video encoders.
+    pub fn select_video_encoder(&self) -> EncoderSelector<'_> {
+        EncoderSelector::new(&self.encoders, EncoderKind::Video)
+    }
+
+    /// Starts a deterministic selection over discovered audio encoders.
+    pub fn select_audio_encoder(&self) -> EncoderSelector<'_> {
+        EncoderSelector::new(&self.encoders, EncoderKind::Audio)
+    }
+
+    /// Starts a deterministic selection over discovered outputs.
+    pub fn select_output(&self) -> OutputSelector<'_> {
+        OutputSelector::new(&self.outputs)
+    }
+}
+
+/// Filters and ranks discovered encoder descriptors without creating native objects.
+#[derive(Clone, Debug)]
+pub struct EncoderSelector<'a> {
+    encoders: &'a [EncoderTypeInfo],
+    kind: EncoderKind,
+    codec: Option<String>,
+    required_capabilities: EncoderCapabilities,
+    include_deprecated: bool,
+    include_internal: bool,
+    prefer_hardware: bool,
+}
+
+impl<'a> EncoderSelector<'a> {
+    fn new(encoders: &'a [EncoderTypeInfo], kind: EncoderKind) -> Self {
+        Self {
+            encoders,
+            kind,
+            codec: None,
+            required_capabilities: EncoderCapabilities::empty(),
+            include_deprecated: false,
+            include_internal: false,
+            prefer_hardware: false,
+        }
+    }
+
+    pub fn codec(mut self, codec: impl Into<String>) -> Self {
+        self.codec = Some(codec.into());
+        self
+    }
+
+    pub fn require_capabilities(mut self, capabilities: EncoderCapabilities) -> Self {
+        self.required_capabilities |= capabilities;
+        self
+    }
+
+    pub fn include_deprecated(mut self, include: bool) -> Self {
+        self.include_deprecated = include;
+        self
+    }
+
+    pub fn include_internal(mut self, include: bool) -> Self {
+        self.include_internal = include;
+        self
+    }
+
+    /// Prefer likely hardware-accelerated encoders while retaining software fallback.
+    pub fn prefer_hardware(mut self) -> Self {
+        self.prefer_hardware = true;
+        self
+    }
+
+    pub fn matches(&self) -> Vec<&'a EncoderTypeInfo> {
+        let mut candidates = self
+            .encoders
+            .iter()
+            .filter(|encoder| encoder.kind == self.kind)
+            .filter(|encoder| self.include_deprecated || !encoder.is_deprecated())
+            .filter(|encoder| self.include_internal || !encoder.is_internal())
+            .filter(|encoder| {
+                self.codec.as_ref().is_none_or(|codec| {
+                    encoder
+                        .codec
+                        .as_deref()
+                        .is_some_and(|actual| actual.eq_ignore_ascii_case(codec))
+                })
+            })
+            .filter(|encoder| {
+                encoder
+                    .capability_flags()
+                    .contains(self.required_capabilities)
+            })
+            .collect::<Vec<_>>();
+
+        candidates.sort_by(|a, b| {
+            let a_hardware = self.prefer_hardware && a.is_likely_hardware_accelerated();
+            let b_hardware = self.prefer_hardware && b.is_likely_hardware_accelerated();
+            b_hardware.cmp(&a_hardware).then_with(|| a.id.cmp(&b.id))
+        });
+        candidates
+    }
+
+    pub fn best_available(&self) -> Option<&'a EncoderTypeInfo> {
+        self.matches().into_iter().next()
+    }
+}
+
+/// Filters discovered outputs by their libobs-declared protocols, codecs, and flags.
+#[derive(Clone, Debug)]
+pub struct OutputSelector<'a> {
+    outputs: &'a [OutputTypeInfo],
+    protocol: Option<String>,
+    video_codec: Option<String>,
+    audio_codec: Option<String>,
+    required_capabilities: OutputCapabilities,
+}
+
+impl<'a> OutputSelector<'a> {
+    fn new(outputs: &'a [OutputTypeInfo]) -> Self {
+        Self {
+            outputs,
+            protocol: None,
+            video_codec: None,
+            audio_codec: None,
+            required_capabilities: OutputCapabilities::empty(),
+        }
+    }
+
+    pub fn protocol(mut self, protocol: impl Into<String>) -> Self {
+        self.protocol = Some(protocol.into());
+        self
+    }
+
+    pub fn video_codec(mut self, codec: impl Into<String>) -> Self {
+        self.video_codec = Some(codec.into());
+        self
+    }
+
+    pub fn audio_codec(mut self, codec: impl Into<String>) -> Self {
+        self.audio_codec = Some(codec.into());
+        self
+    }
+
+    pub fn require_capabilities(mut self, capabilities: OutputCapabilities) -> Self {
+        self.required_capabilities |= capabilities;
+        self
+    }
+
+    pub fn matches(&self) -> Vec<&'a OutputTypeInfo> {
+        let mut candidates = self
+            .outputs
+            .iter()
+            .filter(|output| {
+                self.protocol
+                    .as_deref()
+                    .is_none_or(|protocol| output.supports_protocol(protocol))
+            })
+            .filter(|output| {
+                self.video_codec
+                    .as_deref()
+                    .is_none_or(|codec| output.supports_video_codec(codec))
+            })
+            .filter(|output| {
+                self.audio_codec
+                    .as_deref()
+                    .is_none_or(|codec| output.supports_audio_codec(codec))
+            })
+            .filter(|output| {
+                output
+                    .capability_flags()
+                    .contains(self.required_capabilities)
+            })
+            .collect::<Vec<_>>();
+        candidates.sort_by(|a, b| a.id.cmp(&b.id));
+        candidates
+    }
+
+    pub fn best_available(&self) -> Option<&'a OutputTypeInfo> {
+        self.matches().into_iter().next()
     }
 }
 
@@ -748,10 +1019,38 @@ fn discover_outputs(runtime: &ObsRuntime) -> Result<Vec<OutputTypeInfo>, ObsErro
     let runtime_for_result = runtime.clone();
     // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
     let rows = run_with_obs!(runtime, move || unsafe {
-        enum_ids_on_actor(libobs::obs_enum_output_types)
-            .into_iter()
+        let ids = enum_ids_on_actor(libobs::obs_enum_output_types);
+        let mut protocols_by_output = HashMap::<String, Vec<String>>::new();
+        let mut protocol_index = 0;
+        loop {
+            let mut protocol = ptr::null_mut();
+            if !libobs::obs_enum_output_protocols(protocol_index, &mut protocol) {
+                break;
+            }
+            protocol_index += 1;
+            let Some(protocol_name) = cstr_owned(protocol.cast_const()) else {
+                continue;
+            };
+            let mut matching_ids = HashSet::<String>::new();
+            libobs::obs_enum_output_types_with_protocol(
+                protocol.cast_const(),
+                (&mut matching_ids as *mut HashSet<String>).cast::<c_void>(),
+                Some(collect_output_type_id),
+            );
+            for id in matching_ids {
+                protocols_by_output
+                    .entry(id)
+                    .or_default()
+                    .push(protocol_name.clone());
+            }
+        }
+
+        ids.into_iter()
             .map(|id| {
                 let c_id = ObsString::new(&id);
+                let mut protocols = protocols_by_output.remove(&id).unwrap_or_default();
+                protocols.sort();
+                protocols.dedup();
                 (
                     id,
                     cstr_owned(libobs::obs_output_get_display_name(c_id.as_ptr().0)),
@@ -761,6 +1060,8 @@ fn discover_outputs(runtime: &ObsRuntime) -> Result<Vec<OutputTypeInfo>, ObsErro
                     split_capability_string(libobs::obs_get_output_supported_audio_codecs(
                         c_id.as_ptr().0,
                     )),
+                    protocols,
+                    libobs::obs_get_output_flags(c_id.as_ptr().0),
                 )
             })
             .collect::<Vec<_>>()
@@ -768,15 +1069,30 @@ fn discover_outputs(runtime: &ObsRuntime) -> Result<Vec<OutputTypeInfo>, ObsErro
     Ok(rows
         .into_iter()
         .map(
-            |(id, display_name, video_codecs, audio_codecs)| OutputTypeInfo {
+            |(id, display_name, video_codecs, audio_codecs, protocols, flags)| OutputTypeInfo {
                 id,
                 display_name,
                 video_codecs,
                 audio_codecs,
+                protocols,
+                flags,
                 runtime: runtime_for_result.clone(),
             },
         )
         .collect())
+}
+
+/// # Safety
+/// `data` must point to a live `HashSet<String>` for this synchronous libobs enumeration
+/// and `id` must be null or a valid callback-borrowed C string for the duration of the call.
+unsafe extern "C" fn collect_output_type_id(data: *mut c_void, id: *const c_char) -> bool {
+    let Some(ids) = data.cast::<HashSet<String>>().as_mut() else {
+        return false;
+    };
+    if let Some(id) = cstr_owned(id) {
+        ids.insert(id);
+    }
+    true
 }
 
 fn discover_encoders(runtime: &ObsRuntime) -> Result<Vec<EncoderTypeInfo>, ObsError> {
@@ -1251,7 +1567,13 @@ unsafe fn cstr_owned(ptr: *const c_char) -> Option<String> {
 
 /// # Safety
 /// A non-null `ptr` must address a NUL-terminated C string that is readable for this call.
-unsafe fn split_capability_string(ptr: *const c_char) -> Vec<String> {
+fn capability_list_supports(values: &[String], requested: &str) -> bool {
+    values
+        .iter()
+        .any(|value| value.eq_ignore_ascii_case(requested))
+}
+
+fn split_capability_string(ptr: *const c_char) -> Vec<String> {
     // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
     let Some(value) = (unsafe { cstr_owned(ptr) }) else {
         return Vec::new();
@@ -1280,7 +1602,7 @@ mod tests {
     fn capability_string_parser_is_owned_and_tolerant() {
         let text = std::ffi::CString::new("h264, hevc;av1").unwrap();
         // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
-        let parsed = unsafe { split_capability_string(text.as_ptr()) };
+        let parsed = split_capability_string(text.as_ptr());
         assert_eq!(parsed, ["h264", "hevc", "av1"]);
     }
 }

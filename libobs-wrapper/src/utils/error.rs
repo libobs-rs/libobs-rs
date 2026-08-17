@@ -95,6 +95,37 @@ pub enum ObsError {
         actual: String,
     },
 
+    /// A required encoder/service was omitted from a high-level output pipeline.
+    OutputPipelineMissingComponent {
+        output_id: String,
+        component: String,
+    },
+
+    /// A component was supplied to an output that does not accept that component category.
+    OutputPipelineUnexpectedComponent {
+        output_id: String,
+        component: String,
+    },
+
+    /// An encoder codec is incompatible with the selected output type.
+    OutputPipelineUnsupportedCodec {
+        output_id: String,
+        media: String,
+        codec: String,
+    },
+
+    /// A service protocol is incompatible with the selected output type.
+    OutputPipelineUnsupportedProtocol {
+        output_id: String,
+        protocol: String,
+    },
+
+    /// An audio encoder mixer index exceeded libobs's supported mixer range.
+    AudioMixerIndexOutOfBounds {
+        index: usize,
+        max: usize,
+    },
+
     /// A blocking operation was requested recursively from the OBS actor thread.
     RuntimeReentrantBlocking,
 
@@ -149,6 +180,11 @@ impl Display for ObsError {
             ObsError::RuntimePanicked => write!(f, "The OBS actor panicked and has been shut down."),
             ObsError::RuntimeMismatch => write!(f, "The operation mixed objects owned by different OBS runtimes."),
             ObsError::CapabilityKindMismatch { id, expected, actual } => write!(f, "Discovered OBS type '{id}' has kind '{actual}', but this operation requires '{expected}'."),
+            ObsError::OutputPipelineMissingComponent { output_id, component } => write!(f, "Output pipeline for '{output_id}' requires {component}."),
+            ObsError::OutputPipelineUnexpectedComponent { output_id, component } => write!(f, "Output pipeline for '{output_id}' does not accept {component}."),
+            ObsError::OutputPipelineUnsupportedCodec { output_id, media, codec } => write!(f, "Output '{output_id}' does not support {media} codec '{codec}'."),
+            ObsError::OutputPipelineUnsupportedProtocol { output_id, protocol } => write!(f, "Output '{output_id}' does not support service protocol '{protocol}'."),
+            ObsError::AudioMixerIndexOutOfBounds { index, max } => write!(f, "Audio mixer index {index} is out of bounds (max {max})."),
             ObsError::RuntimeReentrantBlocking => write!(f, "A blocking operation cannot wait for an OBS callback from the OBS actor thread."),
             ObsError::InvalidDll => write!(f, "A dummy DLL was loaded instead of the real libobs DLL. Make sure you bootstrap properly with libobs-bootstrapper"),
             #[cfg(feature="enable_runtime")]
