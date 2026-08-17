@@ -1,8 +1,17 @@
-//! Runtime capability discovery for the loaded libobs installation.
+//! Runtime capability discovery and compatibility planning for the loaded OBS installation.
 //!
-//! All enumeration and property inspection is executed on the OBS actor. Values returned
-//! from this module are owned Rust snapshots; no callback-borrowed or temporary libobs
-//! pointer escapes into safe downstream code.
+//! All enumeration and property inspection is executed on the OBS actor. Values returned from this
+//! module are owned Rust snapshots; no callback-borrowed or temporary libobs pointer escapes into
+//! safe downstream code.
+//!
+//! Use [`ObsCapabilities`] when the application cares about capabilities such as “H.264”, “AAC” or
+//! “RTMP” rather than a specific plugin ID. Selectors expose candidate lists, while
+//! [`ObsCapabilities::best_output_plan`] resolves a complete output/encoder choice and reports
+//! structured rejection reasons when no combination works.
+//!
+//! Each source/output/encoder/service descriptor also exposes runtime property schemas and
+//! form-ready settings snapshots through [`crate::settings`]. This is the plugin-generic path for
+//! third-party OBS settings UIs.
 
 use std::{
     collections::{HashMap, HashSet},
@@ -19,6 +28,7 @@ use crate::{
     runtime::ObsRuntime,
     scenes::{ObsSceneItemRef, ObsSceneRef},
     services::ObsServiceRef,
+    settings::{SettingsSchema, SettingsSnapshot},
     sources::{ObsFilterRef, ObsSourceRef},
     unsafe_send::Sendable,
     utils::{ObjectInfo, ObsError, ObsString},
@@ -54,7 +64,7 @@ bitflags::bitflags! {
 
 bitflags::bitflags! {
     /// Capability flags reported by libobs for an output type. Unknown future bits are retained.
-    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
     pub struct OutputCapabilities: u32 {
         const VIDEO = libobs::OBS_OUTPUT_VIDEO;
         const AUDIO = libobs::OBS_OUTPUT_AUDIO;
@@ -94,6 +104,27 @@ impl SourceTypeInfo {
 
     pub fn properties(&self) -> Result<Vec<PropertyMetadata>, ObsError> {
         source_properties(&self.runtime, &self.id)
+    }
+
+    pub fn settings_schema(&self) -> Result<SettingsSchema, ObsError> {
+        Ok(SettingsSchema::new(self.properties()?))
+    }
+
+    /// Rebuilds the property tree after asking OBS to apply property-modified callbacks for
+    /// the supplied settings. This reflects dynamic visibility, enabled state, and list items.
+    pub fn settings_schema_for(&self, settings: &ObsData) -> Result<SettingsSchema, ObsError> {
+        self.runtime.ensure_same_runtime(settings.runtime())?;
+        Ok(SettingsSchema::new(source_properties_for_settings(
+            &self.runtime,
+            &self.id,
+            settings,
+        )?))
+    }
+
+    pub fn settings_snapshot_for(&self, settings: &ObsData) -> Result<SettingsSnapshot, ObsError> {
+        let schema = self.settings_schema_for(settings)?;
+        let defaults = self.default_settings()?;
+        schema.snapshot(settings, defaults.as_ref())
     }
 
     pub fn default_settings(&self) -> Result<Option<ImmutableObsData>, ObsError> {
@@ -165,6 +196,26 @@ impl OutputTypeInfo {
 
     pub fn properties(&self) -> Result<Vec<PropertyMetadata>, ObsError> {
         type_properties(&self.runtime, &self.id, libobs::obs_get_output_properties)
+    }
+
+    pub fn settings_schema(&self) -> Result<SettingsSchema, ObsError> {
+        Ok(SettingsSchema::new(self.properties()?))
+    }
+
+    pub fn settings_schema_for(&self, settings: &ObsData) -> Result<SettingsSchema, ObsError> {
+        self.runtime.ensure_same_runtime(settings.runtime())?;
+        Ok(SettingsSchema::new(type_properties_for_settings(
+            &self.runtime,
+            &self.id,
+            libobs::obs_get_output_properties,
+            settings,
+        )?))
+    }
+
+    pub fn settings_snapshot_for(&self, settings: &ObsData) -> Result<SettingsSnapshot, ObsError> {
+        let schema = self.settings_schema_for(settings)?;
+        let defaults = self.default_settings()?;
+        schema.snapshot(settings, defaults.as_ref())
     }
 
     pub fn default_settings(&self) -> Result<Option<ImmutableObsData>, ObsError> {
@@ -245,6 +296,26 @@ impl EncoderTypeInfo {
         type_properties(&self.runtime, &self.id, libobs::obs_get_encoder_properties)
     }
 
+    pub fn settings_schema(&self) -> Result<SettingsSchema, ObsError> {
+        Ok(SettingsSchema::new(self.properties()?))
+    }
+
+    pub fn settings_schema_for(&self, settings: &ObsData) -> Result<SettingsSchema, ObsError> {
+        self.runtime.ensure_same_runtime(settings.runtime())?;
+        Ok(SettingsSchema::new(type_properties_for_settings(
+            &self.runtime,
+            &self.id,
+            libobs::obs_get_encoder_properties,
+            settings,
+        )?))
+    }
+
+    pub fn settings_snapshot_for(&self, settings: &ObsData) -> Result<SettingsSnapshot, ObsError> {
+        let schema = self.settings_schema_for(settings)?;
+        let defaults = self.default_settings()?;
+        schema.snapshot(settings, defaults.as_ref())
+    }
+
     pub fn default_settings(&self) -> Result<Option<ImmutableObsData>, ObsError> {
         default_settings(&self.runtime, &self.id, libobs::obs_encoder_defaults)
     }
@@ -273,6 +344,26 @@ impl ServiceTypeInfo {
 
     pub fn properties(&self) -> Result<Vec<PropertyMetadata>, ObsError> {
         type_properties(&self.runtime, &self.id, libobs::obs_get_service_properties)
+    }
+
+    pub fn settings_schema(&self) -> Result<SettingsSchema, ObsError> {
+        Ok(SettingsSchema::new(self.properties()?))
+    }
+
+    pub fn settings_schema_for(&self, settings: &ObsData) -> Result<SettingsSchema, ObsError> {
+        self.runtime.ensure_same_runtime(settings.runtime())?;
+        Ok(SettingsSchema::new(type_properties_for_settings(
+            &self.runtime,
+            &self.id,
+            libobs::obs_get_service_properties,
+            settings,
+        )?))
+    }
+
+    pub fn settings_snapshot_for(&self, settings: &ObsData) -> Result<SettingsSnapshot, ObsError> {
+        let schema = self.settings_schema_for(settings)?;
+        let defaults = self.default_settings()?;
+        schema.snapshot(settings, defaults.as_ref())
     }
 
     pub fn default_settings(&self) -> Result<Option<ImmutableObsData>, ObsError> {
@@ -350,6 +441,254 @@ impl ObsCapabilities {
     /// Starts a deterministic selection over discovered outputs.
     pub fn select_output(&self) -> OutputSelector<'_> {
         OutputSelector::new(&self.outputs)
+    }
+
+    /// Resolves the best currently available output/encoder combination for a capability request.
+    /// The operation is pure over this owned capability snapshot and never creates native objects.
+    pub fn best_output_plan(
+        &self,
+        request: &OutputCompatibilityRequest,
+    ) -> Result<OutputCompatibilityPlan, OutputCompatibilityReport> {
+        let video_encoder = request.video_codec.as_deref().and_then(|codec| {
+            let selector = self.select_video_encoder().codec(codec);
+            if request.prefer_hardware_video {
+                selector.prefer_hardware().best_available().cloned()
+            } else {
+                selector.best_available().cloned()
+            }
+        });
+        let audio_encoder = request.audio_codec.as_deref().and_then(|codec| {
+            self.select_audio_encoder()
+                .codec(codec)
+                .best_available()
+                .cloned()
+        });
+
+        let mut issues = Vec::new();
+        if let Some(codec) = request.video_codec.as_deref() {
+            if video_encoder.is_none() {
+                issues.push(CompatibilityIssue::NoVideoEncoder {
+                    codec: codec.into(),
+                });
+            }
+        }
+        if let Some(codec) = request.audio_codec.as_deref() {
+            if audio_encoder.is_none() {
+                issues.push(CompatibilityIssue::NoAudioEncoder {
+                    codec: codec.into(),
+                });
+            }
+        }
+
+        let mut matching_outputs = Vec::new();
+        for output in &self.outputs {
+            let mut reasons = Vec::new();
+            if let Some(required_id) = request.output_id.as_deref() {
+                if output.id() != required_id {
+                    reasons.push(OutputRejectionReason::OutputId {
+                        required: required_id.into(),
+                    });
+                }
+            }
+            let flags = output.capability_flags();
+            if !flags.contains(request.required_output_capabilities) {
+                reasons.push(OutputRejectionReason::MissingCapabilities {
+                    required: request.required_output_capabilities,
+                    actual: flags,
+                });
+            }
+            if let Some(protocol) = request.protocol.as_deref() {
+                if !output.supports_protocol(protocol) {
+                    reasons.push(OutputRejectionReason::Protocol {
+                        required: protocol.into(),
+                    });
+                }
+            }
+            if let Some(codec) = request.video_codec.as_deref() {
+                if !output.supports_video_codec(codec) {
+                    reasons.push(OutputRejectionReason::VideoCodec {
+                        required: codec.into(),
+                    });
+                }
+            }
+            if let Some(codec) = request.audio_codec.as_deref() {
+                if !output.supports_audio_codec(codec) {
+                    reasons.push(OutputRejectionReason::AudioCodec {
+                        required: codec.into(),
+                    });
+                }
+            }
+            if reasons.is_empty() {
+                matching_outputs.push(output.clone());
+            } else {
+                issues.push(CompatibilityIssue::OutputRejected {
+                    output_id: output.id.clone(),
+                    reasons,
+                });
+            }
+        }
+
+        matching_outputs.sort_by(|a, b| a.id.cmp(&b.id));
+        let output = matching_outputs.into_iter().next();
+        if output.is_none() {
+            issues.push(CompatibilityIssue::NoCompatibleOutput);
+        }
+
+        let video_required = request.video_codec.is_some();
+        let audio_required = request.audio_codec.is_some();
+        match (
+            output,
+            video_required && video_encoder.is_none(),
+            audio_required && audio_encoder.is_none(),
+        ) {
+            (Some(output), false, false) => Ok(OutputCompatibilityPlan {
+                output,
+                video_encoder,
+                audio_encoder,
+                protocol: request.protocol.clone(),
+            }),
+            _ => Err(OutputCompatibilityReport { issues }),
+        }
+    }
+}
+
+/// Requirements used when resolving an output graph from runtime-discovered capabilities.
+#[derive(Clone, Debug, Default)]
+pub struct OutputCompatibilityRequest {
+    output_id: Option<String>,
+    protocol: Option<String>,
+    video_codec: Option<String>,
+    audio_codec: Option<String>,
+    required_output_capabilities: OutputCapabilities,
+    prefer_hardware_video: bool,
+}
+
+impl OutputCompatibilityRequest {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Restricts matching to one concrete output type while still validating codecs/flags.
+    pub fn output_id(mut self, output_id: impl Into<String>) -> Self {
+        self.output_id = Some(output_id.into());
+        self
+    }
+
+    pub fn protocol(mut self, protocol: impl Into<String>) -> Self {
+        self.protocol = Some(protocol.into());
+        self
+    }
+
+    pub fn video_codec(mut self, codec: impl Into<String>) -> Self {
+        self.video_codec = Some(codec.into());
+        self
+    }
+
+    pub fn audio_codec(mut self, codec: impl Into<String>) -> Self {
+        self.audio_codec = Some(codec.into());
+        self
+    }
+
+    pub fn require_output_capabilities(mut self, capabilities: OutputCapabilities) -> Self {
+        self.required_output_capabilities |= capabilities;
+        self
+    }
+
+    pub fn prefer_hardware_video(mut self, prefer: bool) -> Self {
+        self.prefer_hardware_video = prefer;
+        self
+    }
+}
+
+/// A concrete compatible choice of output and encoders from one capability snapshot.
+#[derive(Clone, Debug)]
+pub struct OutputCompatibilityPlan {
+    output: OutputTypeInfo,
+    video_encoder: Option<EncoderTypeInfo>,
+    audio_encoder: Option<EncoderTypeInfo>,
+    protocol: Option<String>,
+}
+
+impl OutputCompatibilityPlan {
+    pub fn output(&self) -> &OutputTypeInfo {
+        &self.output
+    }
+    pub fn video_encoder(&self) -> Option<&EncoderTypeInfo> {
+        self.video_encoder.as_ref()
+    }
+    pub fn audio_encoder(&self) -> Option<&EncoderTypeInfo> {
+        self.audio_encoder.as_ref()
+    }
+    pub fn protocol(&self) -> Option<&str> {
+        self.protocol.as_deref()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum OutputRejectionReason {
+    OutputId {
+        required: String,
+    },
+    MissingCapabilities {
+        required: OutputCapabilities,
+        actual: OutputCapabilities,
+    },
+    Protocol {
+        required: String,
+    },
+    VideoCodec {
+        required: String,
+    },
+    AudioCodec {
+        required: String,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CompatibilityIssue {
+    NoVideoEncoder {
+        codec: String,
+    },
+    NoAudioEncoder {
+        codec: String,
+    },
+    OutputRejected {
+        output_id: String,
+        reasons: Vec<OutputRejectionReason>,
+    },
+    NoCompatibleOutput,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OutputCompatibilityReport {
+    issues: Vec<CompatibilityIssue>,
+}
+
+impl OutputCompatibilityReport {
+    pub fn issues(&self) -> &[CompatibilityIssue] {
+        &self.issues
+    }
+
+    pub fn summary(&self) -> String {
+        let encoder_issues = self
+            .issues
+            .iter()
+            .filter(|issue| {
+                matches!(
+                    issue,
+                    CompatibilityIssue::NoVideoEncoder { .. }
+                        | CompatibilityIssue::NoAudioEncoder { .. }
+                )
+            })
+            .count();
+        let rejected_outputs = self
+            .issues
+            .iter()
+            .filter(|issue| matches!(issue, CompatibilityIssue::OutputRejected { .. }))
+            .count();
+        format!(
+            "no compatible OBS output graph: {encoder_issues} encoder requirement(s) unavailable, {rejected_outputs} output type(s) rejected"
+        )
     }
 }
 
@@ -1232,8 +1571,37 @@ fn type_properties(
     })
 }
 
+fn type_properties_for_settings(
+    runtime: &ObsRuntime,
+    id: &str,
+    getter: PropertiesFn,
+    settings: &ObsData,
+) -> Result<Vec<PropertyMetadata>, ObsError> {
+    runtime.ensure_same_runtime(settings.runtime())?;
+    let id = ObsString::new(id);
+    let settings_ptr = settings.as_ptr();
+    run_with_obs!(runtime, (id, settings_ptr), move || unsafe {
+        // Safety: the property tree and settings handle are live on the OBS actor. Applying
+        // settings invokes plugin property-modified callbacks synchronously before snapshotting.
+        let properties = getter(id.as_ptr().0);
+        if properties.is_null() {
+            return Vec::new();
+        }
+        libobs::obs_properties_apply_settings(properties, settings_ptr.get_ptr());
+        snapshot_owned_properties(properties)
+    })
+}
+
 fn source_properties(runtime: &ObsRuntime, id: &str) -> Result<Vec<PropertyMetadata>, ObsError> {
     type_properties(runtime, id, libobs::obs_get_source_properties)
+}
+
+fn source_properties_for_settings(
+    runtime: &ObsRuntime,
+    id: &str,
+    settings: &ObsData,
+) -> Result<Vec<PropertyMetadata>, ObsError> {
+    type_properties_for_settings(runtime, id, libobs::obs_get_source_properties, settings)
 }
 
 fn default_settings(
@@ -1568,9 +1936,10 @@ unsafe fn cstr_owned(ptr: *const c_char) -> Option<String> {
 /// # Safety
 /// A non-null `ptr` must address a NUL-terminated C string that is readable for this call.
 fn capability_list_supports(values: &[String], requested: &str) -> bool {
-    values
-        .iter()
-        .any(|value| value.eq_ignore_ascii_case(requested))
+    values.is_empty()
+        || values
+            .iter()
+            .any(|value| value.eq_ignore_ascii_case(requested))
 }
 
 fn split_capability_string(ptr: *const c_char) -> Vec<String> {

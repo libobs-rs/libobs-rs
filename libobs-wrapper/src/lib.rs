@@ -20,6 +20,7 @@ pub mod logger;
 pub mod runtime;
 pub mod scenes;
 pub mod services;
+pub mod settings;
 pub mod signals;
 pub mod sources;
 #[doc(hidden)]

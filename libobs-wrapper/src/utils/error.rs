@@ -74,6 +74,38 @@ pub enum ObsError {
         expected: String,
     },
 
+    /// A runtime-discovered settings schema does not contain the requested property.
+    PropertyNotFound {
+        name: String,
+    },
+
+    /// A generic property value has the wrong scalar category for the discovered property.
+    PropertyValueTypeMismatch {
+        name: String,
+        expected: String,
+        actual: String,
+    },
+
+    /// A numeric generic property value is outside the range reported by libobs.
+    PropertyValueOutOfRange {
+        name: String,
+        value: String,
+        min: String,
+        max: String,
+    },
+
+    /// A generic value is correctly typed but not accepted by the discovered property metadata.
+    PropertyValueNotAllowed {
+        name: String,
+        value: String,
+    },
+
+    /// The discovered property category is structural/action-oriented and cannot be represented by a scalar setting value.
+    PropertyValueUnsupported {
+        name: String,
+        property_type: String,
+    },
+
     /// Failed to send/receive on a runtime channel
     RuntimeChannelError(String),
 
@@ -118,6 +150,11 @@ pub enum ObsError {
     OutputPipelineUnsupportedProtocol {
         output_id: String,
         protocol: String,
+    },
+
+    /// No runtime-discovered output/encoder combination satisfies a high-level request.
+    NoCompatibleOutputGraph {
+        summary: String,
     },
 
     /// An audio encoder mixer index exceeded libobs's supported mixer range.
@@ -175,6 +212,11 @@ impl Display for ObsError {
             ObsError::SignalDataError(e) => write!(f, "Signal data error: {}", e),
             ObsError::EnumConversionError(e) => write!(f, "Enum conversion error: {}", e),
             ObsError::PropertyTypeMismatch { expected } => write!(f, "OBS property type mismatch; expected {expected}"),
+            ObsError::PropertyNotFound { name } => write!(f, "OBS settings schema has no property named '{name}'."),
+            ObsError::PropertyValueTypeMismatch { name, expected, actual } => write!(f, "OBS property '{name}' expects {expected}, but received {actual}."),
+            ObsError::PropertyValueOutOfRange { name, value, min, max } => write!(f, "OBS property '{name}' value {value} is outside the supported range {min}..={max}."),
+            ObsError::PropertyValueNotAllowed { name, value } => write!(f, "OBS property '{name}' does not accept value {value}."),
+            ObsError::PropertyValueUnsupported { name, property_type } => write!(f, "OBS property '{name}' ({property_type}) is not a scalar setting value."),
             ObsError::RuntimeChannelError(e) => write!(f, "Runtime channel error: {}", e),
             ObsError::RuntimeQueueFull { capacity } => write!(f, "OBS runtime queue is full (capacity: {}). Batch work or retry later.", capacity),
             ObsError::RuntimePanicked => write!(f, "The OBS actor panicked and has been shut down."),
@@ -184,6 +226,7 @@ impl Display for ObsError {
             ObsError::OutputPipelineUnexpectedComponent { output_id, component } => write!(f, "Output pipeline for '{output_id}' does not accept {component}."),
             ObsError::OutputPipelineUnsupportedCodec { output_id, media, codec } => write!(f, "Output '{output_id}' does not support {media} codec '{codec}'."),
             ObsError::OutputPipelineUnsupportedProtocol { output_id, protocol } => write!(f, "Output '{output_id}' does not support service protocol '{protocol}'."),
+            ObsError::NoCompatibleOutputGraph { summary } => write!(f, "No compatible OBS output graph: {summary}"),
             ObsError::AudioMixerIndexOutOfBounds { index, max } => write!(f, "Audio mixer index {index} is out of bounds (max {max})."),
             ObsError::RuntimeReentrantBlocking => write!(f, "A blocking operation cannot wait for an OBS callback from the OBS actor thread."),
             ObsError::InvalidDll => write!(f, "A dummy DLL was loaded instead of the real libobs DLL. Make sure you bootstrap properly with libobs-bootstrapper"),
