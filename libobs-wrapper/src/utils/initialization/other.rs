@@ -209,37 +209,44 @@ fn symlink_required_muxers() -> Result<(), ObsError> {
             ))
         })?;
 
-        if link_name.exists() {
-            let should_warn = link_name
-                .read_link()
-                .map(|existing_target| existing_target != target)
-                .unwrap_or(true);
+        match std::fs::symlink_metadata(&link_name) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                let existing_target = std::fs::read_link(&link_name).map_err(|err| {
+                    ObsError::PlatformInitError(format!(
+                        "Failed to inspect existing symlink for {exe}: {err}"
+                    ))
+                })?;
+                if existing_target == target {
+                    continue;
+                }
 
-            if should_warn {
+                // A stale helper symlink is safe to replace. This commonly happens when a
+                // disposable validation install moves between sandbox sessions.
+                std::fs::remove_file(&link_name).map_err(|err| {
+                    ObsError::PlatformInitError(format!(
+                        "Failed to remove stale symlink for {exe}: {err}"
+                    ))
+                })?;
+            }
+            Ok(_) => {
                 log::warn!(
-                    "[libobs-wrapper]: Symlink for '{}' already exists at '{}', skipping creation. If this is not intentional, please remove the existing file and restart the application.",
+                    "[libobs-wrapper]: '{}' already exists at '{}' and is not a symlink; leaving it untouched.",
                     exe,
                     link_name.display()
                 );
+                continue;
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) => {
+                return Err(ObsError::PlatformInitError(format!(
+                    "Failed to inspect helper path for {exe}: {err}"
+                )));
             }
         }
 
-        if link_name.exists() {
-            continue;
-        }
-        let status = std::process::Command::new("ln")
-            .arg("-s")
-            .arg(&target)
-            .arg(&link_name)
-            .status()
-            .map_err(|err| {
-                ObsError::PlatformInitError(format!("Failed to create symlink for {exe}: {err}"))
-            })?;
-        if !status.success() {
-            return Err(ObsError::PlatformInitError(format!(
-                "ln failed while creating symlink for {exe}: {status}"
-            )));
-        }
+        std::os::unix::fs::symlink(&target, &link_name).map_err(|err| {
+            ObsError::PlatformInitError(format!("Failed to create symlink for {exe}: {err}"))
+        })?;
     }
 
     Ok(())
