@@ -4,6 +4,7 @@ use crate::{
     utils::{ObsError, ObsString},
 };
 
+#[allow(private_bounds)]
 pub trait ObsDataSetters: ObsDataPointers {
     /// Sets a string in `obs_data` and stores it so
     /// it in `ObsData` does not get freed.

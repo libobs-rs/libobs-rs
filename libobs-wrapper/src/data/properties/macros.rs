@@ -10,10 +10,9 @@ macro_rules! unsafe_is_of_type_result {
             let p_type = crate::macros::enum_from_number!(ObsPropertyType, p_type);
 
             if p_type.is_none_or(|e| !matches!(e, ObsPropertyType::$prop_type)) {
-                Err(crate::utils::ObsError::InvocationError(format!(
-                    "Property is not of type {}",
-                    stringify!($prop_type)
-                )))
+                Err(crate::utils::ObsError::PropertyTypeMismatch {
+                    expected: stringify!($prop_type).to_string(),
+                })
             } else {
                 Ok(())
             }

@@ -60,8 +60,10 @@ impl<T: ObsSourceTrait + Clone> ObsSceneItemRef<T> {
         source: T,
         runtime: ObsRuntime,
     ) -> Result<Self, ObsError> {
+        runtime.ensure_same_runtime(source.runtime())?;
+        runtime.ensure_same_runtime(&scene.runtime)?;
         let scene_ptr = scene.as_ptr();
-        let source_ptr = source.as_ptr();
+        let source_ptr = source.__native_handle();
 
         let scene_item_ptr = run_with_obs!(runtime, (scene_ptr, source_ptr), move || {
             let ptr = unsafe {
@@ -98,14 +100,19 @@ impl<T: ObsSourceTrait + Clone> ObsSceneItemRef<T> {
 
 trait_with_optional_send_sync! {
     pub trait SceneItemTrait: Debug {
-        fn as_ptr(&self) -> &SmartPointerSendable<*mut obs_scene_item>;
+        #[doc(hidden)]
+        fn __native_handle(&self) -> &SmartPointerSendable<*mut obs_scene_item>;
         fn runtime(&self) -> ObsRuntime;
+
+        fn object_id(&self) -> crate::unsafe_send::NativeObjectId {
+            self.__native_handle().native_id()
+        }
         fn inner_source_dyn(&self) -> &dyn ObsSourceTrait;
         fn inner_source_dyn_mut(&mut self) -> &mut dyn ObsSourceTrait;
 
         /// Gets the transform info of the given source in this scene.
         fn get_transform_info(&self) -> Result<ObsTransformInfo, ObsError> {
-            let self_ptr = self.as_ptr();
+            let self_ptr = self.__native_handle().clone();
             let item_info = run_with_obs!(self.runtime(), (self_ptr), move || {
                 let mut item_info: obs_transform_info = unsafe {
                     // Safety: this is safe to call because we are filling a struct with zeros
@@ -124,7 +131,7 @@ trait_with_optional_send_sync! {
 
         /// Gets the position of the given source in this scene.
         fn get_source_position(&self) -> Result<Vec2, ObsError> {
-            let self_ptr = self.as_ptr();
+            let self_ptr = self.__native_handle().clone();
             let position = run_with_obs!(self.runtime(), (self_ptr), move || {
                 let main_pos = unsafe {
                     // Safety: this is safe to call because we a filling a struct with zeros
@@ -144,7 +151,7 @@ trait_with_optional_send_sync! {
 
         /// Gets the scale of the given source in this scene.
         fn get_source_scale(&self) -> Result<Vec2, ObsError> {
-            let self_ptr = self.as_ptr();
+            let self_ptr = self.__native_handle().clone();
             let scale = run_with_obs!(self.runtime(), (self_ptr), move || {
                 let main_pos = unsafe {
                     // Safety: this is safe to call because we a filling a struct with zeros
@@ -164,7 +171,7 @@ trait_with_optional_send_sync! {
 
         /// Sets the position of the given source in this scene.
         fn set_source_position(&self, position: Vec2) -> Result<(), ObsError> {
-            let self_ptr = self.as_ptr();
+            let self_ptr = self.__native_handle().clone();
 
             run_with_obs!(self.runtime(), (self_ptr), move || {
                 let position: libobs::vec2 = position.into();
@@ -182,7 +189,7 @@ trait_with_optional_send_sync! {
         /// The `ObsTransformInfo` can be built by using the `ObsTransformInfoBuilder`.
         fn set_transform_info(&self, info: &ObsTransformInfo) -> Result<(), ObsError> {
             let item_info = Sendable(info.clone());
-            let self_ptr = self.as_ptr();
+            let self_ptr = self.__native_handle().clone();
 
             run_with_obs!(self.runtime(), (self_ptr, item_info), move || {
                 let item_info = item_info.0 .0;
@@ -201,7 +208,7 @@ trait_with_optional_send_sync! {
         ///
         /// Returns `Ok(true)` if the source was resized, `Ok(false)` if the source was locked and not resized.
         fn fit_source_to_screen(&self) -> Result<bool, ObsError> {
-            let self_ptr = self.as_ptr();
+            let self_ptr = self.__native_handle().clone();
             let is_locked = {
                 run_with_obs!(self.runtime(), (self_ptr), move || unsafe {
                     // Safety: The pointer is valid as it is a safe pointer
@@ -253,7 +260,7 @@ trait_with_optional_send_sync! {
 
         /// Sets the scale of the given source in this scene.
         fn set_source_scale(&self, scale: Vec2) -> Result<(), ObsError> {
-            let self_ptr = self.as_ptr();
+            let self_ptr = self.__native_handle().clone();
 
             run_with_obs!(self.runtime(), (self_ptr), move || {
                 let scale: libobs::vec2 = scale.into();
@@ -270,7 +277,7 @@ trait_with_optional_send_sync! {
 }
 
 impl<T: ObsSourceTrait + Clone> SceneItemTrait for ObsSceneItemRef<T> {
-    fn as_ptr(&self) -> &SmartPointerSendable<*mut obs_scene_item> {
+    fn __native_handle(&self) -> &SmartPointerSendable<*mut obs_scene_item> {
         &self.scene_item_ptr
     }
 

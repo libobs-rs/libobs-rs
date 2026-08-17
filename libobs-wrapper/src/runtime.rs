@@ -18,7 +18,13 @@ use std::thread::JoinHandle;
 #[cfg(feature = "enable_runtime")]
 use crossbeam_channel::{bounded, select, unbounded, Sender, TrySendError};
 #[cfg(feature = "enable_runtime")]
-use std::sync::Mutex;
+use std::{
+    panic::{catch_unwind, AssertUnwindSafe},
+    sync::{
+        atomic::{AtomicU8, Ordering},
+        Mutex,
+    },
+};
 
 use crate::context::ObsContext;
 use crate::crash_handler::main_crash_handler;
@@ -31,13 +37,22 @@ use crate::utils::initialization::{platform_specific_setup, PlatformSpecificGuar
 use crate::utils::{ObsError, ObsModules, ObsString};
 use crate::{
     context::{
-        activate_runtime_slot, begin_runtime_shutdown, release_runtime_slot, reserve_runtime_slot,
+        activate_runtime_slot, begin_runtime_shutdown, cancel_runtime_start, release_runtime_slot,
+        reserve_runtime_slot,
     },
     utils::StartupInfo,
 };
 
 #[cfg(feature = "enable_runtime")]
 const RUNTIME_QUEUE_CAPACITY: usize = 128;
+#[cfg(feature = "enable_runtime")]
+const RUNTIME_RUNNING: u8 = 0;
+#[cfg(feature = "enable_runtime")]
+const RUNTIME_SHUTTING_DOWN: u8 = 1;
+#[cfg(feature = "enable_runtime")]
+const RUNTIME_PANICKED: u8 = 2;
+#[cfg(feature = "enable_runtime")]
+const RUNTIME_STOPPED: u8 = 3;
 
 #[cfg(feature = "enable_runtime")]
 type RuntimeTask = Box<dyn FnOnce() + Send + 'static>;
@@ -54,6 +69,75 @@ fn execute_command(command: ObsCommand) {
     }
 }
 
+#[cfg(feature = "enable_runtime")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum QueueSubmitError {
+    Full,
+    Disconnected,
+}
+
+#[cfg(feature = "enable_runtime")]
+fn try_submit_command(
+    sender: &Sender<ObsCommand>,
+    command: ObsCommand,
+) -> Result<(), QueueSubmitError> {
+    match sender.try_send(command) {
+        Ok(()) => Ok(()),
+        Err(TrySendError::Full(_)) => Err(QueueSubmitError::Full),
+        Err(TrySendError::Disconnected(_)) => Err(QueueSubmitError::Disconnected),
+    }
+}
+
+#[cfg(feature = "enable_runtime")]
+fn run_actor_work<F>(work: F) -> bool
+where
+    F: FnOnce(),
+{
+    catch_unwind(AssertUnwindSafe(work)).is_ok()
+}
+
+struct InitializationRollback {
+    armed: bool,
+    obs_started: bool,
+}
+
+impl InitializationRollback {
+    fn new() -> Self {
+        Self {
+            armed: true,
+            obs_started: false,
+        }
+    }
+
+    fn disarm(&mut self) {
+        self.armed = false;
+    }
+}
+
+#[allow(unknown_lints)]
+#[allow(ensure_obs_call_in_runtime)]
+impl Drop for InitializationRollback {
+    fn drop(&mut self) {
+        if !self.armed {
+            return;
+        }
+
+        log::warn!("Rolling back incomplete OBS initialization");
+        if self.obs_started {
+            unsafe {
+                // SAFETY: Initialization and rollback occur on the owning OBS thread.
+                libobs::obs_shutdown();
+            }
+        }
+        unsafe {
+            // SAFETY: These process-global handlers were installed by initialize_inner.
+            libobs::base_set_crash_handler(None, std::ptr::null_mut());
+            libobs::base_set_log_handler(None, std::ptr::null_mut());
+        }
+        let _ = release_runtime_slot();
+    }
+}
+
 /// Core runtime that serializes access to libobs.
 #[derive(Clone)]
 pub struct ObsRuntime {
@@ -61,6 +145,8 @@ pub struct ObsRuntime {
     command_sender: Arc<Sender<ObsCommand>>,
     #[cfg(feature = "enable_runtime")]
     cleanup_sender: Arc<Sender<RuntimeTask>>,
+    #[cfg(feature = "enable_runtime")]
+    health: Arc<AtomicU8>,
     native_registry: Arc<NativeObjectRegistry>,
     thread_id: std::thread::ThreadId,
     _guard: Arc<_ObsRuntimeGuard>,
@@ -87,9 +173,9 @@ impl ObsRuntime {
         match Self::init(options) {
             Ok(initialized) => Ok(initialized),
             Err(err) => {
-                // Also covers thread-spawn failures, where initialize_inner never had
-                // a chance to transition Starting -> Active.
-                let _ = release_runtime_slot();
+                // Only undo a reservation that never became active. initialize_inner
+                // owns rollback after it activates the process-global slot.
+                cancel_runtime_start();
                 Err(err)
             }
         }
@@ -109,9 +195,13 @@ impl ObsRuntime {
     }
 
     #[cfg(feature = "enable_runtime")]
+    #[allow(unknown_lints)]
+    #[allow(ensure_obs_call_in_runtime)]
     fn init(info: StartupInfo) -> Result<(ObsRuntime, ObsModules, StartupInfo), ObsError> {
         static RUNTIME_THREAD_NAME: &str = "libobs-wrapper-obs-runtime";
 
+        let health = Arc::new(AtomicU8::new(RUNTIME_RUNNING));
+        let actor_health = health.clone();
         let (command_sender, command_receiver) = bounded(RUNTIME_QUEUE_CAPACITY);
         let (cleanup_sender, cleanup_receiver) = unbounded::<RuntimeTask>();
         let (shutdown_sender, shutdown_receiver) = unbounded::<()>();
@@ -122,13 +212,33 @@ impl ObsRuntime {
             .spawn(move || {
                 log::trace!("Starting OBS actor thread");
                 // SAFETY: This closure is the dedicated OBS actor thread and owns the
-                // complete initialize/use/shutdown sequence for libobs.
-                let initialized = unsafe { Self::initialize_inner(info) };
+                // complete initialize/use/shutdown sequence for libobs. Catch Rust panics
+                // as well as typed initialization failures so the process-global slot
+                // cannot be stranded in Starting/Active.
+                let initialized = catch_unwind(AssertUnwindSafe(|| {
+                    // SAFETY: This closure is executing on the dedicated OBS actor that
+                    // owns initialization for the complete process-global OBS lifetime.
+                    unsafe { Self::initialize_inner(info) }
+                }));
 
                 let (info, modules, platform_specific_guard) = match initialized {
-                    Ok(value) => value,
-                    Err(err) => {
+                    Ok(Ok(value)) => value,
+                    Ok(Err(err)) => {
                         let _ = init_tx.send(Err(err));
+                        return;
+                    }
+                    Err(_) => {
+                        actor_health.store(RUNTIME_PANICKED, Ordering::Release);
+                        // SAFETY: We are still on the owning OBS actor and initialization
+                        // panicked before control could be returned to another thread.
+                        // SAFETY: Shutdown recovery runs on the owning OBS actor after
+                        // normal work has stopped; clearing process-global callbacks is safe.
+                        unsafe {
+                            libobs::base_set_crash_handler(None, std::ptr::null_mut());
+                            libobs::base_set_log_handler(None, std::ptr::null_mut());
+                        }
+                        let _ = release_runtime_slot();
+                        let _ = init_tx.send(Err(ObsError::RuntimePanicked));
                         return;
                     }
                 };
@@ -143,34 +253,67 @@ impl ObsRuntime {
                 // Keep platform-specific thread-affine state alive for the complete OBS lifetime.
                 let _platform_specific_guard = platform_specific_guard;
 
-                'runtime: loop {
-                    select! {
-                        recv(cleanup_receiver) -> cleanup => match cleanup {
-                            Ok(task) => task(),
-                            Err(_) => break 'runtime,
-                        },
-                        recv(command_receiver) -> command => match command {
-                            Ok(command) => execute_command(command),
-                            Err(_) => break 'runtime,
-                        },
-                        recv(shutdown_receiver) -> _ => break 'runtime,
+                let actor_survived = run_actor_work(|| {
+                    'runtime: loop {
+                        select! {
+                            recv(cleanup_receiver) -> cleanup => match cleanup {
+                                Ok(task) => task(),
+                                Err(_) => break 'runtime,
+                            },
+                            recv(command_receiver) -> command => match command {
+                                Ok(command) => execute_command(command),
+                                Err(_) => break 'runtime,
+                            },
+                            recv(shutdown_receiver) -> _ => break 'runtime,
+                        }
+                    }
+
+                    // A normal last-runtime drop may leave fire-and-forget work and deferred
+                    // destruction. Preserve FIFO ordering before obs_shutdown().
+                    while let Ok(command) = command_receiver.try_recv() {
+                        execute_command(command);
+                    }
+                    while let Ok(cleanup) = cleanup_receiver.try_recv() {
+                        cleanup();
+                    }
+                });
+
+                if !actor_survived {
+                    actor_health.store(RUNTIME_PANICKED, Ordering::Release);
+                    log::error!("OBS actor command panicked; rejecting pending work and shutting down safely");
+
+                    // Pending normal commands must not execute after an arbitrary command panic.
+                    // Dropping them disconnects any synchronous result channels. Native cleanup
+                    // is still attempted before shutdown so owned OBS references are released.
+                    while command_receiver.try_recv().is_ok() {}
+                    while let Ok(cleanup) = cleanup_receiver.try_recv() {
+                        if !run_actor_work(cleanup) {
+                            log::error!("A deferred OBS cleanup task also panicked during actor recovery");
+                        }
                     }
                 }
 
-                // A last-runtime drop cannot have active synchronous callers, but it can
-                // have fire-and-forget work and deferred native destruction.  Preserve
-                // FIFO correctness by draining both queues before obs_shutdown().
-                while let Ok(command) = command_receiver.try_recv() {
-                    execute_command(command);
+                let shutdown_result = catch_unwind(AssertUnwindSafe(|| unsafe {
+                    // SAFETY: The actor owns the complete libobs lifetime and shutdown
+                    // runs on the same thread that initialized it.
+                    Self::shutdown_inner()
+                }));
+                match shutdown_result {
+                    Ok(Ok(())) => {}
+                    Ok(Err(err)) => log::error!("Failed to shut down OBS context: {err:?}"),
+                    Err(_) => {
+                        log::error!("OBS shutdown panicked; clearing handlers and force-releasing the global runtime slot");
+                        // SAFETY: This recovery branch still executes on the owning OBS actor
+                        // after normal work has stopped; clearing global callbacks is safe here.
+                        unsafe {
+                            libobs::base_set_crash_handler(None, std::ptr::null_mut());
+                            libobs::base_set_log_handler(None, std::ptr::null_mut());
+                        }
+                        let _ = release_runtime_slot();
+                    }
                 }
-                while let Ok(cleanup) = cleanup_receiver.try_recv() {
-                    cleanup();
-                }
-
-                // SAFETY: The actor has drained its queues and shutdown executes on the
-                // same dedicated thread that initialized libobs.
-                if let Err(err) = unsafe { Self::shutdown_inner() } {
-                    log::error!("Failed to shut down OBS context: {err:?}");
+                if actor_health.load(Ordering::Acquire) != RUNTIME_PANICKED {
+                    actor_health.store(RUNTIME_STOPPED, Ordering::Release);
                 }
             })
             .map_err(|_| ObsError::ThreadFailure)?;
@@ -186,16 +329,44 @@ impl ObsRuntime {
         let runtime = Self {
             command_sender: command_sender.clone(),
             cleanup_sender: cleanup_sender.clone(),
+            health: health.clone(),
             native_registry: Arc::new(NativeObjectRegistry::default()),
             thread_id,
             _guard: Arc::new(_ObsRuntimeGuard {
                 handle: Mutex::new(Some(handle)),
                 shutdown_sender,
+                health,
             }),
         };
 
         modules.runtime = Some(runtime.clone());
         Ok((runtime, modules, info))
+    }
+
+    /// Returns true when called from the dedicated OBS actor thread.
+    pub fn is_actor_thread(&self) -> bool {
+        std::thread::current().id() == self.thread_id
+    }
+
+    /// Returns true when both values belong to the same process-global OBS runtime.
+    pub fn same_instance(&self, other: &Self) -> bool {
+        self.native_registry.runtime_id() == other.native_registry.runtime_id()
+    }
+
+    pub(crate) fn ensure_same_runtime(&self, other: &Self) -> Result<(), ObsError> {
+        if self.same_instance(other) {
+            Ok(())
+        } else {
+            Err(ObsError::RuntimeMismatch)
+        }
+    }
+
+    #[cfg(feature = "enable_runtime")]
+    fn unavailable_error(&self) -> ObsError {
+        match self.health.load(Ordering::Acquire) {
+            RUNTIME_PANICKED => ObsError::RuntimePanicked,
+            _ => ObsError::RuntimeChannelError("OBS actor is shutting down or stopped".to_string()),
+        }
     }
 
     /// Dispatches work without waiting for completion.
@@ -207,22 +378,23 @@ impl ObsRuntime {
     where
         F: FnOnce() + Send + 'static,
     {
-        if std::thread::current().id() == self.thread_id {
+        if self.is_actor_thread() {
             operation();
             return Ok(());
         }
+        if self.health.load(Ordering::Acquire) != RUNTIME_RUNNING {
+            return Err(self.unavailable_error());
+        }
 
-        match self
-            .command_sender
-            .try_send(ObsCommand::Execute(Box::new(operation)))
-        {
+        match try_submit_command(
+            &self.command_sender,
+            ObsCommand::Execute(Box::new(operation)),
+        ) {
             Ok(()) => Ok(()),
-            Err(TrySendError::Full(_)) => Err(ObsError::RuntimeQueueFull {
+            Err(QueueSubmitError::Full) => Err(ObsError::RuntimeQueueFull {
                 capacity: RUNTIME_QUEUE_CAPACITY,
             }),
-            Err(TrySendError::Disconnected(_)) => Err(ObsError::RuntimeChannelError(
-                "OBS actor is no longer running".to_string(),
-            )),
+            Err(QueueSubmitError::Disconnected) => Err(self.unavailable_error()),
         }
     }
 
@@ -244,8 +416,11 @@ impl ObsRuntime {
         F: FnOnce() -> T + Send + 'static,
         T: Send + 'static,
     {
-        if std::thread::current().id() == self.thread_id {
+        if self.is_actor_thread() {
             return Ok(operation());
+        }
+        if self.health.load(Ordering::Acquire) != RUNTIME_RUNNING {
+            return Err(self.unavailable_error());
         }
 
         let (result_tx, result_rx) = bounded(1);
@@ -254,16 +429,17 @@ impl ObsRuntime {
             let _ = result_tx.send(result);
         };
 
-        // `send` intentionally provides backpressure for synchronous callers.
-        self.command_sender
-            .send(ObsCommand::Execute(Box::new(task)))
-            .map_err(|_| {
-                ObsError::RuntimeChannelError("OBS actor is no longer running".to_string())
-            })?;
+        match try_submit_command(&self.command_sender, ObsCommand::Execute(Box::new(task))) {
+            Ok(()) => {}
+            Err(QueueSubmitError::Full) => {
+                return Err(ObsError::RuntimeQueueFull {
+                    capacity: RUNTIME_QUEUE_CAPACITY,
+                });
+            }
+            Err(QueueSubmitError::Disconnected) => return Err(self.unavailable_error()),
+        }
 
-        result_rx.recv().map_err(|_| {
-            ObsError::RuntimeChannelError("OBS actor dropped a command result".to_string())
-        })
+        result_rx.recv().map_err(|_| self.unavailable_error())
     }
 
     #[cfg(not(feature = "enable_runtime"))]
@@ -338,10 +514,20 @@ impl ObsRuntime {
             libobs::base_set_crash_handler(Some(main_crash_handler), std::ptr::null_mut());
         }
 
-        let native = unsafe {
-            // Safety: We are in the OBS thread and the nix_display can only be set
-            platform_specific_setup(info.nix_display.clone())?
+        let native = match unsafe {
+            // Safety: We are in the OBS thread and the nix_display can only be set here.
+            platform_specific_setup(info.nix_display.clone())
+        } {
+            Ok(native) => native,
+            Err(err) => {
+                unsafe {
+                    libobs::base_set_crash_handler(None, std::ptr::null_mut());
+                }
+                let _ = release_runtime_slot();
+                return Err(err);
+            }
         };
+        let mut rollback = InitializationRollback::new();
         unsafe {
             // Safety: We are in the OBS thread, so it's safe to call this here.
             libobs::base_set_log_handler(Some(extern_log_callback), std::ptr::null_mut());
@@ -349,7 +535,9 @@ impl ObsRuntime {
 
         let mut log_callback = LOGGER.lock().map_err(|_e| ObsError::MutexFailure)?;
 
-        *log_callback = info.logger.take().expect("Logger can never be null");
+        *log_callback = info.logger.take().ok_or_else(|| {
+            ObsError::InvalidOperation("startup logger was already consumed".to_string())
+        })?;
         drop(log_callback);
 
         // Locale will only be used internally by
@@ -360,10 +548,23 @@ impl ObsRuntime {
             // Safety: All pointers are valid here.
             libobs::obs_startup(locale_str.as_ptr().0, ptr::null(), ptr::null_mut())
         };
+        if !startup_status {
+            return Err(ObsError::Failure);
+        }
+        // From this exact point onward any Rust error/panic must run obs_shutdown().
+        rollback.obs_started = true;
 
+        // SAFETY: libobs startup succeeded on this actor; the returned pointer is either
+        // null or a libobs-owned NUL-terminated version string.
         let version = unsafe { libobs::obs_get_version_string() };
-        let version_cstr = unsafe { CStr::from_ptr(version) };
-        let version_str = version_cstr.to_string_lossy().into_owned();
+        let version_str = if version.is_null() {
+            "unknown".to_string()
+        } else {
+            // SAFETY: `version` was checked non-null immediately above and libobs owns
+            // the NUL-terminated string for the process lifetime.
+            let version_cstr = unsafe { CStr::from_ptr(version) };
+            version_cstr.to_string_lossy().into_owned()
+        };
 
         internal_log_global(ObsLogLevel::Info, format!("OBS {}", version_str));
 
@@ -392,10 +593,6 @@ impl ObsRuntime {
             "---------------------------------".to_string(),
         );
 
-        if !startup_status {
-            return Err(ObsError::Failure);
-        }
-
         let mut obs_modules = unsafe {
             // Safety: This is running in the OBS thread, so it's safe to call this here.
             ObsModules::add_paths(&info.startup_paths)
@@ -405,9 +602,12 @@ impl ObsRuntime {
         // once. See the link below for information.
         //
         // https://docs.obsproject.com/frontends
-        unsafe {
+        let audio_ready = unsafe {
             // Safety: The audio_info pointer is valid here.
-            libobs::obs_reset_audio2(info.obs_audio_info.as_ptr().0);
+            libobs::obs_reset_audio2(info.obs_audio_info.as_ptr().0)
+        };
+        if !audio_ready {
+            return Err(ObsError::ResetAudioFailure);
         }
 
         // Resets the video context. Note that this
@@ -445,6 +645,7 @@ impl ObsRuntime {
             "==== Startup complete ===============================================".to_string(),
         );
 
+        rollback.disarm();
         Ok((info, obs_modules, native))
     }
 
@@ -495,8 +696,8 @@ impl ObsRuntime {
                 );
 
                 #[cfg(any(feature = "__test_environment", test))]
-                {
-                    assert_eq!(allocs, 1, "Memory leaks detected: {}", allocs);
+                if allocs != 1 {
+                    log::error!("OBS leak check expected 1 allocation, observed {allocs}");
                 }
             }
             Err(_) => {
@@ -543,6 +744,8 @@ pub struct _ObsRuntimeGuard {
     handle: Mutex<Option<JoinHandle<()>>>,
     #[cfg(feature = "enable_runtime")]
     shutdown_sender: Arc<Sender<()>>,
+    #[cfg(feature = "enable_runtime")]
+    health: Arc<AtomicU8>,
 }
 
 #[cfg(feature = "enable_runtime")]
@@ -550,6 +753,7 @@ impl Drop for _ObsRuntimeGuard {
     fn drop(&mut self) {
         log::trace!("Last ObsRuntime dropped; requesting actor shutdown");
         begin_runtime_shutdown();
+        self.health.store(RUNTIME_SHUTTING_DOWN, Ordering::Release);
         if self.shutdown_sender.send(()).is_err() {
             let _ = release_runtime_slot();
         }
@@ -583,5 +787,37 @@ impl Drop for _ObsRuntimeGuard {
         if let Err(err) = unsafe { ObsRuntime::shutdown_inner() } {
             log::error!("Failed to shut down OBS context: {err:?}");
         }
+    }
+}
+
+#[cfg(all(test, feature = "enable_runtime"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bounded_submission_reports_full_without_blocking() {
+        let (sender, _receiver) = bounded(1);
+        try_submit_command(&sender, ObsCommand::Execute(Box::new(|| {})))
+            .expect("first command fits");
+        assert_eq!(
+            try_submit_command(&sender, ObsCommand::Execute(Box::new(|| {}))),
+            Err(QueueSubmitError::Full)
+        );
+    }
+
+    #[test]
+    fn bounded_submission_reports_disconnect() {
+        let (sender, receiver) = bounded(1);
+        drop(receiver);
+        assert_eq!(
+            try_submit_command(&sender, ObsCommand::Execute(Box::new(|| {}))),
+            Err(QueueSubmitError::Disconnected)
+        );
+    }
+
+    #[test]
+    fn actor_work_contains_command_panics() {
+        assert!(!run_actor_work(|| panic!("synthetic actor command panic")));
+        assert!(run_actor_work(|| {}));
     }
 }

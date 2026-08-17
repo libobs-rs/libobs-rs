@@ -14,8 +14,6 @@ use libobs::obs_video_info;
 use crate::unsafe_send::SmartPointerSendable;
 use crate::utils::{ObsDropGuard, ObsError};
 use crate::{impl_obs_drop, run_with_obs, runtime::ObsRuntime, unsafe_send::Sendable};
-use lazy_static::lazy_static;
-use std::collections::HashMap;
 use std::mem::MaybeUninit;
 use std::{
     ffi::c_void,
@@ -28,13 +26,9 @@ static ID_COUNTER: AtomicUsize = AtomicUsize::new(1);
 /// You can use the `ObsContext` to create this struct. This struct is stored in the
 /// `ObsContext` itself and the display is removed if every instance of this struct is dropped
 /// (and you have called `remove_display` on the `ObsContext`).
-// Note to developers: This struct does not need to be pinned to Memory any longer.
-// because we are using a id and then using a RwLock (`DISPLAY_POSITIONS`) for managing display data
-// in the render context.
 pub struct ObsDisplayRef {
     id: usize,
-
-    _pos_remove_guard: Arc<PosRemoveGuard>,
+    render_state: Arc<DisplayRenderState>,
 
     /// Keep for window, manager is accessed by render thread as well so Arc and RwLock
     ///
@@ -49,23 +43,9 @@ pub struct ObsDisplayRef {
     display: SmartPointerSendable<*mut libobs::obs_display_t>,
 }
 
-lazy_static! {
-    pub(super) static ref DISPLAY_POSITIONS: Arc<RwLock<HashMap<usize, (i32, i32)>>> =
-        Arc::new(RwLock::new(HashMap::new()));
-}
-
 #[derive(Debug)]
-struct PosRemoveGuard {
-    id: usize,
-}
-
-impl Drop for PosRemoveGuard {
-    fn drop(&mut self) {
-        let mut map = DISPLAY_POSITIONS
-            .write()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        map.remove(&self.id);
-    }
+pub(super) struct DisplayRenderState {
+    pub(super) position: RwLock<(i32, i32)>,
 }
 
 #[allow(unknown_lints)]
@@ -73,13 +53,14 @@ impl Drop for PosRemoveGuard {
 /// # Safety
 /// Always call this function in the graphics/rendering thread of OBS, never call this function directly!
 unsafe extern "C" fn render_display(data: *mut c_void, width: u32, height: u32) {
-    let id = data as usize;
-    let pos = DISPLAY_POSITIONS
+    let Some(state) = (data as *const DisplayRenderState).as_ref() else {
+        log::error!("Display render callback received null userdata");
+        return;
+    };
+    let pos = *state
+        .position
         .read()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .get(&id)
-        .cloned()
-        .unwrap_or((0, 0));
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
 
     let mut ovi = MaybeUninit::<obs_video_info>::uninit();
     let was_ok = libobs::obs_get_video_info(ovi.as_mut_ptr());
@@ -128,8 +109,13 @@ pub struct ObsWindowHandle {
 }
 
 impl ObsWindowHandle {
+    /// Construct from an HWND supplied by an external windowing toolkit.
+    ///
+    /// # Safety
+    /// `handle` must be a live HWND for the complete lifetime of any OBS display created
+    /// from this value, and all toolkit thread-affinity requirements must be respected.
     #[cfg(windows)]
-    pub fn new_from_handle(handle: *mut std::os::raw::c_void) -> Self {
+    pub unsafe fn new_from_handle(handle: *mut std::os::raw::c_void) -> Self {
         Self {
             window: Sendable(libobs::gs_window { hwnd: handle }),
             is_wayland: false,
@@ -141,8 +127,13 @@ impl ObsWindowHandle {
         windows::Win32::Foundation::HWND(self.window.0.hwnd)
     }
 
+    /// Construct from a Wayland surface supplied by an external windowing toolkit.
+    ///
+    /// # Safety
+    /// `surface` must be a live `wl_surface` belonging to the configured Wayland display
+    /// and must outlive any OBS display created from this handle.
     #[cfg(target_os = "linux")]
-    pub fn new_from_wayland(surface: *mut c_void) -> Self {
+    pub unsafe fn new_from_wayland(surface: *mut c_void) -> Self {
         Self {
             window: Sendable(libobs::gs_window {
                 display: surface,
@@ -228,10 +219,20 @@ impl ObsDisplayRef {
             }
         })??;
 
+        let initial_pos = if create_child && cfg!(windows) {
+            (0, 0)
+        } else {
+            (x, y)
+        };
+        let render_state = Arc::new(DisplayRenderState {
+            position: RwLock::new(initial_pos),
+        });
+
         let display = SmartPointerSendable::new(
             display.0,
             Arc::new(_ObsDisplayDropGuard {
                 display,
+                render_state: render_state.clone(),
                 runtime: runtime.clone(),
             }),
             runtime.native_registry(),
@@ -242,23 +243,12 @@ impl ObsDisplayRef {
             handler.set_display_handle(display.clone());
         }
 
-        let initial_pos = if create_child && cfg!(windows) {
-            (0, 0)
-        } else {
-            (x, y)
-        };
-
         let id = ID_COUNTER.fetch_add(1, Ordering::Relaxed);
-        DISPLAY_POSITIONS
-            .write()
-            .map_err(|e| ObsError::LockError(format!("{:?}", e)))?
-            .insert(id, initial_pos);
-
         let instance = Self {
             display: display.clone(),
             id,
+            render_state: render_state.clone(),
             runtime: runtime.clone(),
-            _pos_remove_guard: Arc::new(PosRemoveGuard { id }),
 
             #[cfg(windows)]
             child_window_handler: child_handler.map(|e| Arc::new(RwLock::new(e))),
@@ -273,7 +263,7 @@ impl ObsDisplayRef {
                 libobs::obs_display_add_draw_callback(
                     display_ptr.get_ptr(),
                     Some(render_display),
-                    id as *mut c_void,
+                    Arc::as_ptr(&render_state) as *mut c_void,
                 );
             }
         })?;
@@ -295,7 +285,7 @@ impl ObsDisplayRef {
         })
     }
 
-    pub fn as_ptr(&self) -> SmartPointerSendable<*mut libobs::obs_display_t> {
+    pub(crate) fn as_ptr(&self) -> SmartPointerSendable<*mut libobs::obs_display_t> {
         self.display.clone()
     }
 }
@@ -303,15 +293,24 @@ impl ObsDisplayRef {
 #[derive(Debug)]
 struct _ObsDisplayDropGuard {
     display: Sendable<*mut libobs::obs_display_t>,
+    render_state: Arc<DisplayRenderState>,
     runtime: ObsRuntime,
 }
 
 impl ObsDropGuard for _ObsDisplayDropGuard {}
 
-impl_obs_drop!(_ObsDisplayDropGuard, (display), move || unsafe {
-    // Safety: The pointer is valid as long as we are in the runtime and the guard is alive.
-    log::trace!("Removing callback of display {:?}...", display);
-    libobs::obs_display_remove_draw_callback(display.0, Some(render_display), std::ptr::null_mut());
-
-    libobs::obs_display_destroy(display.0);
-});
+impl_obs_drop!(
+    _ObsDisplayDropGuard,
+    (display, render_state),
+    move || unsafe {
+        // SAFETY: `render_state` remains alive through callback deregistration and display
+        // destruction, and the native pointer is leased by this drop guard.
+        log::trace!("Removing callback of display {:?}...", display);
+        libobs::obs_display_remove_draw_callback(
+            display.0,
+            Some(render_display),
+            Arc::as_ptr(&render_state) as *mut c_void,
+        );
+        libobs::obs_display_destroy(display.0);
+    }
+);

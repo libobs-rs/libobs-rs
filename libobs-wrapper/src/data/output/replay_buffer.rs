@@ -39,7 +39,8 @@ impl ObsOutputTraitSealed for ObsReplayBufferOutputRef {
         output.id = ObsString::new("replay_buffer");
         let output = ObsOutputRef::new(output, runtime.clone())?;
 
-        let replay_signal_manager = ObsReplayOutputSignals::new(&output.as_ptr(), runtime)?;
+        let replay_signal_manager =
+            ObsReplayOutputSignals::new(&output.__native_handle(), runtime)?;
         Ok(Self {
             replay_signal_manager: Arc::new(replay_signal_manager),
             output,
@@ -80,8 +81,11 @@ impl ObsReplayBufferOutputRef {
     ///   - Failure to call "get_last_replay" procedure
     ///   - Failure to extract the path from calldata
     pub fn save_buffer(&self) -> Result<Box<Path>, ObsError> {
+        if self.runtime().is_actor_thread() {
+            return Err(ObsError::RuntimeReentrantBlocking);
+        }
         log::trace!("Saving replay buffer...");
-        let output_ptr = self.as_ptr();
+        let output_ptr = self.__native_handle();
 
         log::trace!("Getting procedure handler for replay buffer output...");
         let proc_handler = run_with_obs!(self.runtime().clone(), (output_ptr), move || {

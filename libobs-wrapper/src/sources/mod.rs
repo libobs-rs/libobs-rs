@@ -164,7 +164,13 @@ impl ObsObjectTraitPrivate for ObsSourceRef {
     }
 }
 
-impl ObsObjectTrait<*mut libobs::obs_source_t> for ObsSourceRef {
+impl ObsObjectTrait for ObsSourceRef {
+    type Native = *mut libobs::obs_source_t;
+
+    fn __native_handle(&self) -> SmartPointerSendable<Self::Native> {
+        self.source.clone()
+    }
+
     fn runtime(&self) -> &ObsRuntime {
         &self.runtime
     }
@@ -200,10 +206,6 @@ impl ObsObjectTrait<*mut libobs::obs_source_t> for ObsSourceRef {
     fn update_settings(&self, settings: crate::data::ObsData) -> Result<(), ObsError> {
         inner_fn_update_settings!(self, libobs::obs_source_update, settings)
     }
-
-    fn as_ptr(&self) -> SmartPointerSendable<*mut libobs::obs_source_t> {
-        self.source.clone()
-    }
 }
 
 impl ObsSourceTrait for ObsSourceRef {
@@ -220,16 +222,17 @@ impl ObsSourceTrait for ObsSourceRef {
     }
 
     fn apply_filter(&self, filter: &ObsFilterRef) -> Result<(), ObsError> {
+        self.runtime.ensure_same_runtime(filter.runtime())?;
         let mut guard = self.attached_filters.write().map_err(|_| {
             ObsError::LockError("Failed to acquire write lock on attached filters".into())
         })?;
 
-        let source_ptr = self.as_ptr();
-        let filter_ptr = filter.as_ptr();
+        let source_ptr = self.__native_handle();
+        let filter_ptr = filter.__native_handle();
 
-        let has_filter = guard
-            .iter()
-            .any(|f| f.get_inner().as_ptr().native_id() == filter.as_ptr().native_id());
+        let has_filter = guard.iter().any(|f| {
+            f.get_inner().__native_handle().native_id() == filter.__native_handle().native_id()
+        });
 
         if has_filter {
             return Err(ObsError::FilterAlreadyApplied);
@@ -242,7 +245,12 @@ impl ObsSourceTrait for ObsSourceRef {
         })??;
 
         let runtime = self.runtime().clone();
-        let drop_guard = _ObsRemoveFilterOnDrop::new(self.as_ptr(), filter.as_ptr(), None, runtime);
+        let drop_guard = _ObsRemoveFilterOnDrop::new(
+            self.__native_handle(),
+            filter.__native_handle(),
+            None,
+            runtime,
+        );
 
         guard.push(ObsFilterGuardPair::new(
             filter.clone(),

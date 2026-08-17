@@ -12,7 +12,7 @@ pub struct ObsPipeWireGeneralUpdater<'a> {
     updatable: &'a mut ObsPipeWireSourceRef,
 }
 
-impl<'a> ObsObjectUpdater<'a, *mut libobs::obs_source> for ObsPipeWireGeneralUpdater<'a> {
+impl<'a> ObsObjectUpdater<'a> for ObsPipeWireGeneralUpdater<'a> {
     type ToUpdate = ObsPipeWireSourceRef;
 
     fn get_id() -> libobs_wrapper::utils::ObsString {

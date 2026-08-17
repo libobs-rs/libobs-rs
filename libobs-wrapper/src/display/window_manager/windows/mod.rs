@@ -37,19 +37,42 @@ struct MessageThreadHwnd(HWND);
 unsafe impl Send for MessageThreadHwnd {}
 unsafe impl Sync for MessageThreadHwnd {}
 
-/// Function to update color space from window user data
-/// # Safety
-/// This function may never be called if the display window handle attached to the window user data is invalid.
-unsafe fn update_color_space_from_userdata(window: HWND) {
-    let user_data = GetWindowLongPtrW(window, GWLP_USERDATA) as *mut obs_display_t;
-    if !user_data.is_null() {
-        log::trace!("Updating color space for display change/move");
+#[derive(Debug, Default)]
+struct WindowUserData {
+    // The message thread only needs a borrowed native address while processing a
+    // display-change message. The owning handler retains the managed display lease on
+    // the OBS-owning thread. Holding this mutex across the libobs call synchronizes
+    // teardown with an in-flight WndProc callback without making the lease itself Send.
+    display_address: Mutex<Option<usize>>,
+}
 
-        // Safety: This function locks a mutex under the hood and only changes one bool, so this is fine.
-        #[allow(unknown_lints)]
-        #[allow(ensure_obs_call_in_runtime)]
-        libobs::obs_display_update_color_space(user_data);
-    }
+/// Update color space using userdata owned by the message thread.
+///
+/// # Safety
+///
+/// `window` must be a live HWND created by this window manager, and its `GWLP_USERDATA`
+/// must either be null or point to the `WindowUserData` retained by the message thread.
+/// The message thread keeps that `Arc<WindowUserData>` alive for the complete window
+/// lifetime. The owning handler keeps the managed display lease alive. The callback holds
+/// the userdata mutex while using the borrowed address; teardown takes the same mutex,
+/// clears the address, and only then releases its lease, so teardown cannot race this call.
+unsafe fn update_color_space_from_userdata(window: HWND) {
+    let user_data = GetWindowLongPtrW(window, GWLP_USERDATA) as *const WindowUserData;
+    let Some(user_data) = user_data.as_ref() else {
+        return;
+    };
+    let display_address = match user_data.display_address.lock() {
+        Ok(display) => display,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    let Some(display_address) = *display_address else {
+        return;
+    };
+
+    log::trace!("Updating color space for display change/move");
+    #[allow(unknown_lints)]
+    #[allow(ensure_obs_call_in_runtime)]
+    libobs::obs_display_update_color_space(display_address as *mut obs_display_t);
 }
 
 extern "system" fn wndproc(
@@ -59,8 +82,8 @@ extern "system" fn wndproc(
     l_param: LPARAM,
 ) -> LRESULT {
     unsafe {
-        // Safety: This is a valid window procedure called by the OS. I've seen this plenty of times.
-        // TODO: Check for safety when the window is closed but update_color_space_from_userdata is still called. Maybe we need a sender / receiver model here?
+        // SAFETY: This is a valid window procedure called by the OS. The userdata
+        // points to state retained by the message thread itself.
         match message {
             WM_NCHITTEST => LRESULT(HTTRANSPARENT as _),
             WM_DESTROY_WINDOW => {
@@ -149,8 +172,10 @@ pub(crate) struct WindowsPreviewChildWindowHandler {
     pub(in crate::display::window_manager) is_hidden: AtomicBool,
     pub(in crate::display::window_manager) render_at_bottom: bool,
 
-    pub(in crate::display::window_manager) obs_display:
-        Option<SmartPointerSendable<*mut obs_display_t>>,
+    user_data: Arc<WindowUserData>,
+    // Retain the display lease on the OBS-owning thread. This deliberately does not live
+    // in `WindowUserData`, because no-runtime builds must not make native leases Send.
+    display_handle: Option<SmartPointerSendable<*mut obs_display_t>>,
 }
 
 impl WindowsPreviewChildWindowHandler {
@@ -166,11 +191,16 @@ impl WindowsPreviewChildWindowHandler {
 
         let should_exit = Arc::new(AtomicBool::new(false));
         let tmp = should_exit.clone();
+        let user_data = Arc::new(WindowUserData::default());
+        let thread_user_data = user_data.clone();
 
         let parent = parent.get_hwnd();
         let parent = Mutex::new(MessageThreadHwnd(parent));
         let message_thread = std::thread::spawn(move || {
-            let parent = parent.lock().unwrap().0;
+            let parent = parent
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .0;
             // We have to have the whole window creation stuff here as well so the message loop functions
             let create = move || -> Result<MessageThreadHwnd, ObsError> {
                 log::trace!("Registering class...");
@@ -273,6 +303,17 @@ impl WindowsPreviewChildWindowHandler {
 
             let r = create();
             let window = r.as_ref().ok().map(|r| r.0);
+            if let Some(window) = window {
+                unsafe {
+                    // SAFETY: The message thread owns `thread_user_data` until its loop
+                    // exits, so this pointer is stable for every WndProc invocation.
+                    SetWindowLongPtrW(
+                        window,
+                        GWLP_USERDATA,
+                        Arc::as_ptr(&thread_user_data) as isize,
+                    );
+                }
+            }
             if tx.send(r).is_err() {
                 log::warn!(
                     "Preview creator dropped before the window creation result was delivered"
@@ -308,12 +349,17 @@ impl WindowsPreviewChildWindowHandler {
             y,
             width,
             height,
-            window_handle: ObsWindowHandle::new_from_handle(window.0 .0),
+            window_handle: unsafe {
+                // SAFETY: `window` was just created successfully by this message thread and
+                // remains owned by it until the handler is dropped.
+                ObsWindowHandle::new_from_handle(window.0 .0)
+            },
             should_exit,
             child_message_thread: Some(message_thread),
             render_at_bottom: false,
             is_hidden: AtomicBool::new(false),
-            obs_display: None,
+            user_data,
+            display_handle: None,
         })
     }
 
@@ -322,33 +368,42 @@ impl WindowsPreviewChildWindowHandler {
     }
 
     /// Set the obs display pointer in the window's user data for message handling
+    pub(in crate::display::window_manager) fn has_display_handle(&self) -> bool {
+        self.display_handle.is_some()
+    }
+
     pub(crate) fn set_display_handle(
         &mut self,
         handle: SmartPointerSendable<*mut libobs::obs_display>,
     ) {
-        // REVIEW: Check if this the display is still being dropped
-        self.obs_display = Some(handle.clone());
-        unsafe {
-            // Safety: The window handle is valid because it was created and is owned by this struct.
-            SetWindowLongPtrW(
-                self.window_handle.get_hwnd(),
-                GWLP_USERDATA,
-                handle.get_ptr() as isize,
-            );
-        }
+        let address = handle.get_ptr() as usize;
+        let mut display_address = match self.user_data.display_address.lock() {
+            Ok(display) => display,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        *display_address = Some(address);
+        self.display_handle = Some(handle);
     }
 }
 
 impl Drop for WindowsPreviewChildWindowHandler {
     fn drop(&mut self) {
         log::trace!("Dropping DisplayWindowManager...");
+        // Synchronize with any WndProc callback currently using the borrowed address.
+        // Once the address is cleared, no future callback can reach the display; only then
+        // release the owning-thread lease.
+        match self.user_data.display_address.lock() {
+            Ok(mut display_address) => {
+                display_address.take();
+            }
+            Err(poisoned) => {
+                poisoned.into_inner().take();
+            }
+        }
+        self.display_handle.take();
         unsafe {
             // Safety: The window handle is valid because it was created and is owned by this struct.
-            SetWindowLongPtrW(
-                self.window_handle.get_hwnd(),
-                GWLP_USERDATA,
-                std::ptr::null_mut::<libobs::obs_display>() as isize,
-            );
+            SetWindowLongPtrW(self.window_handle.get_hwnd(), GWLP_USERDATA, 0);
         }
 
         self.should_exit.store(true, Ordering::Relaxed);

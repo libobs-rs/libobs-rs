@@ -148,7 +148,9 @@ impl ObsInner {
                 panic!("Expected a Win32 window handle");
             };
 
-            ObsWindowHandle::new_from_handle(hwnd.get() as *mut _)
+            // SAFETY: winit supplied this live HWND for `window`, which remains owned by
+            // this preview for at least as long as the OBS display.
+            unsafe { ObsWindowHandle::new_from_handle(hwnd.get() as *mut _) }
         };
 
         #[cfg(target_os = "linux")]
@@ -157,7 +159,9 @@ impl ObsInner {
                 //TODO check if this is actually u32
                 ObsWindowHandle::new_from_x11(context.runtime(), handle.window as u32)?
             } else if let RawWindowHandle::Wayland(handle) = hwnd {
-                ObsWindowHandle::new_from_wayland(handle.surface.as_ptr() as *mut _)
+                // SAFETY: winit owns this live wl_surface for `window`; the window outlives
+                // the OBS display created below and shares the configured Wayland display.
+                unsafe { ObsWindowHandle::new_from_wayland(handle.surface.as_ptr() as *mut _) }
             } else {
                 panic!("Unsupported window handle for this platform");
             }

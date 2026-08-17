@@ -38,7 +38,7 @@ impl ObsAudioInfo {
         Self::new(samples_per_second, speakers, 20, true)
     }
 
-    pub fn as_ptr(&self) -> Sendable<*const obs_audio_info2> {
+    pub(crate) fn as_ptr(&self) -> Sendable<*const obs_audio_info2> {
         Sendable(self as *const Self as *const obs_audio_info2)
     }
 }

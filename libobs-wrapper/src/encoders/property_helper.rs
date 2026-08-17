@@ -1,4 +1,4 @@
-use std::{collections::HashMap, str::FromStr, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
 use duplicate::duplicate_item;
 
@@ -45,7 +45,7 @@ pub struct StructName {
 impl StructName {
     pub fn new(context: ObsContext, encoder_id: &str) -> Self {
         Self {
-            encoder_id: EncoderType::from_str(encoder_id).unwrap(),
+            encoder_id: EncoderType::from(encoder_id),
             runtime: context.runtime().clone(),
             _context: context,
             settings: None,

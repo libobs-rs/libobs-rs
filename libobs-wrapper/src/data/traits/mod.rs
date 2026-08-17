@@ -6,7 +6,7 @@ pub use setters::*;
 
 use crate::{runtime::ObsRuntime, unsafe_send::SmartPointerSendable};
 
-pub trait ObsDataPointers {
+pub(crate) trait ObsDataPointers {
     fn runtime(&self) -> &ObsRuntime;
     fn as_ptr(&self) -> SmartPointerSendable<*mut libobs::obs_data_t>;
 }

@@ -14,6 +14,8 @@ pub enum ObsError {
     MutexFailure,
     /// Some or no thread is already using libobs. This is a bug!
     ThreadFailure,
+    /// Unable to initialize/reset the OBS audio subsystem.
+    ResetAudioFailure,
     /// Unable to reset video.
     ResetVideoFailure(ObsResetVideoStatus),
     /// Unable to reset video because the program attempted to
@@ -67,6 +69,11 @@ pub enum ObsError {
     /// Failed to convert an enum from a code
     EnumConversionError(String),
 
+    /// The caller requested metadata using the wrong OBS property category.
+    PropertyTypeMismatch {
+        expected: String,
+    },
+
     /// Failed to send/receive on a runtime channel
     RuntimeChannelError(String),
 
@@ -74,6 +81,15 @@ pub enum ObsError {
     RuntimeQueueFull {
         capacity: usize,
     },
+
+    /// The OBS actor panicked while executing a command or cleanup task.
+    RuntimePanicked,
+
+    /// An object from a different OBS runtime/context was passed to this operation.
+    RuntimeMismatch,
+
+    /// A blocking operation was requested recursively from the OBS actor thread.
+    RuntimeReentrantBlocking,
 
     /// Attempted to call a OBS runtime function from outside the OBS thread.
     /// This error should NEVER occur. If you are not using the runtime manually or have the "enable_runtime" feature enabled
@@ -93,6 +109,7 @@ impl Display for ObsError {
             ObsError::Failure => write!(f, "`obs-startup` function failed on libobs"),
             ObsError::MutexFailure => write!(f, "Failed to lock mutex describing whether there is a thread using libobs or not. Report to crate maintainer."),
             ObsError::ThreadFailure => write!(f, "Some or no thread is already using libobs. This is a bug!"),
+            ObsError::ResetAudioFailure => write!(f, "Could not initialize/reset OBS audio."),
             ObsError::ResetVideoFailure(status) => write!(f, "Could not reset obs video. Status: {:?}", status),
             ObsError::ResetVideoFailureGraphicsModule => write!(f, "Unable to reset video because the program attempted to change the graphics module. This is a bug!"),
             ObsError::ResetVideoFailureOutputActive => write!(f, "Unable to reset video because some outputs were still active."),
@@ -119,8 +136,12 @@ impl Display for ObsError {
             ObsError::IoError(e) => write!(f, "I/O error: {}", e),
             ObsError::SignalDataError(e) => write!(f, "Signal data error: {}", e),
             ObsError::EnumConversionError(e) => write!(f, "Enum conversion error: {}", e),
+            ObsError::PropertyTypeMismatch { expected } => write!(f, "OBS property type mismatch; expected {expected}"),
             ObsError::RuntimeChannelError(e) => write!(f, "Runtime channel error: {}", e),
             ObsError::RuntimeQueueFull { capacity } => write!(f, "OBS runtime queue is full (capacity: {}). Batch work or retry later.", capacity),
+            ObsError::RuntimePanicked => write!(f, "The OBS actor panicked and has been shut down."),
+            ObsError::RuntimeMismatch => write!(f, "The operation mixed objects owned by different OBS runtimes."),
+            ObsError::RuntimeReentrantBlocking => write!(f, "A blocking operation cannot wait for an OBS callback from the OBS actor thread."),
             ObsError::InvalidDll => write!(f, "A dummy DLL was loaded instead of the real libobs DLL. Make sure you bootstrap properly with libobs-bootstrapper"),
             #[cfg(feature="enable_runtime")]
             ObsError::RuntimeOutsideThread => write!(f, "Attempted to call a OBS runtime function from outside the OBS thread. This is a bug in the crate!"),

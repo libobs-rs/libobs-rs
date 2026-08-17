@@ -22,7 +22,7 @@ impl<K: ObsSourceTrait> ObsPropertyObjectPrivate for K {
     fn get_properties_raw(
         &self,
     ) -> Result<SmartPointerSendable<*mut libobs::obs_properties_t>, ObsError> {
-        let source_ptr = self.as_ptr();
+        let source_ptr = self.__native_handle();
         let runtime = self.runtime().clone();
 
         let raw_ptr = run_with_obs!(runtime, (source_ptr), move || {
@@ -92,7 +92,7 @@ impl ObsPropertyObjectPrivate for ObsOutputRef {
     fn get_properties_raw(
         &self,
     ) -> Result<SmartPointerSendable<*mut libobs::obs_properties_t>, ObsError> {
-        let output_ptr = self.as_ptr().clone();
+        let output_ptr = self.__native_handle().clone();
         let ptr = run_with_obs!(self.runtime(), (output_ptr), move || {
             let property_ptr = unsafe {
                 // Safety: Safe because of smart pointer

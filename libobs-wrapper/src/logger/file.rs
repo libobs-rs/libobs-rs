@@ -35,6 +35,8 @@ impl FileLogger {
 impl ObsLogger for FileLogger {
     fn log(&mut self, level: crate::enums::ObsLogLevel, msg: String) {
         use std::io::Write;
-        writeln!(self.file, "[{:?}] {}", level, msg).unwrap();
+        if let Err(err) = writeln!(self.file, "[{:?}] {}", level, msg) {
+            eprintln!("Failed to write libobs log message: {err}");
+        }
     }
 }

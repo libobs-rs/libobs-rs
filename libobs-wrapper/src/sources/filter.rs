@@ -3,7 +3,7 @@ use libobs::{obs_scene_t, obs_source_t};
 use crate::{
     data::ImmutableObsData,
     forward_obs_object_impl, forward_obs_source_impl, impl_obs_drop,
-    macros::impl_eq_of_ptr,
+    macros::impl_eq_of_obs_object,
     runtime::ObsRuntime,
     sources::ObsSourceRef,
     unsafe_send::SmartPointerSendable,
@@ -66,4 +66,4 @@ impl_obs_drop!(_ObsRemoveFilterOnDrop, (source, filter), move || unsafe {
 forward_obs_object_impl!(ObsFilterRef, inner, *mut libobs::obs_source_t);
 forward_obs_source_impl!(ObsFilterRef, inner);
 
-impl_eq_of_ptr!(ObsFilterRef);
+impl_eq_of_obs_object!(ObsFilterRef);

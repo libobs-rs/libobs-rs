@@ -19,7 +19,7 @@ mod calldata;
 
 use std::fmt::Debug;
 
-pub use calldata::*;
+pub(crate) use calldata::*;
 pub use error::*;
 pub use info::*;
 pub use initialization::NixDisplay;
