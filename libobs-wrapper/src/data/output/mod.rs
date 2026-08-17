@@ -13,6 +13,7 @@ use crate::{impl_obs_drop, impl_signal_manager, run_with_obs};
 
 use crate::{
     encoders::{audio::ObsAudioEncoder, video::ObsVideoEncoder},
+    services::ObsServiceRef,
     utils::{ObsError, ObsString},
 };
 
@@ -68,6 +69,9 @@ pub struct ObsOutputRef {
 
     /// Audio encoders attached to this output
     audio_encoders: Arc<RwLock<HashMap<usize, Arc<ObsAudioEncoder>>>>,
+
+    /// Streaming service attached to this output, if any.
+    service: Arc<RwLock<Option<Arc<ObsServiceRef>>>>,
 
     /// The type identifier of this output
     id: ObsString,
@@ -167,6 +171,7 @@ impl ObsOutputTraitSealed for ObsOutputRef {
 
             curr_video_encoder: Arc::new(RwLock::new(None)),
             audio_encoders: Arc::new(RwLock::new(HashMap::new())),
+            service: Arc::new(RwLock::new(None)),
 
             output: output.clone(),
             id,
@@ -257,6 +262,10 @@ impl ObsOutputTrait for ObsOutputRef {
 
     fn audio_encoders(&self) -> &Arc<RwLock<HashMap<usize, Arc<ObsAudioEncoder>>>> {
         &self.audio_encoders
+    }
+
+    fn service(&self) -> &Arc<RwLock<Option<Arc<ObsServiceRef>>>> {
+        &self.service
     }
 }
 

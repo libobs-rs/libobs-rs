@@ -83,6 +83,25 @@ impl ObsData {
         })
     }
 
+    /// Wraps an owned native data pointer returned by libobs.
+    ///
+    /// The caller must only pass pointers for which this wrapper owns one reference.
+    /// Keeping this constructor crate-private makes that ownership contract an internal
+    /// FFI invariant rather than something downstream callers need to reason about.
+    pub(crate) fn from_raw_pointer(
+        data: Sendable<*mut libobs::obs_data_t>,
+        runtime: ObsRuntime,
+    ) -> Self {
+        let drop_guard = Arc::new(_ObsDataDropGuard {
+            data_ptr: data.clone(),
+            runtime: runtime.clone(),
+        });
+        Self {
+            ptr: SmartPointerSendable::new(data.0, drop_guard, runtime.native_registry()),
+            runtime,
+        }
+    }
+
     pub fn bulk_update(&mut self) -> ObsDataUpdater {
         ObsDataUpdater::new(self.as_ptr(), self.runtime.clone())
     }

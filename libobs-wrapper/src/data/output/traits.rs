@@ -12,6 +12,7 @@ use crate::{
     macros::trait_with_optional_send_sync,
     run_with_obs,
     runtime::ObsRuntime,
+    services::ObsServiceRef,
     utils::{AudioEncoderInfo, ObsError, OutputInfo, VideoEncoderInfo},
 };
 
@@ -41,6 +42,7 @@ pub trait ObsOutputTrait:
 
     fn video_encoder(&self) -> &Arc<RwLock<Option<Arc<ObsVideoEncoder>>>>;
     fn audio_encoders(&self) -> &Arc<RwLock<HashMap<usize, Arc<ObsAudioEncoder>>>>;
+    fn service(&self) -> &Arc<RwLock<Option<Arc<ObsServiceRef>>>>;
 
     /// Returns the current video encoder attached to this output, if any.
     fn get_current_video_encoder(&self) -> Result<Option<Arc<ObsVideoEncoder>>, ObsError> {
@@ -50,6 +52,36 @@ pub trait ObsOutputTrait:
             .map_err(|e| ObsError::LockError(e.to_string()))?;
 
         Ok(curr.clone())
+    }
+
+    /// Returns the streaming service attached to this output, if any.
+    fn get_current_service(&self) -> Result<Option<Arc<ObsServiceRef>>, ObsError> {
+        self.service()
+            .read()
+            .map_err(|e| ObsError::LockError(e.to_string()))
+            .map(|service| service.clone())
+    }
+
+    /// Attaches a streaming service to this output. Fails while the output is active.
+    fn set_service(&mut self, service: Arc<ObsServiceRef>) -> Result<(), ObsError> {
+        if self.is_active()? {
+            return Err(ObsError::OutputAlreadyActive);
+        }
+        self.runtime().ensure_same_runtime(service.runtime())?;
+
+        let output_ptr = self.__native_handle();
+        let service_ptr = service.__native_handle();
+        let runtime = self.runtime().clone();
+        run_with_obs!(runtime, (output_ptr, service_ptr), move || {
+            // Safety: both managed handles retain their native objects for the actor call.
+            unsafe { libobs::obs_output_set_service(output_ptr.get_ptr(), service_ptr.get_ptr()) };
+        })?;
+
+        self.service()
+            .write()
+            .map_err(|e| ObsError::LockError(e.to_string()))?
+            .replace(service);
+        Ok(())
     }
 
     /// Creates and attaches a new video encoder to this output.

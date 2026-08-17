@@ -28,6 +28,14 @@ macro_rules! forward_obs_output_impl {
             > {
                 self.$var_name.audio_encoders()
             }
+
+            fn service(
+                &self,
+            ) -> &std::sync::Arc<
+                std::sync::RwLock<Option<std::sync::Arc<$crate::services::ObsServiceRef>>>,
+            > {
+                self.$var_name.service()
+            }
         }
 
         impl $struct_name {
