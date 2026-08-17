@@ -288,6 +288,17 @@ pub enum ObsBoundsType {
     MaxOnly = libobs::obs_bounds_type_OBS_BOUNDS_MAX_ONLY,
 }
 
+#[cfg_attr(target_os = "windows", repr(i32))]
+#[cfg_attr(not(target_os = "windows"), repr(u32))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, FromPrimitive, ToPrimitive)]
+/// Relative movement operations for reordering an item within a scene.
+pub enum ObsOrderMovement {
+    Up = libobs::obs_order_movement_OBS_ORDER_MOVE_UP,
+    Down = libobs::obs_order_movement_OBS_ORDER_MOVE_DOWN,
+    Top = libobs::obs_order_movement_OBS_ORDER_MOVE_TOP,
+    Bottom = libobs::obs_order_movement_OBS_ORDER_MOVE_BOTTOM,
+}
+
 bitflags! {
     /// Represents a set of flags.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]

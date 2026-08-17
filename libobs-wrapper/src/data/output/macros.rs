@@ -36,6 +36,10 @@ macro_rules! forward_obs_output_impl {
             > {
                 self.$var_name.service()
             }
+
+            fn configuration_lock(&self) -> &std::sync::Arc<std::sync::Mutex<()>> {
+                self.$var_name.configuration_lock()
+            }
         }
 
         impl $struct_name {

@@ -12,7 +12,8 @@ A safe, ergonomic Rust wrapper around the OBS (Open Broadcaster Software) Studio
 - **Per-object Signals**: Signal subscriptions are owned by each object; callback-only pointers are exposed as opaque identities
 - **Runtime Bootstrapping**: Optional automatic download and setup of OBS binaries at runtime (functionality moved to [libobs-bootstrapper](https://crates.io/crates/libobs-bootstrapper))
 - **Runtime Discovery**: Inspect plugin source/output/encoder/service types, properties, defaults, and create typed objects from discovered descriptors
-- **Scene Management**: Create and manipulate scenes, sources, and outputs
+- **Output Composition**: Apply runtime-checked video/audio encoder and service wiring as one desired state, with explicit attach/detach APIs
+- **Scene Management**: Create typed scene items from existing or discovered sources and control position, scale, rotation, visibility, locking, and ordering
 - **Video Recording**: Configure and record video with various encoders
 - **Audio Support**: Configure audio sources and encoders
 - **Display Management**: Create and control OBS preview windows

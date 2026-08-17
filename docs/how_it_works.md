@@ -63,9 +63,19 @@ Display rendering follows the same rule: per-display render state is owned by th
 - `loaded_modules()`; and
 - `capabilities()` for one aggregate snapshot.
 
-Source/output/encoder/service descriptors can query generic properties and default settings. `default_settings_mut()` creates an owned mutable settings object initialized from plugin defaults, and descriptor-aware `ObsContext::create_source`, `create_filter`, `create_output`, `create_video_encoder`, `create_audio_encoder`, and `create_service` methods turn discovery results directly into runtime-affine typed handles. Outputs can retain and attach an `ObsServiceRef` with `set_service`. Property trees are copied recursively into owned `PropertyMetadata`/`PropertyKind` values and destroyed on the OBS actor before the result crosses the thread boundary. Lists, paths, numeric controls, groups, frame-rate metadata, and other common property kinds are represented directly. Unknown future property/category enum values are preserved as `Unknown(...)` rather than panicking.
+Source/output/encoder/service descriptors can query generic properties and default settings. `default_settings_mut()` creates an owned mutable settings object initialized from plugin defaults, and descriptor-aware `ObsContext::create_source`, `create_filter`, `create_output`, `create_video_encoder`, `create_audio_encoder`, and `create_service` methods turn discovery results directly into runtime-affine typed handles. A discovered source can also be created directly inside a scene with `ObsSceneRef::add_discovered_source`.
+
+Outputs expose `ObsOutputComposition` as a desired-state wiring object. `apply_composition()` validates the runtime affinity of the video encoder, all audio encoders, and service before performing the native wiring in one actor command; omitted components are detached. Shared output handles can also inspect `current_composition()` or set/clear individual attachments. Audio mixer indices are checked against libobs's supported mixer count before FFI.
+
+Property trees are copied recursively into owned `PropertyMetadata`/`PropertyKind` values and destroyed on the OBS actor before the result crosses the thread boundary. Lists, paths, numeric controls, groups, frame-rate metadata, and other common property kinds are represented directly. Unknown future property/category enum values are preserved as `Unknown(...)` rather than panicking.
 
 Discovery descriptors retain the owning runtime so later property/default queries and typed creation can verify runtime affinity before reaching FFI.
+
+### Scene and scene-item composition
+
+`ObsSceneRef` exposes inherent `add`, `add_new_source`, `remove_item`, `items_for_source`, and `clear` operations, so normal callers do not need pointer-oriented extension names. `ObsSceneItemRef<T>` keeps the concrete source type and provides managed operations for position, scale, rotation, visibility, locking, absolute/relative ordering, full transform updates, and fitting to the current canvas.
+
+Scene items take an explicit native reference when they are created. `remove_item(&item)` therefore detaches the item from the scene immediately while outstanding Rust clones remain valid managed references; the final handle releases the native reference exactly once. This avoids the older behavior where apparent removal could be delayed until every Rust clone happened to drop.
 
 See [`examples/capability-discovery`](../examples/capability-discovery) for an end-to-end introspection example.
 

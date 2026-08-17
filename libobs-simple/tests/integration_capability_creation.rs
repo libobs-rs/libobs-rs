@@ -3,7 +3,14 @@ use std::collections::HashSet;
 use libobs_wrapper::{
     capabilities::{EncoderKind, SourceKind},
     context::ObsContext,
-    data::{object::ObsObjectTrait, output::ObsOutputTrait, ObsDataGetters, ObsDataSetters},
+    data::{
+        object::ObsObjectTrait,
+        output::{ObsOutputComposition, ObsOutputTrait},
+        ObsDataGetters, ObsDataSetters,
+    },
+    enums::ObsOrderMovement,
+    graphics::Vec2,
+    scenes::SceneItemTrait,
     sources::ObsSourceTrait,
     utils::{ObsError, StartupInfo},
 };
@@ -119,12 +126,17 @@ fn discovered_types_drive_typed_creation_and_lifecycle() {
         .output_type("rtmp_output")
         .expect("discover RTMP output")
         .expect("rtmp_output is provided by obs-outputs");
-    let mut rtmp_output = context
+    let rtmp_output = context
         .create_output(&rtmp_output_type, "generic-rtmp-output", None)
         .expect("create discovered RTMP output");
     rtmp_output
-        .set_service(service.clone())
-        .expect("attach runtime-affine service");
+        .apply_composition(
+            ObsOutputComposition::new()
+                .with_video_encoder(video_encoder.clone())
+                .with_audio_encoder(0, audio_encoder.clone())
+                .with_service(service.clone()),
+        )
+        .expect("apply runtime-affine output composition");
     assert_eq!(
         rtmp_output
             .get_current_service()
@@ -133,6 +145,104 @@ fn discovered_types_drive_typed_creation_and_lifecycle() {
             .object_id(),
         service.object_id()
     );
+    assert_eq!(
+        rtmp_output
+            .get_current_video_encoder()
+            .unwrap()
+            .expect("video encoder remains attached")
+            .object_id(),
+        video_encoder.object_id()
+    );
+    assert_eq!(
+        rtmp_output
+            .get_current_audio_encoder(0)
+            .unwrap()
+            .expect("audio encoder remains attached")
+            .object_id(),
+        audio_encoder.object_id()
+    );
+
+    // Shared output handles deliberately support concurrent configuration. The per-output
+    // lifecycle lock serializes the complete desired-state transition so start/stop and
+    // encoder/service snapshots cannot observe half-applied wiring.
+    let workers = (0..8)
+        .map(|_| {
+            let output = rtmp_output.clone();
+            let video_encoder = video_encoder.clone();
+            let audio_encoder = audio_encoder.clone();
+            let service = service.clone();
+            std::thread::spawn(move || {
+                for _ in 0..4 {
+                    output
+                        .apply_composition(
+                            ObsOutputComposition::new()
+                                .with_video_encoder(video_encoder.clone())
+                                .with_audio_encoder(0, audio_encoder.clone())
+                                .with_service(service.clone()),
+                        )
+                        .expect("apply composition from shared output clone");
+                    output
+                        .apply_composition(ObsOutputComposition::new())
+                        .expect("clear composition from shared output clone");
+                }
+            })
+        })
+        .collect::<Vec<_>>();
+    for worker in workers {
+        worker.join().expect("composition worker did not panic");
+    }
+    rtmp_output
+        .apply_composition(
+            ObsOutputComposition::new()
+                .with_video_encoder(video_encoder.clone())
+                .with_audio_encoder(0, audio_encoder.clone())
+                .with_service(service.clone()),
+        )
+        .expect("restore composition after concurrency stress");
+
+    rtmp_output.clear_service().expect("detach service");
+    rtmp_output
+        .clear_audio_encoder(0)
+        .expect("detach audio encoder");
+    rtmp_output
+        .clear_video_encoder()
+        .expect("detach video encoder");
+    assert!(rtmp_output.get_current_service().unwrap().is_none());
+    assert!(rtmp_output.get_current_video_encoder().unwrap().is_none());
+    assert!(rtmp_output.get_current_audio_encoders().unwrap().is_empty());
+
+    let mut scene = context.scene("generic-scene", None).expect("create scene");
+    let item = scene
+        .add_discovered_source(&color_type, "scene-color", None)
+        .expect("add source from discovered descriptor");
+    item.set_position(Vec2::new(12.0, 34.0))
+        .expect("set item position");
+    item.set_scale(Vec2::new(0.5, 0.75))
+        .expect("set item scale");
+    item.set_rotation(17.5).expect("set item rotation");
+    item.set_visible(false).expect("hide scene item");
+    item.set_locked(true).expect("lock scene item");
+    assert_eq!(item.position().unwrap(), Vec2::new(12.0, 34.0));
+    assert_eq!(item.scale().unwrap(), Vec2::new(0.5, 0.75));
+    assert_eq!(item.rotation().unwrap(), 17.5);
+    assert!(!item.is_visible().unwrap());
+    assert!(item.is_locked().unwrap());
+    assert!(item.order_position().unwrap() >= 0);
+    item.move_order(ObsOrderMovement::Top)
+        .expect("move scene item");
+    assert_eq!(
+        scene.items_for_source(item.inner_source()).unwrap().len(),
+        1
+    );
+    let retained_item = item.clone();
+    scene
+        .remove_item(&item)
+        .expect("remove scene item immediately");
+    assert!(retained_item.is_removed());
+    assert!(scene
+        .items_for_source(retained_item.inner_source())
+        .unwrap()
+        .is_empty());
 
     // Stress the public handle seam: every created source has unique runtime-scoped
     // identity, clones preserve identity, and dropping clone sets leaves OBS usable.

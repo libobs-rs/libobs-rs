@@ -83,13 +83,22 @@ let source = obs.create_source(&color, "Background", Some(settings))?;
 let service_ty = obs.service_type("rtmp_custom")?.expect("plugin available");
 let service = obs.create_service(&service_ty, "Stream", None)?;
 let output_ty = obs.output_type("rtmp_output")?.expect("plugin available");
-let mut output = obs.create_output(&output_ty, "RTMP", None)?;
-output.set_service(service)?;
+let output = obs.create_output(&output_ty, "RTMP", None)?;
+output.apply_composition(
+    ObsOutputComposition::new()
+        .with_video_encoder(video_encoder)
+        .with_audio_encoder(0, audio_encoder)
+        .with_service(service),
+)?;
 ```
 
 Equivalent typed creation methods exist for filters and audio/video encoders. Passing a descriptor from another runtime, or using an encoder/source descriptor with the wrong category, returns a structured error before native creation.
 
 Unknown property/list/category values are represented with `Unknown(...)` variants for forward compatibility. Discovery results never expose temporary libobs strings or property pointers.
+
+`ObsOutputComposition` represents the complete managed encoder/service wiring for an output. Applying it validates runtime affinity before native mutation and detaches components omitted from the desired state. Individual `set_*`/`clear_*` methods remain available and now work through shared output handles.
+
+Scenes also expose inherent `add`, `remove_item`, `items_for_source`, and `clear` methods. `remove_item(&item)` now detaches immediately; a scene-item handle owns a native reference so cloned handles cannot become dangling merely because the item was removed from the scene. Position/scale shorthand plus rotation, visibility, locking, and ordering operations are available on `SceneItemTrait`.
 
 See [`examples/capability-discovery`](../examples/capability-discovery) for a complete executable example.
 

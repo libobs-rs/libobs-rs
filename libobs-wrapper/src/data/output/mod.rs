@@ -1,7 +1,7 @@
 use libobs::obs_output;
 use std::collections::HashMap;
 use std::ptr;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 
 use crate::data::object::{inner_fn_update_settings, ObsObjectTrait, ObsObjectTraitPrivate};
 use crate::data::ImmutableObsData;
@@ -51,9 +51,9 @@ impl_obs_drop!(_ObsOutputDropGuard, (output), move || unsafe {
 /// The output is associated with video and audio encoders that convert
 /// raw media to the required format before sending/storing.
 ///
-/// If encoders are attached to this struct, they are stored internally, so they will not get removed
-/// As of right now, there is no way to remove the encoders again, rather you'll need to replace them with another encoder or drop this struct and
-/// recreate a output.
+/// Attached encoders and services are retained internally for as long as the output owns them.
+/// They can be replaced or detached while the output is inactive, either individually or by
+/// applying a complete [`ObsOutputComposition`] desired state.
 pub struct ObsOutputRef {
     /// Disconnect signals first
     signal_manager: Arc<ObsOutputSignals>,
@@ -72,6 +72,9 @@ pub struct ObsOutputRef {
 
     /// Streaming service attached to this output, if any.
     service: Arc<RwLock<Option<Arc<ObsServiceRef>>>>,
+
+    /// Serializes output configuration with start/stop so encoder/service snapshots cannot race.
+    configuration_lock: Arc<Mutex<()>>,
 
     /// The type identifier of this output
     id: ObsString,
@@ -172,6 +175,7 @@ impl ObsOutputTraitSealed for ObsOutputRef {
             curr_video_encoder: Arc::new(RwLock::new(None)),
             audio_encoders: Arc::new(RwLock::new(HashMap::new())),
             service: Arc::new(RwLock::new(None)),
+            configuration_lock: Arc::new(Mutex::new(())),
 
             output: output.clone(),
             id,
@@ -243,6 +247,10 @@ impl ObsObjectTrait for ObsOutputRef {
     }
 
     fn update_settings(&self, settings: ObsData) -> Result<(), ObsError> {
+        let _configuration = self
+            .configuration_lock
+            .lock()
+            .map_err(|e| ObsError::LockError(e.to_string()))?;
         if self.is_active()? {
             return Err(ObsError::OutputAlreadyActive);
         }
@@ -266,6 +274,10 @@ impl ObsOutputTrait for ObsOutputRef {
 
     fn service(&self) -> &Arc<RwLock<Option<Arc<ObsServiceRef>>>> {
         &self.service
+    }
+
+    fn configuration_lock(&self) -> &Arc<Mutex<()>> {
+        &self.configuration_lock
     }
 }
 
