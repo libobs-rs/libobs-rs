@@ -75,7 +75,7 @@ Discovery descriptors retain the owning runtime so later property/default querie
 
 ### Scene and scene-item composition
 
-`ObsSceneRef` exposes inherent `add`, `add_new_source`, `remove_item`, `items_for_source`, and `clear` operations, so normal callers do not need pointer-oriented extension names. `ObsSceneItemRef<T>` keeps the concrete source type and provides managed operations for position, scale, rotation, visibility, locking, absolute/relative ordering, full transform updates, and fitting to the current canvas.
+`ObsSceneRef` exposes inherent `add`, `add_new_source`, `remove_item`, `items_for_source`, and `clear` operations, so normal callers do not need pointer-oriented extension names. `ObsSceneItemRef<T>` keeps the concrete source type and provides managed operations for position, scale, rotation, explicit edge cropping, visibility, locking, absolute/relative ordering, full transform updates, and fitting to the current canvas.
 
 Scene items take an explicit native reference when they are created. `remove_item(&item)` therefore detaches the item from the scene immediately while outstanding Rust clones remain valid managed references; the final handle releases the native reference exactly once. This avoids the older behavior where apparent removal could be delayed until every Rust clone happened to drop.
 
