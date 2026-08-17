@@ -1,9 +1,9 @@
 use crate::data::object::ObsObjectTrait;
 use crate::run_with_obs;
 use crate::scenes::ObsSceneRef;
+use crate::sources::_ObsRemoveFilterOnDrop;
 use crate::sources::ObsFilterGuardPair;
 use crate::sources::ObsFilterRef;
-use crate::sources::_ObsRemoveFilterOnDrop;
 use crate::unsafe_send::SmartPointerSendable;
 use crate::utils::ObsError;
 use std::sync::Arc;
@@ -34,7 +34,11 @@ impl ObsSceneExtFilter for ObsSceneRef {
 
         let drop_guard = _ObsRemoveFilterOnDrop::new(
             // We are using a no-op drop guard, because we are keeping the actual scene alive in the additional variable field
-            SmartPointerSendable::new(source_ptr.0, Arc::new(super::_NoOpDropGuard)),
+            SmartPointerSendable::new(
+                source_ptr.0,
+                Arc::new(super::_NoOpDropGuard),
+                self.runtime.native_registry(),
+            ),
             filter_ref.as_ptr(),
             Some(self.as_ptr()),
             self.runtime.clone(),
@@ -56,7 +60,7 @@ impl ObsSceneExtFilter for ObsSceneRef {
             })?
             .retain(|f| {
                 // Keep everything except this one filter
-                f.get_inner().as_ptr().get_ptr() != filter_ref.as_ptr().get_ptr()
+                f.get_inner().as_ptr().native_id() != filter_ref.as_ptr().native_id()
             });
         Ok(())
     }

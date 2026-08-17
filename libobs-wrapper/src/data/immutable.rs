@@ -10,7 +10,7 @@ use crate::{
     utils::ObsError,
 };
 
-use super::{ObsData, _ObsDataDropGuard};
+use super::{_ObsDataDropGuard, ObsData};
 
 #[derive(Clone, Debug)]
 /// Immutable wrapper around obs_data_t to be prevent modification and to be used in creation of other objects.
@@ -35,7 +35,7 @@ impl ImmutableObsData {
             runtime: runtime.clone(),
         });
 
-        let ptr = SmartPointerSendable::new(ptr.0, drop_guard);
+        let ptr = SmartPointerSendable::new(ptr.0, drop_guard, runtime.native_registry());
         Ok(ImmutableObsData {
             ptr,
             runtime: runtime.clone(),
@@ -50,6 +50,7 @@ impl ImmutableObsData {
                     data_ptr: data.clone(),
                     runtime: runtime.clone(),
                 }),
+                runtime.native_registry(),
             ),
             runtime,
         }

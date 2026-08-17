@@ -33,7 +33,7 @@ use crate::unsafe_send::Sendable;
 /// // Use in OBS API calls
 /// unsafe {
 ///     let ptr = obs_string.as_ptr();
-///     // Pass ptr.0 to OBS functions
+///     // Native-facing wrapper code can read the pointer with `ptr.get()`
 /// }
 /// ```
 #[derive(Clone, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -74,7 +74,7 @@ impl ObsString {
     /// let obs_string = ObsString::new("source_name");
     /// let ptr = obs_string.as_ptr();
     ///
-    /// // Use ptr.0 in OBS API calls
+    /// // Native-facing wrapper code can read the pointer with `ptr.get()`
     /// ```
     pub fn as_ptr(&self) -> Sendable<*const c_char> {
         Sendable(self.c_string.as_ptr())

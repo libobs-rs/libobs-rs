@@ -5,8 +5,6 @@ use super::PlatformType;
 #[cfg(target_os = "linux")]
 use std::rc::Rc;
 
-use crate::unsafe_send::Sendable;
-
 #[cfg(target_os = "linux")]
 use crate::utils::initialization::NixDisplay;
 use crate::utils::ObsError;
@@ -16,7 +14,7 @@ use crate::utils::linux::{wl_display_disconnect, XCloseDisplay};
 
 #[derive(Debug)]
 pub(crate) struct PlatformSpecificGuard {
-    display: Sendable<*mut std::os::raw::c_void>,
+    display: *mut std::os::raw::c_void,
     platform: PlatformType,
     /// Whether the guard owns the display connection and should close it on drop
     owned: bool,
@@ -32,7 +30,7 @@ impl Drop for PlatformSpecificGuard {
             PlatformType::X11 => {
                 let result = unsafe {
                     // Safety: We do own the display connection, so we can close it.
-                    XCloseDisplay(self.display.0)
+                    XCloseDisplay(self.display)
                 };
                 if result != 0 {
                     eprintln!(
@@ -44,7 +42,7 @@ impl Drop for PlatformSpecificGuard {
             PlatformType::Wayland => {
                 unsafe {
                     // Safety: We do own the display connection, so we can disconnect it.
-                    wl_display_disconnect(self.display.0);
+                    wl_display_disconnect(self.display);
                 };
             }
             _ => {}
@@ -107,7 +105,7 @@ pub(crate) unsafe fn platform_specific_setup(
             }
 
             // Try to get X11 display - note: this may fail in headless environments
-            let display = display_ptr.map(|e| e.0).unwrap_or_else(|| unsafe {
+            let display = display_ptr.map(|e| e.as_ptr()).unwrap_or_else(|| unsafe {
                 // Safety: We are in the runtime and using X11, so we can open the display and the display name should be inherited from env variables.
                 XOpenDisplay(ptr::null())
             });
@@ -129,7 +127,7 @@ pub(crate) unsafe fn platform_specific_setup(
 
             //TODO make sure when creating a display that the same platform is used
             Ok(Some(Rc::new(PlatformSpecificGuard {
-                display: Sendable(display),
+                display,
                 platform: PlatformType::X11,
                 owned,
             })))
@@ -143,7 +141,7 @@ pub(crate) unsafe fn platform_specific_setup(
 
             // Try to get Wayland display - note: this may fail in headless environments
             let display = display_ptr
-                .map(|e| e.0)
+                .map(|e| e.as_ptr())
                 .unwrap_or_else(|| wl_display_connect(ptr::null()));
 
             if display.is_null() {
@@ -160,7 +158,7 @@ pub(crate) unsafe fn platform_specific_setup(
             );
 
             Ok(Some(Rc::new(PlatformSpecificGuard {
-                display: Sendable(display),
+                display,
                 platform: PlatformType::Wayland,
                 owned,
             })))

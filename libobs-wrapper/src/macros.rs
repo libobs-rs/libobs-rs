@@ -3,53 +3,31 @@ macro_rules! run_with_obs_impl {
     ($runtime:expr, $operation:expr) => {
         $crate::run_with_obs_impl!($runtime, (), $operation)
     };
-    ($runtime:expr, ($($var:ident),* $(,)*), $operation:expr) => {
-        {
-            $(let $var = $var.clone();)*
-            $runtime.run_with_obs_result(move || {
-                $(let $var = $var;)*
-                let inner_obs_run = {
-                    //$(let $var = $var.0;)*
-                    $operation
-                };
-                return inner_obs_run()
-            })
-        }
-    };
-    (SEPARATE_THREAD, $runtime:expr, ($($var:ident),* $(,)*), $operation:expr) => {
-        {
-            $(let $var = $var.clone();)*
-
-            tokio::task::spawn_blocking(move || {
-                $runtime.run_with_obs_result(move || {
-                    $(let $var = $var;)*
-                    let e = {
-                        //$(let $var = $var.0;)*
-                        $operation
-                    };
-                    return e()
-                }).unwrap()
-            })
-        }
-    };
+    ($runtime:expr, ($($var:ident),* $(,)*), $operation:expr) => {{
+        $(let $var = $var.clone();)*
+        $runtime.run_with_obs_result(move || {
+            $(let $var = $var;)*
+            let inner_obs_run = { $operation };
+            inner_obs_run()
+        })
+    }};
 }
 
+/// Execute work on the OBS actor while preserving the runtime's structured error.
 #[macro_export]
 macro_rules! run_with_obs {
-    ($runtime:expr, $operation:expr) => {
-        {
-            $crate::run_with_obs_impl!($runtime, $operation)
-                .map_err(|e| $crate::utils::ObsError::InvocationError(e.to_string()))
-        }
-    };
-    ($runtime:expr, ($($var:ident),* $(,)*), $operation:expr) => {
-        {
-            $crate::run_with_obs_impl!($runtime, ($($var),*), $operation)
-                .map_err(|e| $crate::utils::ObsError::InvocationError(e.to_string()))
-        }
-    };
+    ($runtime:expr, $operation:expr) => {{
+        $crate::run_with_obs_impl!($runtime, $operation)
+    }};
+    ($runtime:expr, ($($var:ident),* $(,)*), $operation:expr) => {{
+        $crate::run_with_obs_impl!($runtime, ($($var),*), $operation)
+    }};
 }
 
+/// Implement a non-panicking native cleanup guard.
+///
+/// Cleanup is enqueued on the runtime's dedicated cleanup queue, so destructors do
+/// not synchronously execute libobs calls or require a Tokio runtime.
 #[macro_export]
 macro_rules! impl_obs_drop {
     ($struct_name: ident, $operation:expr) => {
@@ -59,33 +37,23 @@ macro_rules! impl_obs_drop {
         impl Drop for $struct_name {
             fn drop(&mut self) {
                 log::trace!("Dropping {}...", stringify!($struct_name));
-
-                $(let $var = self.$var.clone();)*
-                #[cfg(any(
-                    not(feature = "no_blocking_drops"),
-                    test,
-                    feature="__test_environment",
-                    not(feature="enable_runtime")
-                ))]
-                {
-                    let run_with_obs_result = $crate::run_with_obs!(self.runtime, ($($var),*), $operation);
-                    if std::thread::panicking() {
-                        return;
+                $(let $var = $crate::unsafe_send::DeferredSend::new(self.$var.clone());)*
+                let runtime = self.runtime.clone();
+                let cleanup_runtime = runtime.clone();
+                runtime.defer_obs_cleanup(move || {
+                    let result = cleanup_runtime.run_with_obs_result(move || {
+                        $(let $var = $var.into_inner();)*
+                        let inner_obs_drop = { $operation };
+                        inner_obs_drop()
+                    });
+                    if let Err(err) = result {
+                        log::error!(
+                            "Failed to run native cleanup for {} on the OBS actor: {:?}",
+                            stringify!($struct_name),
+                            err
+                        );
                     }
-
-                    run_with_obs_result.unwrap();
-                }
-
-                #[cfg(all(
-                    feature = "no_blocking_drops",
-                    not(test),
-                    not(feature="__test_environment"),
-                    feature="enable_runtime"
-                ))]
-                {
-                    let __runtime = self.runtime.clone();
-                    $crate::run_with_obs_impl!(SEPARATE_THREAD, __runtime, ($($var),*), $operation);
-                }
+                });
             }
         }
     };
@@ -98,7 +66,7 @@ macro_rules! impl_eq_of_ptr {
             fn eq(&self, other: &Self) -> bool {
                 #[allow(unused_imports)]
                 use crate::data::object::ObsObjectTrait;
-                self.as_ptr().get_ptr() == other.as_ptr().get_ptr()
+                self.as_ptr().native_id() == other.as_ptr().native_id()
             }
         }
 
@@ -108,7 +76,7 @@ macro_rules! impl_eq_of_ptr {
             fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
                 #[allow(unused_imports)]
                 use crate::data::object::ObsObjectTrait;
-                self.as_ptr().get_ptr().hash(state);
+                self.as_ptr().native_id().hash(state);
             }
         }
     };

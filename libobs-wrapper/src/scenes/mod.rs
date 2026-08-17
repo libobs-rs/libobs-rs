@@ -23,8 +23,8 @@ use libobs::{obs_scene_t, obs_source_t};
 use crate::macros::impl_eq_of_ptr;
 use crate::scenes::scene_drop_guards::_SceneDropGuard;
 use crate::sources::{ObsFilterGuardPair, ObsSourceTrait};
-use crate::unsafe_send::SmartPointerSendable;
-use crate::utils::{GeneralTraitHashMap, ObsDropGuard};
+use crate::unsafe_send::{NativeObjectId, SmartPointerSendable};
+use crate::utils::ObsDropGuard;
 use crate::{
     impl_signal_manager, run_with_obs,
     runtime::ObsRuntime,
@@ -36,12 +36,23 @@ use crate::{
 struct _NoOpDropGuard;
 impl ObsDropGuard for _NoOpDropGuard {}
 
+type SceneItemsBySource = Arc<
+    RwLock<
+        HashMap<
+            NativeObjectId,
+            (
+                Arc<dyn ObsSourceTrait>,
+                Vec<Arc<dyn SceneItemTrait + 'static>>,
+            ),
+        >,
+    >,
+>;
+
 #[derive(Debug, Clone)]
 /// This struct holds every ObsSourceRef that is attached to the scene by using `add_source`.
 pub struct ObsSceneRef {
     name: ObsString,
-    attached_scene_items:
-        GeneralTraitHashMap<dyn ObsSourceTrait, Vec<Arc<Box<dyn SceneItemTrait + 'static>>>>,
+    attached_scene_items: SceneItemsBySource,
     attached_filters: Arc<RwLock<Vec<ObsFilterGuardPair>>>,
     runtime: ObsRuntime,
     signals: Arc<ObsSceneSignals>,
@@ -80,7 +91,7 @@ impl ObsSceneRef {
         })??;
 
         let drop_guard = Arc::new(_SceneDropGuard::new(scene.clone(), runtime.clone()));
-        let scene = SmartPointerSendable::new(scene.0, drop_guard);
+        let scene = SmartPointerSendable::new(scene.0, drop_guard, runtime.native_registry());
 
         let signals = Arc::new(ObsSceneSignals::new(&scene, runtime.clone())?);
         Ok(Self {

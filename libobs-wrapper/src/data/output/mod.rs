@@ -134,6 +134,7 @@ impl ObsOutputTraitSealed for ObsOutputRef {
                 output: output.clone(),
                 runtime: runtime.clone(),
             }),
+            runtime.native_registry(),
         );
 
         // We are getting the settings from OBS because OBS will have updated it with default values.

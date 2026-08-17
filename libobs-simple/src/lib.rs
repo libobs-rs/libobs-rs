@@ -1,4 +1,4 @@
-#![cfg_attr(doc, feature(doc_cfg))]
+#![cfg_attr(all(doc, not(doctest)), feature(doc_cfg))]
 //! A simplified interface for recording and streaming with libobs
 
 pub mod error;

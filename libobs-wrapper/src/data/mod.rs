@@ -47,9 +47,8 @@ impl ObsDropGuard for _ObsDataDropGuard {}
 /// Contains `obs_data` and its related strings. Note that
 /// this struct prevents string pointers from being freed
 /// by keeping them owned.
-/// Cloning `ObsData` is blocking and will create a new `ObsData` instance. Recommended is to use `ObsData::full_clone()` instead.
-/// ## Panics
-/// If the underlying JSON representation can not be parsed.
+/// `ObsData` is intentionally not `Clone`: duplicating it requires a native round-trip
+/// and can fail. Use [`ObsData::try_clone`] when an independent mutable copy is needed.
 //NOTE: Update: The strings are actually copied by obs itself, we don't need to store them
 #[derive(Debug)]
 pub struct ObsData {
@@ -76,7 +75,8 @@ impl ObsData {
             data_ptr: obs_data.clone(),
             runtime: runtime.clone(),
         });
-        let ptr = SmartPointerSendable::new(obs_data.0, drop_guard.clone());
+        let ptr =
+            SmartPointerSendable::new(obs_data.0, drop_guard.clone(), runtime.native_registry());
         Ok(ObsData {
             ptr,
             runtime: runtime.clone(),
@@ -104,7 +104,8 @@ impl ObsData {
             runtime: runtime.clone(),
         });
 
-        let ptr = SmartPointerSendable::new(raw_ptr.0, drop_guard.clone());
+        let ptr =
+            SmartPointerSendable::new(raw_ptr.0, drop_guard.clone(), runtime.native_registry());
 
         Ok(ObsData {
             ptr,
@@ -116,6 +117,15 @@ impl ObsData {
     /// Transfers the pointer without cloning.
     pub fn into_immutable(self) -> ImmutableObsData {
         ImmutableObsData::from(self)
+    }
+
+    /// Creates an independent mutable copy of this OBS data object.
+    ///
+    /// This is fallible by design; the previous `Clone` implementation performed the
+    /// same JSON round-trip but panicked when either native operation failed.
+    pub fn try_clone(&self) -> Result<Self, ObsError> {
+        let json = self.get_json()?;
+        Self::from_json(&json, self.runtime.clone())
     }
 }
 
@@ -131,10 +141,3 @@ impl ObsDataPointers for ObsData {
 
 impl ObsDataGetters for ObsData {}
 impl ObsDataSetters for ObsData {}
-
-impl Clone for ObsData {
-    fn clone(&self) -> Self {
-        let json = self.get_json().unwrap();
-        Self::from_json(json.as_str(), self.runtime.clone()).unwrap()
-    }
-}

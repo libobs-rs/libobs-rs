@@ -28,7 +28,7 @@ use libobs_wrapper::data::video::ObsVideoInfoBuilder;
 use libobs_wrapper::display::{
     ObsDisplayCreationData, ObsDisplayRef, ObsWindowHandle, ShowHideTrait, WindowPositionTrait,
 };
-use libobs_wrapper::unsafe_send::Sendable;
+use libobs_wrapper::sources::{ObsSourceBuilder, ObsSourceTrait};
 use libobs_wrapper::{context::ObsContext, utils::StartupInfo};
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
@@ -38,7 +38,6 @@ use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use winit::window::{Window, WindowId};
-use libobs_wrapper::sources::{ObsSourceBuilder, ObsSourceTrait};
 
 struct SignalThreadGuard {
     should_exit: Arc<AtomicBool>,
@@ -85,7 +84,7 @@ impl ObsInner {
         if let RawDisplayHandle::Wayland(handle) = _event_loop.display_handle().unwrap().as_raw() {
             info = unsafe {
                 // Safety: We know that the display handle is valid as long as the event loop is running.
-                info.set_nix_display(NixDisplay::Wayland(Sendable(handle.display.as_ptr() as _)))
+                info.set_nix_display(NixDisplay::wayland(handle.display.as_ptr() as _))
             };
         }
 
@@ -176,7 +175,7 @@ impl ObsInner {
         let thread_exit = should_exit.clone();
         let handle = std::thread::spawn(move || {
             let signal_manager = tmp.signals();
-            let mut x = signal_manager.on_update().unwrap();
+            let x = signal_manager.on_update().unwrap();
 
             println!("Listening for updates");
             while !thread_exit.load(Ordering::Relaxed) {
@@ -207,7 +206,7 @@ impl ObsInner {
 }
 
 struct App {
-    window: Arc<RwLock<Option<Sendable<Window>>>>,
+    window: Arc<RwLock<Option<Window>>>,
     obs: Arc<RwLock<Option<ObsInner>>>,
     #[cfg_attr(not(windows), allow(dead_code))]
     monitor_index: Arc<AtomicUsize>,
@@ -226,7 +225,7 @@ impl ApplicationHandler for App {
             .unwrap()
             .replace(ObsInner::new(event_loop, &window).unwrap());
 
-        let _ = self.window.write().unwrap().replace(Sendable(window));
+        let _ = self.window.write().unwrap().replace(window);
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
@@ -242,7 +241,7 @@ impl ApplicationHandler for App {
                 event_loop.exit();
             }
             WindowEvent::RedrawRequested => {
-                window.0.request_redraw();
+                window.request_redraw();
             }
             WindowEvent::Resized(size) => {
                 let window_width = size.width;

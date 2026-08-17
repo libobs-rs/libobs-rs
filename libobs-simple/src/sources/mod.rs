@@ -7,12 +7,12 @@
 //!
 //! You can find examples [here](https://github.com/libobs-rs/libobs-rs/tree/main/examples).
 
-#[cfg(any(windows, doc))]
-#[cfg_attr(doc, doc(cfg(windows)))]
+#[cfg(any(windows, all(doc, not(doctest))))]
+#[cfg_attr(all(doc, not(doctest)), doc(cfg(windows)))]
 pub mod windows;
 
-#[cfg(any(target_os = "linux", doc))]
-#[cfg_attr(doc, doc(cfg(target_os = "linux")))]
+#[cfg(any(target_os = "linux", all(doc, not(doctest))))]
+#[cfg_attr(all(doc, not(doctest)), doc(cfg(target_os = "linux")))]
 pub mod linux;
 
 mod either;

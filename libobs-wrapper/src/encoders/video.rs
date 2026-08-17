@@ -9,7 +9,7 @@ use crate::{
         object::{inner_fn_update_settings, ObsObjectTrait, ObsObjectTraitPrivate},
         ImmutableObsData, ObsData, ObsDataPointers,
     },
-    encoders::{ObsEncoderTrait, _ObsEncoderDropGuard},
+    encoders::{_ObsEncoderDropGuard, ObsEncoderTrait},
     run_with_obs,
     runtime::ObsRuntime,
     unsafe_send::{Sendable, SmartPointerSendable},
@@ -86,6 +86,7 @@ impl ObsVideoEncoder {
                 encoder: encoder_ptr,
                 runtime: runtime.clone(),
             }),
+            runtime.native_registry(),
         );
 
         let hotkey_data = match hotkey_data {

@@ -8,31 +8,21 @@
 //!
 //! ```no_run
 //! use libobs_simple::output::replay::ReplayBufferBuilder;
-//! use libobs_wrapper::{context::ObsContext, utils::StartupInfo, data::video::ObsVideoInfoBuilder};
+//! use libobs_wrapper::{data::video::ObsVideoInfoBuilder, utils::{ObsPath, StartupInfo}};
 //!
-//! #[tokio::main]
-//! async fn main() {
+//! fn main() -> Result<(), Box<dyn std::error::Error>> {
 //!     let context = StartupInfo::new()
-//!         .set_video_info(
-//!             ObsVideoInfoBuilder::new()
-//!                 // Configure video info as needed
-//!                 .build()
-//!         ).start()
-//!         .unwrap();
-//!     
-//!     let replay = ReplayBufferBuilder::new(context, "my_replay")
+//!         .set_video_info(ObsVideoInfoBuilder::new().build())
+//!         .start()?;
+//!
+//!     let _replay = ReplayBufferBuilder::new(context, "my_replay", ObsPath::new("."))
 //!         .max_time_sec(30)
 //!         .max_size_mb(1000)
 //!         .format("%CCYY-%MM-%DD %hh-%mm-%ss")
 //!         .extension("mp4")
-//!         .build()
-//!         .unwrap();
+//!         .build()?;
 //!
-//!     // Configure video and audio encoders on the replay buffer
-//!     // Start the replay buffer
-//!     // Call replay.save_buffer() when you want to save the buffer
-//!
-//!     println!("Replay buffer created!");
+//!     Ok(())
 //! }
 //! ```
 

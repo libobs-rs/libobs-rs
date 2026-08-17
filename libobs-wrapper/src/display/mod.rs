@@ -61,7 +61,9 @@ struct PosRemoveGuard {
 
 impl Drop for PosRemoveGuard {
     fn drop(&mut self) {
-        let mut map = DISPLAY_POSITIONS.write().unwrap();
+        let mut map = DISPLAY_POSITIONS
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         map.remove(&self.id);
     }
 }
@@ -74,7 +76,7 @@ unsafe extern "C" fn render_display(data: *mut c_void, width: u32, height: u32) 
     let id = data as usize;
     let pos = DISPLAY_POSITIONS
         .read()
-        .unwrap()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
         .get(&id)
         .cloned()
         .unwrap_or((0, 0));
@@ -232,6 +234,7 @@ impl ObsDisplayRef {
                 display,
                 runtime: runtime.clone(),
             }),
+            runtime.native_registry(),
         );
 
         #[cfg(windows)]

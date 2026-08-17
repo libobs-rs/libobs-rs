@@ -44,7 +44,11 @@ impl<K: ObsSourceTrait> ObsPropertyObjectPrivate for K {
             runtime: self.runtime().clone(),
         });
 
-        Ok(SmartPointerSendable::new(raw_ptr.0, drop_guard))
+        Ok(SmartPointerSendable::new(
+            raw_ptr.0,
+            drop_guard,
+            self.runtime().native_registry(),
+        ))
     }
 
     fn get_properties_by_id_raw<T: Into<ObsString> + Sync + Send>(
@@ -71,7 +75,8 @@ impl<K: ObsSourceTrait> ObsPropertyObjectPrivate for K {
             runtime: runtime.clone(),
         };
 
-        let ptr = SmartPointerSendable::new(raw_ptr.0, Arc::new(drop_guard));
+        let ptr =
+            SmartPointerSendable::new(raw_ptr.0, Arc::new(drop_guard), runtime.native_registry());
         Ok(ptr)
     }
 }
@@ -106,7 +111,11 @@ impl ObsPropertyObjectPrivate for ObsOutputRef {
             runtime: self.runtime().clone(),
         });
 
-        Ok(SmartPointerSendable::new(ptr.0, drop_guard))
+        Ok(SmartPointerSendable::new(
+            ptr.0,
+            drop_guard,
+            self.runtime().native_registry(),
+        ))
     }
 
     fn get_properties_by_id_raw<T: Into<ObsString> + Sync + Send>(
@@ -133,7 +142,7 @@ impl ObsPropertyObjectPrivate for ObsOutputRef {
             runtime: runtime.clone(),
         };
 
-        let ptr = SmartPointerSendable::new(ptr.0, Arc::new(drop_guard));
+        let ptr = SmartPointerSendable::new(ptr.0, Arc::new(drop_guard), runtime.native_registry());
         Ok(ptr)
     }
 }

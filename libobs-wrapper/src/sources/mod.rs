@@ -111,6 +111,7 @@ impl ObsSourceRef {
                 source: source_ptr.clone(),
                 runtime: runtime.clone(),
             }),
+            runtime.native_registry(),
         );
 
         // Getting default settings if none were provided
@@ -228,7 +229,7 @@ impl ObsSourceTrait for ObsSourceRef {
 
         let has_filter = guard
             .iter()
-            .any(|f| f.get_inner().as_ptr().get_ptr() == filter.as_ptr().get_ptr());
+            .any(|f| f.get_inner().as_ptr().native_id() == filter.as_ptr().native_id());
 
         if has_filter {
             return Err(ObsError::FilterAlreadyApplied);

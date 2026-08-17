@@ -26,7 +26,7 @@ pub fn test_source() {
     }
     let window = window.expect("Couldn't find notepad window");
 
-    println!("Recording {:?}", window.0.obs_id);
+    println!("Recording {:?}", window.obs_id);
 
     let (mut context, mut _output) = initialize_obs(rec_file);
     let mut scene = context.scene("main", Some(0)).unwrap();

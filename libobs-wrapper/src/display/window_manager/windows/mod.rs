@@ -5,7 +5,6 @@ use std::sync::{
     Arc, Mutex,
 };
 
-use crate::unsafe_send::AlwaysSendable;
 use crate::utils::ObsError;
 use crate::{display::ObsWindowHandle, unsafe_send::SmartPointerSendable};
 use lazy_static::lazy_static;
@@ -29,6 +28,14 @@ use windows::{
 };
 
 const WM_DESTROY_WINDOW: u32 = 0x8001; // Custom message
+
+#[derive(Debug, Clone, Copy)]
+struct MessageThreadHwnd(HWND);
+
+// HWND is an opaque OS handle. It is only used through Win32 APIs, and the window
+// itself is owned by the dedicated message thread until teardown completes.
+unsafe impl Send for MessageThreadHwnd {}
+unsafe impl Sync for MessageThreadHwnd {}
 
 /// Function to update color space from window user data
 /// # Safety
@@ -161,11 +168,11 @@ impl WindowsPreviewChildWindowHandler {
         let tmp = should_exit.clone();
 
         let parent = parent.get_hwnd();
-        let parent = Mutex::new(AlwaysSendable(parent));
+        let parent = Mutex::new(MessageThreadHwnd(parent));
         let message_thread = std::thread::spawn(move || {
             let parent = parent.lock().unwrap().0;
             // We have to have the whole window creation stuff here as well so the message loop functions
-            let create = move || -> Result<AlwaysSendable<HWND>, ObsError> {
+            let create = move || -> Result<MessageThreadHwnd, ObsError> {
                 log::trace!("Registering class...");
                 try_register_class().map_err(|e| ObsError::DisplayCreationError(e.to_string()))?;
                 let enabled = unsafe {
@@ -261,16 +268,20 @@ impl WindowsPreviewChildWindowHandler {
                     SetWindowLongPtrW(window, GWL_EXSTYLE, ex_style);
                 }
 
-                Ok(AlwaysSendable(window))
+                Ok(MessageThreadHwnd(window))
             };
 
             let r = create();
             let window = r.as_ref().ok().map(|r| r.0);
-            tx.send(r).unwrap();
-            if window.is_none() {
+            if tx.send(r).is_err() {
+                log::warn!(
+                    "Preview creator dropped before the window creation result was delivered"
+                );
                 return;
             }
-            let window = window.unwrap();
+            let Some(window) = window else {
+                return;
+            };
 
             log::trace!("Starting up message thread...");
             let mut msg = MSG::default();
@@ -357,20 +368,8 @@ impl Drop for WindowsPreviewChildWindowHandler {
             log::error!("Failed to post destroy window message: {:?}", err);
         }
 
-        let thread = self.child_message_thread.take();
-        if let Some(thread) = thread {
-            log::trace!("Waiting for message thread to exit...");
-            let r = thread.join();
-            if r.is_ok() {
-                log::trace!("Message thread exited cleanly");
-                return;
-            }
-
-            if !std::thread::panicking() {
-                log::error!("Message thread panicked: {:?}", r.unwrap_err());
-            } else {
-                r.unwrap();
-            }
-        }
+        // The quit message and `should_exit` flag request termination. Do not join from
+        // Drop: a stuck native message loop must not stall application destruction.
+        drop(self.child_message_thread.take());
     }
 }
