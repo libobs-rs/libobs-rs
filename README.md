@@ -57,7 +57,7 @@ More details can be found in the [cargo-obs-build documentation](./cargo-obs-bui
 
 ## Quick Start
 
-The high-level wrapper supports runtime discovery, typed source/scene composition, encoder/service wiring, recording/streaming outputs, and explicit unsafe escape hatches for advanced libobs integrations.
+The high-level wrapper supports runtime discovery and capability-driven selection, validated output pipelines, typed source/scene composition, recording/streaming outputs, and explicit unsafe escape hatches for advanced libobs integrations.
 
 Examples are located in the [examples](./examples) directory.
 Documentation is also available for [libobs-simple](libobs-simple/README.md)

@@ -49,14 +49,14 @@ Callback payloads are copied into owned Rust data before publication. Callback-o
 
 Each subscriber has a bounded channel. A slow subscriber drops new events for that subscriber rather than blocking a libobs callback or growing memory without bound. Subscriber removal during/after callbacks is synchronized by the hub.
 
-Display rendering follows the same rule: per-display render state is owned by the display's release guard and remains alive through callback deregistration. Windows WndProc userdata leases a managed display handle before each native call instead of storing a naked `obs_display_t *`.
+Display rendering follows the same rule: per-display render state is owned by the display's release guard and remains alive through callback deregistration. Windows WndProc userdata stores only a mutex-protected borrowed display address; the owning handler keeps the managed display lease on the OBS-owning thread, and teardown clears the address under the same mutex before releasing that lease.
 
 ### Capability discovery
 
 `ObsContext` can query the running libobs installation instead of relying on hard-coded plugin assumptions:
 
 - `source_types()`, `input_types()`, `filter_types()`, and `transition_types()`;
-- `output_types()`, including supported audio/video codecs;
+- `output_types()`, including supported audio/video codecs, protocols, and output flags;
 - `encoder_types()`, including codec and capability metadata;
 - `service_types()`;
 - `protocols()`;
@@ -65,7 +65,9 @@ Display rendering follows the same rule: per-display render state is owned by th
 
 Source/output/encoder/service descriptors can query generic properties and default settings. `default_settings_mut()` creates an owned mutable settings object initialized from plugin defaults, and descriptor-aware `ObsContext::create_source`, `create_filter`, `create_output`, `create_video_encoder`, `create_audio_encoder`, and `create_service` methods turn discovery results directly into runtime-affine typed handles. A discovered source can also be created directly inside a scene with `ObsSceneRef::add_discovered_source`.
 
-Outputs expose `ObsOutputComposition` as a desired-state wiring object. `apply_composition()` validates the runtime affinity of the video encoder, all audio encoders, and service before performing the native wiring in one actor command; omitted components are detached. Shared output handles can also inspect `current_composition()` or set/clear individual attachments. Audio mixer indices are checked against libobs's supported mixer count before FFI.
+`ObsCapabilities` also provides deterministic selectors: `select_video_encoder()`, `select_audio_encoder()`, and `select_output()`. They filter by codec, protocol, native capability flags, and deprecated/internal status. `prefer_hardware()` ranks likely hardware encoders first while preserving same-codec software fallbacks. Selection is metadata-only: no native encoder/output is created until the caller chooses a descriptor.
+
+For complete outputs, `ObsContext::output_pipeline()` is the preferred high-level seam. `ObsOutputPipelineBuilder::validate()` checks runtime affinity, required/forbidden components, audio mixer bounds, encoder codecs, service protocol, and output flags before output creation or native mutation. `build()` creates the output only after validation and applies the complete `ObsOutputComposition`. The lower-level composition and individual attach/detach methods remain available for applications that intentionally manage wiring themselves. Shared output handles expose `current_composition()` plus `attached_video_encoder()`, `attached_audio_encoder()` / `attached_audio_encoders()`, and `attached_service()`.
 
 Property trees are copied recursively into owned `PropertyMetadata`/`PropertyKind` values and destroyed on the OBS actor before the result crosses the thread boundary. Lists, paths, numeric controls, groups, frame-rate metadata, and other common property kinds are represented directly. Unknown future property/category enum values are preserved as `Unknown(...)` rather than panicking.
 

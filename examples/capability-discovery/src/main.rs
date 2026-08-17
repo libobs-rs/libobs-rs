@@ -48,10 +48,12 @@ fn main() -> Result<()> {
     println!("\nOutputs:");
     for output in capabilities.outputs() {
         println!(
-            "  {} (video={:?}, audio={:?})",
+            "  {} (video={:?}, audio={:?}, protocols={:?}, flags={:?})",
             output.id(),
             output.video_codecs(),
-            output.audio_codecs()
+            output.audio_codecs(),
+            output.protocols(),
+            output.capability_flags()
         );
     }
 
@@ -62,6 +64,28 @@ fn main() -> Result<()> {
 
     println!("\nProtocols: {:?}", capabilities.protocols());
     println!("Loaded modules: {}", capabilities.modules().len());
+
+    if let Some(encoder) = capabilities
+        .select_video_encoder()
+        .codec("h264")
+        .prefer_hardware()
+        .best_available()
+    {
+        println!(
+            "Preferred available H.264 encoder: {} (hardware-likely={})",
+            encoder.id(),
+            encoder.is_likely_hardware_accelerated()
+        );
+    }
+    if let Some(output) = capabilities
+        .select_output()
+        .protocol("RTMP")
+        .video_codec("h264")
+        .audio_codec("aac")
+        .best_available()
+    {
+        println!("Compatible RTMP H.264/AAC output: {}", output.id());
+    }
 
     // Discovery descriptors are actionable: callers can start from plugin defaults,
     // change settings generically, and create a typed managed object without hard-coding
