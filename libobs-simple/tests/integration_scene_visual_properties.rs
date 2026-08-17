@@ -1,7 +1,7 @@
 #[path = "common/render_probe.rs"]
 mod render_probe;
 
-use std::{thread, time::Duration};
+use std::time::Duration;
 
 use libobs_wrapper::{
     capabilities::SourceTypeInfo,
@@ -12,7 +12,7 @@ use libobs_wrapper::{
     sources::ObsSourceRef,
     utils::StartupInfo,
 };
-use render_probe::{capture_program, PixelBounds};
+use render_probe::{capture_until, PixelBounds};
 
 const CANVAS_WIDTH: u32 = 200;
 const CANVAS_HEIGHT: u32 = 140;
@@ -130,20 +130,20 @@ fn randomized_axis_aligned_crop_scale_and_position_match_rendered_geometry() {
         // Crop changes deliberately invalidate a scene-item texrender for the next video tick.
         // Poll across a few real 30 fps frames: seeing the previous geometry briefly is legal, but
         // the rendered state must converge to the public transform we just applied.
-        let mut observed = None;
-        for _ in 0..12 {
-            let frame = capture_program(&scene, CANVAS_WIDTH, CANVAS_HEIGHT)
-                .expect("render randomized scene-item transform");
-            let bounds = frame.color_bounds(ORANGE, COLOR_TOLERANCE);
-            let area = frame.count_color(ORANGE, COLOR_TOLERANCE);
-            if bounds == Some(expected) && area == expected_area {
-                observed = Some((bounds, area));
-                break;
-            }
-            observed = Some((bounds, area));
-            thread::sleep(Duration::from_millis(12));
-        }
-        let (actual_bounds, actual_area) = observed.expect("at least one property-test frame");
+        let frame = capture_until(
+            &scene,
+            CANVAS_WIDTH,
+            CANVAS_HEIGHT,
+            12,
+            Duration::from_millis(12),
+            |frame| {
+                frame.color_bounds(ORANGE, COLOR_TOLERANCE) == Some(expected)
+                    && frame.count_color(ORANGE, COLOR_TOLERANCE) == expected_area
+            },
+        )
+        .expect("render randomized scene-item transform");
+        let actual_bounds = frame.color_bounds(ORANGE, COLOR_TOLERANCE);
+        let actual_area = frame.count_color(ORANGE, COLOR_TOLERANCE);
         assert_eq!(
             actual_bounds,
             Some(expected),

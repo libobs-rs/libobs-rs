@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+use std::{thread, time::Duration};
+
 use libobs_wrapper::{scenes::ObsSceneRef, utils::ObsError};
 
 #[derive(Clone, Debug)]
@@ -77,6 +79,32 @@ impl RgbaFrame {
             "pixel ({x}, {y}) mismatch: expected {expected:?} ± {tolerance}, got {actual:?}"
         );
     }
+
+    pub fn assert_color_bounds(
+        &self,
+        color: [u8; 4],
+        tolerance: u8,
+        expected: PixelBounds,
+        label: &str,
+    ) {
+        assert_eq!(
+            self.color_bounds(color, tolerance),
+            Some(expected),
+            "unexpected {label} rendered bounds"
+        );
+    }
+
+    pub fn assert_color_count(&self, color: [u8; 4], tolerance: u8, expected: usize, label: &str) {
+        assert_eq!(
+            self.count_color(color, tolerance),
+            expected,
+            "unexpected {label} rendered pixel count"
+        );
+    }
+
+    pub fn assert_color_absent(&self, color: [u8; 4], tolerance: u8, label: &str) {
+        self.assert_color_count(color, tolerance, 0, label);
+    }
 }
 
 pub fn color_close(actual: [u8; 4], expected: [u8; 4], tolerance: u8) -> bool {
@@ -84,6 +112,31 @@ pub fn color_close(actual: [u8; 4], expected: [u8; 4], tolerance: u8) -> bool {
         .into_iter()
         .zip(expected)
         .all(|(actual, expected)| actual.abs_diff(expected) <= tolerance)
+}
+
+/// Captures bounded successive real frames until `predicate` accepts one. This models libobs
+/// property/scene updates that intentionally take effect on the next video tick.
+pub fn capture_until(
+    scene: &ObsSceneRef,
+    width: u32,
+    height: u32,
+    attempts: usize,
+    delay: Duration,
+    mut predicate: impl FnMut(&RgbaFrame) -> bool,
+) -> Result<RgbaFrame, ObsError> {
+    let attempts = attempts.max(1);
+    let mut last = capture_program(scene, width, height)?;
+    if predicate(&last) {
+        return Ok(last);
+    }
+    for _ in 1..attempts {
+        thread::sleep(delay);
+        last = capture_program(scene, width, height)?;
+        if predicate(&last) {
+            return Ok(last);
+        }
+    }
+    Ok(last)
 }
 
 /// Renders OBS's current program texture into an off-screen RGBA texture and reads it back.
