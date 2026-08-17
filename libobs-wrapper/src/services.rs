@@ -4,7 +4,10 @@
 //! the OBS actor, clones share one native lifetime lease, and final release is deferred
 //! back to the actor.
 
-use std::sync::{Arc, RwLock};
+use std::{
+    ffi::CStr,
+    sync::{Arc, RwLock},
+};
 
 use crate::{
     data::{
@@ -44,6 +47,25 @@ pub struct ObsServiceRef {
 }
 
 impl ObsServiceRef {
+    /// Returns the protocol reported by this service instance (for example `RTMP`).
+    pub fn protocol(&self) -> Result<Option<String>, ObsError> {
+        let service = self.__native_handle();
+        run_with_obs!(self.runtime, (service), move || {
+            // Safety: the managed service handle remains alive for the actor call.
+            let protocol = unsafe { libobs::obs_service_get_protocol(service.get_ptr()) };
+            if protocol.is_null() {
+                None
+            } else {
+                // Safety: libobs returns a borrowed NUL-terminated string for the service lifetime.
+                Some(
+                    unsafe { CStr::from_ptr(protocol) }
+                        .to_string_lossy()
+                        .into_owned(),
+                )
+            }
+        })
+    }
+
     pub(crate) fn new_from_info(
         info: ObjectInfo,
         runtime: ObsRuntime,

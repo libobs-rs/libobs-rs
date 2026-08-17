@@ -23,6 +23,9 @@ pub(crate) mod macros;
 mod traits;
 pub use traits::*;
 
+mod pipeline;
+pub use pipeline::*;
+
 mod replay_buffer;
 pub use replay_buffer::*;
 
@@ -264,15 +267,15 @@ impl ObsOutputTrait for ObsOutputRef {
         &self.signal_manager
     }
 
-    fn video_encoder(&self) -> &Arc<RwLock<Option<Arc<ObsVideoEncoder>>>> {
+    fn video_encoder_slot(&self) -> &Arc<RwLock<Option<Arc<ObsVideoEncoder>>>> {
         &self.curr_video_encoder
     }
 
-    fn audio_encoders(&self) -> &Arc<RwLock<HashMap<usize, Arc<ObsAudioEncoder>>>> {
+    fn audio_encoder_slots(&self) -> &Arc<RwLock<HashMap<usize, Arc<ObsAudioEncoder>>>> {
         &self.audio_encoders
     }
 
-    fn service(&self) -> &Arc<RwLock<Option<Arc<ObsServiceRef>>>> {
+    fn service_slot(&self) -> &Arc<RwLock<Option<Arc<ObsServiceRef>>>> {
         &self.service
     }
 
