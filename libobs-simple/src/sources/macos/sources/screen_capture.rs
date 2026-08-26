@@ -30,6 +30,8 @@ impl ScreenCaptureType {
 ///
 /// Which selector is used depends on [`ScreenCaptureType`]: `display_uuid` for display
 /// capture, `window` for window capture, and `application` for application capture.
+/// OBS's `screen_capture` source captures audio automatically on supported macOS
+/// versions; it does not expose an `audio_capture` settings key.
 #[obs_object_builder("screen_capture")]
 pub struct ScreenCaptureSourceBuilder {
     #[obs_property(type_t = "int", settings_key = "type")]
@@ -55,10 +57,6 @@ pub struct ScreenCaptureSourceBuilder {
     #[obs_property(type_t = "bool")]
     /// Include the mouse cursor in the captured video.
     show_cursor: bool,
-
-    #[obs_property(type_t = "bool")]
-    /// Capture system/application audio when supported by macOS and OBS.
-    audio_capture: bool,
 
     #[obs_property(type_t = "bool")]
     /// Exclude OBS windows from capture.

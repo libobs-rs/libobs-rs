@@ -352,10 +352,11 @@ fn build_obs(
 ) -> anyhow::Result<()> {
     fs::create_dir_all(build_out)?;
 
-    let obs_path = if let Some(e) = override_zip {
-        e
+    let (obs_path, remove_archive_after_extract) = if let Some(path) = override_zip {
+        // An override is caller-owned input (primarily for testing). Never delete it.
+        (path, false)
     } else {
-        download_binaries(build_out, &release, target)?
+        (download_binaries(build_out, &release, target)?, true)
     };
 
     info!("Extracting OBS Studio binaries...");
@@ -374,7 +375,9 @@ fn build_obs(
 
     clean_up_files(build_out, remove_pdbs, include_browser)?;
 
-    fs::remove_file(&obs_path)?;
+    if remove_archive_after_extract {
+        fs::remove_file(&obs_path)?;
+    }
 
     Ok(())
 }

@@ -2,7 +2,6 @@ use std::ptr;
 
 #[cfg(target_os = "linux")]
 use super::PlatformType;
-#[cfg(target_os = "linux")]
 use std::rc::Rc;
 
 use crate::unsafe_send::Sendable;

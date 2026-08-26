@@ -17,15 +17,15 @@
 ### 3. `libobs-simple`
 - High-level abstraction.
 - Simplifies common tasks like recording and streaming.
-- Integrates `libobs-bootstrapper` for easy setup.
 
 ### 4. `libobs-bootstrapper`
-- Handles downloading and extracting OBS binaries.
-- Manages versioning and updates.
+- Inspects a caller-selected local OBS installation and reports its version/status.
+- Runtime downloading/installing is intentionally disabled; legacy bootstrap entry points return `RuntimeBootstrapDisabled` before network I/O.
+- Build/package-time binary preparation is handled separately by `cargo-obs-build`.
 
 ## Data Flow
 
-1. **Initialization**: `libobs-bootstrapper` ensures binaries exist. `libobs-wrapper` loads `obs.dll` and initializes the core context.
+1. **Initialization**: OBS binaries are provided by the system or prepared at build/package time. `libobs-bootstrapper` can inspect an explicitly selected local installation, while `libobs-wrapper` initializes the core context.
 2. **Configuration**: You create scenes, sources, and encoders using `libobs-simple` or `libobs-wrapper`.
 3. **Execution**: `libobs` runs the video/audio pipeline in background threads.
 4. **Output**: Encoded data is written to file or stream.

@@ -501,8 +501,10 @@ impl SimpleOutputBuilder {
         {
             0
         } else {
-            // Unknown future VideoToolbox IDs remain eligible rather than
-            // forcing x264 merely because Apple renamed an encoder.
+            // libobs does not expose VideoToolbox's IsHardwareAccelerated bit
+            // through generic encoder metadata. Treat unknown IDs as unknown
+            // rather than silently satisfying an explicit Hardware request with
+            // an encoder that could be software-only.
             1
         }
     }
@@ -529,7 +531,9 @@ impl SimpleOutputBuilder {
                     return None;
                 }
                 let rank = Self::videotoolbox_hardware_rank(id, display_name.as_deref());
-                if rank == 0 {
+                // Only accept positive hardware evidence. Unknown future IDs
+                // safely fall back to another hardware backend or x264.
+                if rank < 2 {
                     return None;
                 }
                 Some((rank, encoder.clone()))
@@ -566,6 +570,10 @@ impl SimpleOutputBuilder {
         }
     }
 
+    fn uses_x264_options(selected_encoder: &ObsVideoEncoderType) -> bool {
+        *selected_encoder == ObsVideoEncoderType::OBS_X264
+    }
+
     fn configure_video_encoder(
         &self,
         settings: &mut ObsData,
@@ -585,9 +593,13 @@ impl SimpleOutputBuilder {
             settings.set_string("preset", preset)?;
         }
 
-        // Apply custom encoder settings if provided (mainly for x264).
-        if let Some(ref custom) = self.settings.custom_encoder_settings {
-            settings.set_string("x264opts", custom.as_str())?;
+        // `x264opts` is an x264-only property. Hardware selection can fall
+        // back to x264, so key this off the actual selected encoder rather than
+        // the requested encoder mode.
+        if Self::uses_x264_options(selected_encoder) {
+            if let Some(ref custom) = self.settings.custom_encoder_settings {
+                settings.set_string("x264opts", custom.as_str())?;
+            }
         }
 
         Ok(())
@@ -659,6 +671,33 @@ mod tests {
             SimpleOutputBuilder::select_videotoolbox_encoder(HardwareCodec::H264, &software_only),
             None
         );
+    }
+
+    #[test]
+    fn unknown_videotoolbox_encoder_does_not_satisfy_hardware_request() {
+        let unknown = vec![(
+            ObsVideoEncoderType::Other("com.apple.videotoolbox.videoencoder.future.avc".into()),
+            Some("h264".into()),
+            Some("Localized encoder name".into()),
+        )];
+
+        assert_eq!(
+            SimpleOutputBuilder::select_videotoolbox_encoder(HardwareCodec::H264, &unknown),
+            None
+        );
+    }
+
+    #[test]
+    fn x264_options_are_keyed_to_actual_selected_encoder() {
+        assert!(SimpleOutputBuilder::uses_x264_options(
+            &ObsVideoEncoderType::OBS_X264
+        ));
+        assert!(!SimpleOutputBuilder::uses_x264_options(
+            &ObsVideoEncoderType::FFMPEG_VAAPI_TEX
+        ));
+        assert!(!SimpleOutputBuilder::uses_x264_options(
+            &ObsVideoEncoderType::Other("com.apple.videotoolbox.videoencoder.ave.avc".into())
+        ));
     }
 
     #[test]

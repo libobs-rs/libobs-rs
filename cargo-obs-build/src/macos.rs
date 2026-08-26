@@ -9,15 +9,59 @@ use std::{
 
 struct DmgMount {
     path: PathBuf,
+    attached: bool,
+}
+
+impl DmgMount {
+    fn new(path: PathBuf) -> Self {
+        Self {
+            path,
+            attached: false,
+        }
+    }
+
+    fn mark_attached(&mut self) {
+        self.attached = true;
+    }
+
+    fn detach(&mut self) -> anyhow::Result<()> {
+        if self.attached {
+            let detached = Command::new("hdiutil")
+                .arg("detach")
+                .arg(&self.path)
+                .output()?;
+            if !detached.status.success() {
+                let forced = Command::new("hdiutil")
+                    .args(["detach", "-force"])
+                    .arg(&self.path)
+                    .output()?;
+                if !forced.status.success() {
+                    bail!(
+                        "Failed to detach OBS DMG at {}: {}; forced detach also failed: {}",
+                        self.path.display(),
+                        String::from_utf8_lossy(&detached.stderr),
+                        String::from_utf8_lossy(&forced.stderr)
+                    );
+                }
+            }
+            self.attached = false;
+        }
+
+        if self.path.exists() {
+            fs::remove_dir(&self.path)?;
+        }
+        Ok(())
+    }
 }
 
 impl Drop for DmgMount {
     fn drop(&mut self) {
-        let _ = Command::new("hdiutil")
-            .arg("detach")
-            .arg(&self.path)
-            .output();
-        let _ = fs::remove_dir(&self.path);
+        if let Err(error) = self.detach() {
+            log::error!(
+                "Failed to clean up OBS DMG mount {}: {error:#}",
+                self.path.display()
+            );
+        }
     }
 }
 
@@ -33,12 +77,11 @@ pub(crate) fn extract_dmg(dmg_path: &Path, output_dir: &Path) -> anyhow::Result<
             .duration_since(std::time::UNIX_EPOCH)?
             .as_nanos()
     ));
-    // Fail rather than reusing an existing path; the guard below removes the
-    // mountpoint on every subsequent success/error path.
+    // Fail rather than reusing an existing path. The guard tracks whether this
+    // process actually attached the DMG, so attach failures never detach an
+    // unrelated volume and all later errors still unmount our volume.
     fs::create_dir(&mount_path)?;
-    let _mount = DmgMount {
-        path: mount_path.clone(),
-    };
+    let mut mount = DmgMount::new(mount_path.clone());
 
     let mounted = Command::new("hdiutil")
         .args(["attach", "-nobrowse", "-readonly", "-mountpoint"])
@@ -51,60 +94,74 @@ pub(crate) fn extract_dmg(dmg_path: &Path, output_dir: &Path) -> anyhow::Result<
             String::from_utf8_lossy(&mounted.stderr)
         );
     }
-    let contents = mount_path.join("OBS.app/Contents");
-    if !contents.is_dir() {
-        bail!("Mounted DMG does not contain OBS.app/Contents");
-    }
-    fs::create_dir_all(output_dir)?;
+    mount.mark_attached();
 
-    let frameworks = contents.join("Frameworks");
-    if frameworks.is_dir() {
-        copy_to_dir(&frameworks, output_dir, None)?;
-        let libobs_resources = frameworks.join("libobs.framework/Versions/A/Resources");
-        if libobs_resources.is_dir() {
-            copy_to_dir(&libobs_resources, &output_dir.join("data/libobs"), None)?;
+    let extraction_result = (|| -> anyhow::Result<()> {
+        let contents = mount_path.join("OBS.app/Contents");
+        if !contents.is_dir() {
+            bail!("Mounted DMG does not contain OBS.app/Contents");
         }
-    }
+        fs::create_dir_all(output_dir)?;
 
-    let plugins = contents.join("PlugIns");
-    if plugins.is_dir() {
-        let plugin_out = output_dir.join("obs-plugins");
-        copy_to_dir(&plugins, &plugin_out, None)?;
-        let data_out = output_dir.join("data/obs-plugins");
-        for entry in fs::read_dir(&plugins)? {
-            let entry = entry?;
-            let path = entry.path();
-            if path.extension().and_then(|x| x.to_str()) != Some("plugin") {
-                continue;
-            }
-            let resources = path.join("Contents/Resources");
-            if resources.is_dir() {
-                let name = safe_plugin_stem(&path)?;
-                copy_to_dir(&resources, &data_out.join(name), None)?;
+        let frameworks = contents.join("Frameworks");
+        if frameworks.is_dir() {
+            copy_to_dir(&frameworks, output_dir, None)?;
+            let libobs_resources = frameworks.join("libobs.framework/Versions/A/Resources");
+            if libobs_resources.is_dir() {
+                copy_to_dir(&libobs_resources, &output_dir.join("data/libobs"), None)?;
             }
         }
-    }
 
-    let resources = contents.join("Resources");
-    if resources.is_dir() {
-        copy_to_dir(&resources, &output_dir.join("data"), None)?;
-    }
-
-    let macos = contents.join("MacOS");
-    if macos.is_dir() {
-        for entry in fs::read_dir(&macos)? {
-            let entry = entry?;
-            if entry.file_name() == "OBS" {
-                continue;
+        let plugins = contents.join("PlugIns");
+        if plugins.is_dir() {
+            let plugin_out = output_dir.join("obs-plugins");
+            copy_to_dir(&plugins, &plugin_out, None)?;
+            let data_out = output_dir.join("data/obs-plugins");
+            for entry in fs::read_dir(&plugins)? {
+                let entry = entry?;
+                let path = entry.path();
+                if path.extension().and_then(|x| x.to_str()) != Some("plugin") {
+                    continue;
+                }
+                let resources = path.join("Contents/Resources");
+                if resources.is_dir() {
+                    let name = safe_plugin_stem(&path)?;
+                    copy_to_dir(&resources, &data_out.join(name), None)?;
+                }
             }
-            copy_item_preserving_macos_metadata(
-                &entry.path(),
-                &output_dir.join(entry.file_name()),
-            )?;
         }
-    }
 
-    Ok(())
+        let resources = contents.join("Resources");
+        if resources.is_dir() {
+            copy_to_dir(&resources, &output_dir.join("data"), None)?;
+        }
+
+        let macos = contents.join("MacOS");
+        if macos.is_dir() {
+            for entry in fs::read_dir(&macos)? {
+                let entry = entry?;
+                if entry.file_name() == "OBS" {
+                    continue;
+                }
+                copy_item_preserving_macos_metadata(
+                    &entry.path(),
+                    &output_dir.join(entry.file_name()),
+                )?;
+            }
+        }
+
+        Ok(())
+    })();
+
+    let detach_result = mount.detach();
+    match (extraction_result, detach_result) {
+        (Ok(()), Ok(())) => Ok(()),
+        (Err(error), Ok(())) => Err(error),
+        (Ok(()), Err(detach_error)) => Err(detach_error),
+        (Err(error), Err(detach_error)) => Err(anyhow!(
+            "{error:#}; additionally failed to detach OBS DMG: {detach_error:#}"
+        )),
+    }
 }
 
 fn safe_plugin_stem(path: &Path) -> anyhow::Result<&std::ffi::OsStr> {

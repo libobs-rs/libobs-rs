@@ -11,6 +11,7 @@ fn main() {
     println!("cargo:rerun-if-changed=headers/window_capture.h");
     println!("cargo:rerun-if-changed=Cargo.toml");
     println!("cargo:rerun-if-env-changed=LIBOBS_PATH");
+    println!("cargo:rerun-if-env-changed=HOMEBREW_PREFIX");
 
     let target_family = env::var("CARGO_CFG_TARGET_FAMILY").unwrap_or_default();
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
@@ -75,7 +76,9 @@ fn main() {
 
     if should_generate_bindings {
         let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
+        let target_env = env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
         let can_use_pregenerated_linux = target_os == "linux"
+            && target_env == "gnu"
             && !feature_generate_bindings
             && matches!(target_arch.as_str(), "x86_64" | "aarch64");
 
@@ -163,12 +166,25 @@ fn generate_bindings(target_os: &str) {
 
     if target_os == "macos" && env::consts::OS == "macos" {
         let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
-        if target_arch == "aarch64" && std::path::Path::new("/opt/homebrew/include").exists() {
-            builder = builder
-                .clang_arg("-I/opt/homebrew/include")
-                .clang_arg("-DSIMDE_NO_NATIVE");
-        } else if target_arch == "x86_64" && std::path::Path::new("/usr/local/include").exists() {
-            builder = builder.clang_arg("-I/usr/local/include");
+        let mut include_roots = Vec::new();
+        if let Ok(prefix) = env::var("HOMEBREW_PREFIX") {
+            include_roots.push(PathBuf::from(prefix).join("include"));
+        }
+        include_roots.extend([
+            PathBuf::from("/opt/homebrew/include"),
+            PathBuf::from("/usr/local/include"),
+        ]);
+        include_roots.dedup();
+        for include in include_roots {
+            // SIMDe is header-only, so use whichever Homebrew prefix belongs to
+            // the host instead of assuming the target architecture's prefix.
+            // This matters when cross-compiling Intel on Apple Silicon (or vice versa).
+            if include.join("simde").is_dir() {
+                builder = builder.clang_arg(format!("-I{}", include.display()));
+            }
+        }
+        if target_arch == "aarch64" {
+            builder = builder.clang_arg("-DSIMDE_NO_NATIVE");
         }
     }
 
