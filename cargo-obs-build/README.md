@@ -73,6 +73,8 @@ fn main() {
 
 See [BUILD_SCRIPT_EXAMPLE.md](BUILD_SCRIPT_EXAMPLE.md) for more examples and detailed explanations.
 
+For explicit runtime provisioning, `libobs-bootstrapper` reuses this crate's platform preparation through `build_obs_binaries_verified`, which is stricter than the normal build path: downloaded assets must advertise a SHA-256 checksum/digest.
+
 ## Configuration
 
 ### Cargo.toml Metadata

@@ -2,7 +2,14 @@
 name = "download-at-runtime"
 version = "0.1.0"
 edition = "2024"
+build = "build.rs"
 
 [dependencies]
 libobs-bootstrapper = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+
+[target.'cfg(windows)'.dependencies]
+libobs = { workspace = true }
+
+[build-dependencies]
+libobs-bootstrapper = { workspace = true }

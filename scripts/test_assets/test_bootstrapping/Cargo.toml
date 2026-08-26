@@ -2,13 +2,15 @@
 name = "test_bootstrapping"
 version = "0.1.0"
 edition = "2024"
+build = "build.rs"
 
 [dependencies]
-libobs-bootstrapper = { path = "../../../libobs-bootstrapper", features = [
-    "__mock_github_responses",
-] }
+libobs-bootstrapper = { path = "../../../libobs-bootstrapper" }
+libobs = { path = "../../../libobs" }
 tokio = { version = "1.49.0", default-features = false, features = [
     "macros",
     "rt-multi-thread",
 ] }
-libobs = { path = "../../../libobs" }
+
+[build-dependencies]
+libobs-bootstrapper = { path = "../../../libobs-bootstrapper" }

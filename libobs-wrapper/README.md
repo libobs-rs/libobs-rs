@@ -59,9 +59,9 @@ cargo obs-build build --out-dir target/(debug|release)/deps
 
 More details can be found in the [cargo-obs-build documentation](../cargo-obs-build/README.md).
 
-### Runtime bootstrapper status
+### Runtime bootstrapper
 
-Automatic network download/install at runtime is intentionally disabled for provenance and startup-safety reasons. The `libobs-bootstrapper` crate can inspect a pre-packaged Windows/macOS installation, including a custom install directory, but it cannot fetch or execute a mutable release. Prepare OBS before startup with `cargo-obs-build`, a signed installer/package, or the Linux system package manager.
+`libobs-bootstrapper` offers an explicit verified first-run/update flow in addition to build-time packaging with `cargo-obs-build`. On Windows, the final executable must delay-load `obs.dll` and call the bootstrapper before its first wrapper/libobs operation; the bootstrapper exposes `build::emit_windows_obs_delay_load()` for the application's `build.rs`. On macOS, use a separate launcher/helper when the framework may be absent, because dyld resolves a directly linked framework before `main()`. Linux continues to use the system/source `libobs`.
 
 ## Advanced Usage
 

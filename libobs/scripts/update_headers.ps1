@@ -128,23 +128,9 @@ finally
 
 if (-not $DryRun) {
     Copy-Item $tempDir/build_x64/libobs/RelWithDebInfo/obs.lib $PSScriptRoot/../
-    git clone "https://github.com/sshcrack/dummy-dll-generator" --depth 1 $tempDir/dummy-dll
-
-    Push-Location $PSScriptRoot/../../libobs-bootstrapper/assets/
-    try
-    {
-        . $tempDir/dummy-dll/dummyDLL.exe $tempDir/build_x64/libobs/RelWithDebInfo/obs.dll obs_get_version
-        Move-Item out.dll obs-dummy.dll -Force
-        Remove-Item out.exp -Force
-        Remove-Item out.lib -Force
-    }
-    finally
-    {
-        Pop-Location
-    }
 }
 else {
-    Write-Host "[DRY RUN] Would copy obs.lib and generate dummy DLL" -ForegroundColor Cyan
+    Write-Host "[DRY RUN] Would copy obs.lib" -ForegroundColor Cyan
 }
 
 
@@ -221,7 +207,6 @@ else {
 
 Write-Host "Updating mock files..."
 if (-not $DryRun) {
-    Invoke-WebRequest "https://api.github.com/repos/libobs-rs/libobs-builds/releases" -OutFile $PSScriptRoot/../../libobs-bootstrapper/mock_responses/libobs_builds_release.json
     Invoke-WebRequest "https://api.github.com/repos/obsproject/obs-studio/releases" -OutFile $PSScriptRoot/../../cargo-obs-build/mock_responses/obs_studio_release.json
     Invoke-WebRequest "https://api.github.com/repos/obsproject/obs-studio/releases/latest" -OutFile $PSScriptRoot/../../cargo-obs-build/mock_responses/obs_studio_release_latest.json
 }

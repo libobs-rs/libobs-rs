@@ -43,8 +43,8 @@ Install the tool
 cargo install cargo-obs-build
 ```
 
-> [!IMPORTANT]
-> Runtime OBS downloading is intentionally disabled. Package an authenticated OBS runtime before process startup with `cargo-obs-build` (Windows/macOS), a signed installer, or your Linux distribution/system integration. `libobs-bootstrapper` remains available for local installation/version inspection only.
+> [!NOTE]
+> `libobs-bootstrapper` can explicitly provision a verified OBS runtime at first run on Windows/macOS. On Windows, same-process bootstrap requires delay-loading `obs.dll`; on macOS, use a small launcher/helper if the framework may be missing. Nothing downloads implicitly. Linux continues to use the system/source `libobs`. See [OBS Runtime Setup](./docs/bootstrap_options.md).
 
 Add the following to your `Cargo.toml`
 ```toml

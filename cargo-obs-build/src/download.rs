@@ -1,6 +1,6 @@
 use std::{
     fs::File,
-    io::{BufReader, Write, stdout},
+    io::{stdout, BufReader, Write},
     path::{Path, PathBuf},
     sync::mpsc::{self},
     thread,
@@ -35,6 +35,7 @@ pub fn download_binaries(
     build_dir: &Path,
     info: &ReleaseInfo,
     target: ObsBuildTarget,
+    require_checksum: bool,
 ) -> anyhow::Result<PathBuf> {
     if target.os == ObsTargetOs::Linux {
         bail!(
@@ -74,18 +75,32 @@ pub fn download_binaries(
                 .and_then(|d| d.strip_prefix("sha256:"))
         });
 
-    if let Some(expected) = expected {
-        if expected.eq_ignore_ascii_case(&hash) {
-            #[cfg(feature = "colored")]
-            info!("{}", "Checksums match".on_green());
-        } else {
-            bail!("Checksums do not match for {name}");
-        }
-    } else {
-        error!("No checksum found for {name}");
-    }
+    verify_download_hash(name, expected, &hash, require_checksum)?;
 
     Ok(download_path)
+}
+
+fn verify_download_hash(
+    name: &str,
+    expected: Option<&str>,
+    actual: &str,
+    require_checksum: bool,
+) -> anyhow::Result<()> {
+    match expected {
+        Some(expected) if expected.eq_ignore_ascii_case(actual) => {
+            #[cfg(feature = "colored")]
+            info!("{}", "Checksums match".on_green());
+            Ok(())
+        }
+        Some(_) => bail!("Checksums do not match for {name}"),
+        None if require_checksum => bail!(
+            "No SHA-256 checksum/digest is advertised for {name}; refusing verified preparation"
+        ),
+        None => {
+            error!("No checksum found for {name}");
+            Ok(())
+        }
+    }
 }
 
 fn asset_matches_target(asset: &serde_json::Value, target: ObsBuildTarget) -> bool {
@@ -260,5 +275,17 @@ mod tests {
         let target = ObsBuildTarget::parse("windows", "x86_64").unwrap();
         assert!(asset_matches_target(&binary, target));
         assert!(!asset_matches_target(&pdb, target));
+    }
+
+    #[test]
+    fn verified_download_requires_integrity_metadata() {
+        assert!(verify_download_hash("obs.zip", None, "abc", true).is_err());
+        assert!(verify_download_hash("obs.zip", None, "abc", false).is_ok());
+    }
+
+    #[test]
+    fn download_hash_must_match_when_present() {
+        assert!(verify_download_hash("obs.zip", Some("abc"), "ABC", true).is_ok());
+        assert!(verify_download_hash("obs.zip", Some("def"), "abc", false).is_err());
     }
 }

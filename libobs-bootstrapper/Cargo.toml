@@ -1,7 +1,7 @@
 [package]
 name = "libobs-bootstrapper"
 version = "0.4.0"
-description = "Inspects pre-packaged OBS runtimes for libobs-rs"
+description = "Explicit runtime provisioning and inspection of OBS runtimes for libobs-rs"
 readme = "./README.md"
 repository = "https://github.com/libobs-rs/libobs-rs"
 documentation = "https://libobs-rs.github.io/libobs-rs/libobs_bootstrapper/"
@@ -16,23 +16,24 @@ categories = [
 keywords = ["obs", "libobs", "video", "bootstrapper"]
 license = "GPL-3.0"
 
-
 [dependencies]
-libobs = { workspace = true }
-semver = "1"
+cargo-obs-build = { path = "../cargo-obs-build", version = "2.0.5", default-features = false }
 libloading = { workspace = true }
 log = { workspace = true }
+semver = "1"
+tokio = { workspace = true, features = ["rt"] }
+
 [features]
 default = []
-generate_bindings = ["libobs/generate_bindings"]
-# Retained as an inert compatibility flag. Dummy DLL injection was part of the
-# now-disabled runtime bootstrap flow and no longer performs any build action.
+# Kept for source compatibility with older manifests. Runtime provisioning no
+# longer injects a dummy DLL or generates bindings itself.
+generate_bindings = []
 install_dummy_dll = []
 __ci = []
-__mock_github_responses = []
+__mock_github_responses = ["cargo-obs-build/__mock_github_responses"]
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["macros", "rt"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 
 [package.metadata.docs.rs]
 targets = ["x86_64-pc-windows-msvc"]

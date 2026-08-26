@@ -107,8 +107,9 @@ impl ObsRuntime {
     /// Initializes the OBS runtime.
     ///
     /// This function starts up OBS on a dedicated thread and prepares it for use.
-    /// It handles bootstrapping (if configured), OBS initialization, module loading,
-    /// and setup of audio/video subsystems.
+    /// It handles OBS initialization, module loading, and setup of audio/video
+    /// subsystems. Runtime provisioning, when desired, must complete before this
+    /// method makes the first OBS call.
     ///
     /// # Parameters
     ///

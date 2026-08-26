@@ -1,5 +1,5 @@
-use git::{ReleaseInfo, fetch_latest_patch_release, fetch_release};
-use lock::{acquire_lock, wait_for_lock};
+use git::{fetch_latest_patch_release, fetch_release, ReleaseInfo};
+use lock::acquire_lock;
 use log::{debug, info, warn};
 use metadata::fetch_latest_release_tag;
 use std::{
@@ -17,6 +17,20 @@ use target::{ObsBuildTarget, ObsTargetOs};
 use zip::ZipArchive;
 
 pub use metadata::get_meta_info;
+
+/// Resolves the newest non-prerelease OBS release for `major`, optionally
+/// constrained to a specific `minor` line.
+///
+/// This is primarily useful to consumers such as `libobs-bootstrapper` that
+/// need release selection without depending on the native `libobs` crate.
+pub fn resolve_latest_compatible_release(
+    repo_id: &str,
+    major: u32,
+    minor: Option<u32>,
+    cache_dir: &Path,
+) -> anyhow::Result<Option<String>> {
+    git::fetch_latest_compatible_release(repo_id, major, minor, cache_dir)
+}
 
 mod download;
 mod git;
@@ -174,6 +188,25 @@ pub fn install() -> anyhow::Result<()> {
 /// - Locking to prevent concurrent builds
 /// - Copying binaries to the target directory
 pub fn build_obs_binaries(config: ObsBuildConfig) -> anyhow::Result<()> {
+    build_obs_binaries_inner(config, false)
+}
+
+/// Prepares OBS binaries while requiring an advertised SHA-256 checksum/digest
+/// for every downloaded release asset.
+///
+/// Unlike [`build_obs_binaries`], this refuses to use an unverified download.
+/// It is intended for runtime provisioning and other flows where silently
+/// accepting an asset without integrity metadata would be unsafe.
+pub fn build_obs_binaries_verified(config: ObsBuildConfig) -> anyhow::Result<()> {
+    if config.override_zip.is_some() {
+        return Err(anyhow::anyhow!(
+            "verified OBS preparation does not accept an unverified override archive"
+        ));
+    }
+    build_obs_binaries_inner(config, true)
+}
+
+fn build_obs_binaries_inner(config: ObsBuildConfig, require_checksum: bool) -> anyhow::Result<()> {
     let target = ObsBuildTarget::detect()?;
     if target.os == ObsTargetOs::Linux {
         return Err(anyhow::anyhow!(
@@ -300,11 +333,14 @@ pub fn build_obs_binaries(config: ObsBuildConfig) -> anyhow::Result<()> {
     let build_out = repo_dir.join("build_out");
     let lock_file = cache_dir.join(format!("{}.lock", tag));
     let success_file = repo_dir.join(".success");
+    let verified_file = repo_dir.join(".verified");
 
-    wait_for_lock(&lock_file)?;
+    // Serialize preparation across processes and re-check the cache markers only
+    // after the lock is held. This avoids two first-run processes both entering
+    // download/extraction after observing an initially empty cache.
+    let lock = acquire_lock(&lock_file)?;
 
-    if !success_file.is_file() || rebuild {
-        let lock = acquire_lock(&lock_file)?;
+    if !success_file.is_file() || rebuild || (require_checksum && !verified_file.is_file()) {
         if repo_exists || rebuild {
             debug!("Cleaning up old build...");
             delete_all_except(&repo_dir, None)?;
@@ -320,11 +356,15 @@ pub fn build_obs_binaries(config: ObsBuildConfig) -> anyhow::Result<()> {
             remove_pdbs,
             override_zip,
             target,
+            require_checksum,
         )?;
 
         File::create(&success_file)?;
-        drop(lock);
+        if require_checksum {
+            File::create(&verified_file)?;
+        }
     }
+    drop(lock);
 
     info!(
         "Copying files from {} to {}",
@@ -349,6 +389,7 @@ fn build_obs(
     remove_pdbs: bool,
     override_zip: Option<PathBuf>,
     target: ObsBuildTarget,
+    require_checksum: bool,
 ) -> anyhow::Result<()> {
     fs::create_dir_all(build_out)?;
 
@@ -356,7 +397,10 @@ fn build_obs(
         // An override is caller-owned input (primarily for testing). Never delete it.
         (path, false)
     } else {
-        (download_binaries(build_out, &release, target)?, true)
+        (
+            download_binaries(build_out, &release, target, require_checksum)?,
+            true,
+        )
     };
 
     info!("Extracting OBS Studio binaries...");

@@ -1,105 +1,70 @@
 #[cfg(test)]
 mod tests {
-    use crate::{
-        ObsBootstrapperOptions,
-        options::{GITHUB_REPO, UpdateTargetMode},
-    };
+    use semver::Version;
+
+    use crate::{ObsBootstrapperOptions, UpdateTargetMode, DEFAULT_OBS_VERSION, GITHUB_REPO};
 
     #[test]
-    fn test_default_options() {
+    fn default_options_are_pinned_and_explicit() {
         let options = ObsBootstrapperOptions::new();
         assert_eq!(options.get_repository(), GITHUB_REPO);
-        assert!(options.update);
-        assert!(options.restart_after_update);
+        assert!(options.get_update());
+        assert_eq!(options.get_update_target_mode(), UpdateTargetMode::Exact);
         assert_eq!(
-            options.update_target_mode,
-            UpdateTargetMode::LatestCompatibleSameMajor
+            options.get_target_version(),
+            &Version::parse(DEFAULT_OBS_VERSION).unwrap()
         );
+        assert!(options.get_install_dir().is_none());
+        assert!(options.get_cache_dir().is_none());
     }
 
     #[test]
-    fn test_set_repository() {
+    fn repository_is_configurable() {
         let options = ObsBootstrapperOptions::new().set_repository("custom/repo");
         assert_eq!(options.get_repository(), "custom/repo");
     }
 
     #[test]
-    fn test_set_update_true() {
-        let options = ObsBootstrapperOptions::new().set_update(true);
-        assert!(options.update);
-    }
-
-    #[test]
-    fn test_set_update_false() {
-        let options = ObsBootstrapperOptions::new().set_update(false);
-        assert!(!options.update);
-    }
-
-    #[test]
-    fn test_set_no_restart() {
-        let options = ObsBootstrapperOptions::new().set_no_restart();
-        assert!(!options.restart_after_update);
-    }
-
-    #[test]
-    fn test_chaining() {
+    fn update_policy_is_configurable() {
         let options = ObsBootstrapperOptions::new()
-            .set_repository("test/repo")
             .set_update(false)
-            .set_update_target_mode(UpdateTargetMode::LatestCompatibleSameMajorMinor)
-            .set_no_restart();
-
-        assert_eq!(options.get_repository(), "test/repo");
-        assert!(!options.update);
-        assert!(!options.restart_after_update);
-        assert_eq!(
-            options.update_target_mode,
-            UpdateTargetMode::LatestCompatibleSameMajorMinor
-        );
-    }
-
-    #[test]
-    fn test_default_trait() {
-        let options = ObsBootstrapperOptions::default();
-        assert_eq!(options.get_repository(), GITHUB_REPO);
-        assert!(options.update);
-        assert!(options.restart_after_update);
-        assert_eq!(
-            options.update_target_mode,
-            UpdateTargetMode::LatestCompatibleSameMajor
-        );
-    }
-
-    #[test]
-    fn test_set_update_target_mode() {
-        let options = ObsBootstrapperOptions::new()
             .set_update_target_mode(UpdateTargetMode::LatestCompatibleSameMajorMinor);
+        assert!(!options.get_update());
         assert_eq!(
-            options.update_target_mode,
+            options.get_update_target_mode(),
             UpdateTargetMode::LatestCompatibleSameMajorMinor
         );
     }
 
     #[test]
-    fn test_set_install_dir() {
-        let options = ObsBootstrapperOptions::new().set_install_dir("custom-obs");
+    fn install_and_cache_directories_are_configurable() {
+        let options = ObsBootstrapperOptions::new()
+            .set_install_dir("custom-obs")
+            .set_cache_dir("custom-cache");
         assert_eq!(
             options.get_install_dir().map(|p| p.as_path()),
             Some(std::path::Path::new("custom-obs"))
         );
+        assert_eq!(
+            options.get_cache_dir().map(|p| p.as_path()),
+            Some(std::path::Path::new("custom-cache"))
+        );
     }
 
     #[test]
-    fn test_clone() {
-        let options1 = ObsBootstrapperOptions::new().set_repository("test/repo");
-        let options2 = options1.clone();
-        assert_eq!(options1.get_repository(), options2.get_repository());
+    fn target_version_is_configurable() {
+        let version = Version::new(32, 1, 7);
+        let options = ObsBootstrapperOptions::new().set_target_version(version.clone());
+        assert_eq!(options.get_target_version(), &version);
     }
 
     #[test]
-    fn test_debug() {
-        let options = ObsBootstrapperOptions::new();
-        let debug_str = format!("{:?}", options);
-        assert!(debug_str.contains("ObsBootstrapperOptions"));
+    fn clone_preserves_configuration() {
+        let options = ObsBootstrapperOptions::new()
+            .set_repository("test/repo")
+            .set_install_dir("runtime");
+        let cloned = options.clone();
+        assert_eq!(options.get_repository(), cloned.get_repository());
+        assert_eq!(options.get_install_dir(), cloned.get_install_dir());
     }
 }
