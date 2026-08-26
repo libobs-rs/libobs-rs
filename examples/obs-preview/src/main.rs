@@ -28,6 +28,7 @@ use libobs_wrapper::data::video::ObsVideoInfoBuilder;
 use libobs_wrapper::display::{
     ObsDisplayCreationData, ObsDisplayRef, ObsWindowHandle, ShowHideTrait, WindowPositionTrait,
 };
+use libobs_wrapper::sources::{ObsSourceBuilder, ObsSourceTrait};
 use libobs_wrapper::unsafe_send::Sendable;
 use libobs_wrapper::{context::ObsContext, utils::StartupInfo};
 use winit::application::ApplicationHandler;
@@ -38,7 +39,6 @@ use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use winit::window::{Window, WindowId};
-use libobs_wrapper::sources::{ObsSourceBuilder, ObsSourceTrait};
 
 struct SignalThreadGuard {
     should_exit: Arc<AtomicBool>,

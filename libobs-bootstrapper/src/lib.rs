@@ -4,7 +4,7 @@
 use std::{env, fs, path::PathBuf};
 
 use cargo_obs_build::{
-    build_obs_binaries_verified, resolve_latest_compatible_release, ObsBuildConfig,
+    ObsBuildConfig, build_obs_binaries_verified, resolve_latest_compatible_release,
 };
 use semver::Version;
 
@@ -20,7 +20,7 @@ mod options_tests;
 mod version_tests;
 
 pub use error::ObsBootstrapError;
-pub use options::{ObsBootstrapperOptions, UpdateTargetMode, DEFAULT_OBS_VERSION, GITHUB_REPO};
+pub use options::{DEFAULT_OBS_VERSION, GITHUB_REPO, ObsBootstrapperOptions, UpdateTargetMode};
 
 use crate::status_handler::{ObsBootstrapConsoleHandler, ObsBootstrapStatusHandler};
 
@@ -412,20 +412,24 @@ mod tests {
         assert!(!needs_provision(Some("32.1.0"), &target, UpdateTargetMode::Exact, false).unwrap());
         assert!(needs_provision(None, &target, UpdateTargetMode::Exact, false).unwrap());
         assert!(needs_provision(Some("32.2.0"), &target, UpdateTargetMode::Exact, true).unwrap());
-        assert!(!needs_provision(
-            Some("32.2.0"),
-            &target,
-            UpdateTargetMode::LatestCompatibleSameMajor,
-            false
-        )
-        .unwrap());
-        assert!(needs_provision(
-            Some("32.2.0"),
-            &target,
-            UpdateTargetMode::LatestCompatibleSameMajorMinor,
-            true
-        )
-        .unwrap());
+        assert!(
+            !needs_provision(
+                Some("32.2.0"),
+                &target,
+                UpdateTargetMode::LatestCompatibleSameMajor,
+                false
+            )
+            .unwrap()
+        );
+        assert!(
+            needs_provision(
+                Some("32.2.0"),
+                &target,
+                UpdateTargetMode::LatestCompatibleSameMajorMinor,
+                true
+            )
+            .unwrap()
+        );
         assert!(needs_provision(Some("32.0.0"), &target, UpdateTargetMode::Exact, false).is_err());
         assert!(needs_provision(Some("31.9.9"), &target, UpdateTargetMode::Exact, false).is_err());
     }

@@ -470,10 +470,14 @@ impl ObsRuntime {
             libobs::base_set_crash_handler(Some(main_crash_handler), std::ptr::null_mut());
         }
 
+        #[cfg(target_os = "linux")]
         let native = unsafe {
             // Safety: We are in the OBS thread and the nix_display can only be set
+            // by the caller while this runtime owns OBS initialization.
             platform_specific_setup(info.nix_display.clone())?
         };
+        #[cfg(not(target_os = "linux"))]
+        let native = platform_specific_setup(info.nix_display.clone())?;
         unsafe {
             // Safety: We are in the OBS thread, so it's safe to call this here.
             libobs::base_set_log_handler(Some(extern_log_callback), std::ptr::null_mut());

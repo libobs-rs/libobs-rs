@@ -2,7 +2,7 @@
 mod tests {
     use semver::Version;
 
-    use crate::{ObsBootstrapperOptions, UpdateTargetMode, DEFAULT_OBS_VERSION, GITHUB_REPO};
+    use crate::{DEFAULT_OBS_VERSION, GITHUB_REPO, ObsBootstrapperOptions, UpdateTargetMode};
 
     #[test]
     fn default_options_are_pinned_and_explicit() {

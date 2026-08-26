@@ -7,8 +7,8 @@ use crate::{
     data::{
         output::{ObsOutputRef, ObsOutputTrait},
         properties::{
-            ObsProperty, ObsPropertyObject, ObsPropertyObjectPrivate, _ObsPropertiesDropGuard,
-            property_ptr_to_struct,
+            _ObsPropertiesDropGuard, property_ptr_to_struct, ObsProperty, ObsPropertyObject,
+            ObsPropertyObjectPrivate,
         },
         ObsData,
     },

@@ -1,9 +1,9 @@
 use crate::data::object::ObsObjectTrait;
 use crate::run_with_obs;
 use crate::scenes::ObsSceneRef;
+use crate::sources::_ObsRemoveFilterOnDrop;
 use crate::sources::ObsFilterGuardPair;
 use crate::sources::ObsFilterRef;
-use crate::sources::_ObsRemoveFilterOnDrop;
 use crate::unsafe_send::SmartPointerSendable;
 use crate::utils::ObsError;
 use std::sync::Arc;

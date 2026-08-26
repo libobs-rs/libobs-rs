@@ -2,7 +2,7 @@
 mod tests {
     use semver::Version;
 
-    use crate::{version::should_update, DEFAULT_OBS_VERSION};
+    use crate::{DEFAULT_OBS_VERSION, version::should_update};
 
     #[test]
     fn same_version_is_not_an_update() {

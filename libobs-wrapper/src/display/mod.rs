@@ -20,7 +20,7 @@ use std::mem::MaybeUninit;
 use std::{
     ffi::c_void,
     marker::PhantomPinned,
-    sync::{Arc, RwLock, atomic::AtomicUsize},
+    sync::{atomic::AtomicUsize, Arc, RwLock},
 };
 
 static ID_COUNTER: AtomicUsize = AtomicUsize::new(1);
@@ -149,7 +149,10 @@ impl ObsWindowHandle {
     #[cfg(target_os = "macos")]
     pub unsafe fn new_from_cocoa(view: *mut c_void) -> Self {
         Self {
-            window: Sendable(libobs::gs_window { view }),
+            // bindgen represents Objective-C `id` as `*mut objc_object` on
+            // macOS, while this public API intentionally accepts an opaque
+            // Cocoa pointer. Preserve that API and cast only at the FFI edge.
+            window: Sendable(libobs::gs_window { view: view.cast() }),
             is_wayland: false,
         }
     }
@@ -231,7 +234,7 @@ impl ObsDisplayRef {
         let display = run_with_obs!(runtime, (init_data), move || {
             let display_ptr = unsafe {
                 // Safety: All pointers are valid because we are keeping them in this scope and because we are cloning init_data into this scope
-                libobs::obs_display_create(&init_data.0.0, background_color)
+                libobs::obs_display_create(&init_data.0 .0, background_color)
             };
 
             if display_ptr.is_null() {
