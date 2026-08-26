@@ -81,6 +81,15 @@ mod tests {
     }
 
     #[test]
+    fn test_set_install_dir() {
+        let options = ObsBootstrapperOptions::new().set_install_dir("custom-obs");
+        assert_eq!(
+            options.get_install_dir().map(|p| p.as_path()),
+            Some(std::path::Path::new("custom-obs"))
+        );
+    }
+
+    #[test]
     fn test_clone() {
         let options1 = ObsBootstrapperOptions::new().set_repository("test/repo");
         let options2 = options1.clone();

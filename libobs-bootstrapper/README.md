@@ -1,140 +1,34 @@
 # libobs-bootstrapper
 
-[![Crates.io](https://img.shields.io/crates/v/libobs-bootstrapper.svg)](https://crates.io/crates/libobs-bootstrapper)
-[![Documentation](https://docs.rs/libobs-bootstrapper/badge.svg)](https://docs.rs/libobs-bootstrapper)
+`libobs-bootstrapper` keeps local OBS-installation inspection helpers and the
+legacy bootstrap API surface, but **runtime OBS download/install is disabled**.
+Every `ObsBootstrapper::bootstrap*` entry point returns
+`ObsBootstrapError::RuntimeBootstrapDisabled` before network, extraction, or
+process-spawn work can begin.
 
-A utility crate for automatically downloading and installing OBS (Open Broadcaster Software) Studio binaries at runtime. This crate is part of the libobs-rs ecosystem and is designed to make distributing OBS-based applications easier by handling the setup of OBS binaries.
+This is intentional provenance hardening. An application must authenticate and
+package its OBS runtime before process startup instead of downloading a mutable
+"latest compatible" release and executing it in-process.
 
-Note: This crate currently supports Windows and MacOS platforms. Refer to the libobs-wrapper documentation for Linux setup instructions [here](../libobs-wrapper/README.md).
+Use [`cargo-obs-build`](../cargo-obs-build/README.md) at build/package time on
+Windows and macOS. On Linux, use the distro/system `libobs` installation or a
+source integration appropriate for the target distribution.
 
-## Features
-
-- **Automatic OBS Download**: Downloads appropriate OBS binaries at runtime
-- **Progress Tracking**: Built-in progress reporting for downloads and extraction
-- **Version Management**: Handles OBS version checking and updates
-- **Custom Status Handlers**: Flexible progress reporting via custom handlers
-- **Async Support**: Built on Tokio for async operations
-- **Error Handling**: Comprehensive error types for reliable error handling
-
-## Usage
-
-Add the crate to your dependencies:
-
-```toml
-[dependencies]
-libobs-bootstrapper = "0.2.0"
-```
-
-### Basic Example
-
-Here's a simple example using the default console handler:
+`ObsBootstrapperOptions::set_install_dir` remains useful with the local
+inspection helpers:
 
 ```rust
-use std::{sync::Arc, time::Duration};
-use libobs_bootstrapper::{
-    ObsBootstrapper, ObsBootstrapperOptions, ObsBootstrapperResult
-};
-use libobs_wrapper::{context::ObsContext, utils::StartupInfo};
+use libobs_bootstrapper::{ObsBootstrapper, ObsBootstrapperOptions};
 
-
-#[tokio::main]
-async fn main() {
-    env_logger::init();
-    println!("Starting OBS bootstrapper...");
-    let handler = ObsBootstrapProgress::new();
-
-    let res = ObsBootstrapper::bootstrap(&ObsBootstrapperOptions::default())
-        .await
-        .unwrap();
-    if matches!(res, ObsBootstrapperResult::Restart) {
-        println!("OBS has been downloaded and extracted. The application will now restart.");
-        return;
-    }
-
-    let context = ObsContext::new(StartupInfo::default()).unwrap();
-    handler.done();
-
-    println!("Done");
-    // Use the context here
-    // For example creating new obs data
-    context.data().unwrap();
-}
+let options = ObsBootstrapperOptions::new().set_install_dir("/opt/my-app/obs");
+let valid = ObsBootstrapper::is_valid_installation_with_options(&options)?;
+let needs_update = ObsBootstrapper::is_update_available_with_options(&options)?;
+# Ok::<(), libobs_bootstrapper::ObsBootstrapError>(())
 ```
 
-### Custom Progress Handler
+`is_update_available_with_options` is a local comparison against the libobs ABI
+version used to generate this crate. It does not contact GitHub or another
+release server.
 
-You can implement your own progress handler for custom UI integration:
-
-```rust
-use indicatif::{ProgressBar, ProgressStyle};
-use libobs_bootstrapper::status_handler::ObsBootstrapStatusHandler;
-use std::{sync::Arc, time::Duration};
-
-#[derive(Debug, Clone)]
-struct CustomProgressHandler(Arc<ProgressBar>);
-
-impl CustomProgressHandler {
-    pub fn new() -> Self {
-        let bar = ProgressBar::new(200).with_style(
-            ProgressStyle::default_bar()
-                .template("{msg}\n{wide_bar} {pos}/{len}")
-                .unwrap(),
-        );
-
-        bar.set_message("Initializing bootstrapper...");
-        Self(Arc::new(bar))
-    }
-}
-
-impl ObsBootstrapStatusHandler for CustomProgressHandler {
-    fn handle_downloading(&mut self, prog: f32, msg: String) -> anyhow::Result<()> {
-        self.0.set_message(msg);
-        self.0.set_position((prog * 100.0) as u64);
-        Ok(())
-    }
-
-    fn handle_extraction(&mut self, prog: f32, msg: String) -> anyhow::Result<()> {
-        self.0.set_message(msg);
-        self.0.set_position(100 + (prog * 100.0) as u64);
-        Ok(())
-    }
-}
-```
-
-### Setup Steps
-
-1. You can either: <br>
-   **a) RECOMMENDED** enable the `install_dummy_dll` feature for this crate <br>
-   **b)** Add a placeholder `obs.dll` file to your executable directory:
-     - Download a dummy DLL from [libobs-builds releases](https://github.com/sshcrack/libobs-builds/releases)
-     - Use the version matching your target OBS version
-     - Rename the downloaded file to `obs.dll`
-
-2. Call `ObsBootstrapper::bootstrap()` at application startup
-
-3. If `ObsBootstrapperResult::Restart` is returned:
-   - Exit the application
-   - The updater will restart your application automatically
-
-### Advanced Options
-
-The `ObsBootstrapperOptions` struct allows you to customize the bootstrapper:
-
-```rust
-let options = ObsBootstrapperOptions::default()
-    .with_repository("sshcrack/libobs-builds")  // Custom repo
-    .with_update(true)                          // Force update check
-    .with_restart_after_update(true);           // Auto restart
-```
-
-## Error Handling
-
-The crate provides the `ObsBootstrapError` enum for error handling:
-
-- `GeneralError`: Generic bootstrapper errors
-- `DownloadError`: Issues during OBS binary download
-- `ExtractError`: Problems extracting downloaded files
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
+The repository/update/restart option setters are retained temporarily for source
+compatibility, but they cannot re-enable runtime network installation.

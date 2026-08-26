@@ -1,4 +1,4 @@
-use git::{fetch_latest_patch_release, fetch_release, ReleaseInfo};
+use git::{ReleaseInfo, fetch_latest_patch_release, fetch_release};
 use lock::{acquire_lock, wait_for_lock};
 use log::{debug, info, warn};
 use metadata::fetch_latest_release_tag;
@@ -13,6 +13,7 @@ use walkdir::WalkDir;
 use lib_version::get_lib_obs_version;
 
 use download::download_binaries;
+use target::{ObsBuildTarget, ObsTargetOs};
 use zip::ZipArchive;
 
 pub use metadata::get_meta_info;
@@ -21,7 +22,9 @@ mod download;
 mod git;
 mod lib_version;
 mod lock;
+mod macos;
 mod metadata;
+mod target;
 mod util;
 
 /// Check if we're running in a CI environment
@@ -68,7 +71,9 @@ Ignore if this is the first run.",
         }
         println!("cargo:warning=");
         println!("cargo:warning=For detailed setup instructions, see:");
-        println!("cargo:warning=https://github.com/libobs-rs/libobs-rs/blob/main/cargo-obs-build/CI_SETUP.md");
+        println!(
+            "cargo:warning=https://github.com/libobs-rs/libobs-rs/blob/main/cargo-obs-build/CI_SETUP.md"
+        );
         println!("cargo:warning=");
     }
 }
@@ -169,12 +174,13 @@ pub fn install() -> anyhow::Result<()> {
 /// - Locking to prevent concurrent builds
 /// - Copying binaries to the target directory
 pub fn build_obs_binaries(config: ObsBuildConfig) -> anyhow::Result<()> {
-    //TODO For build scripts, we should actually check the TARGET env var instead of just erroring out on linux, but I don't think anyone will be cross-compiling
-
-    if cfg!(target_os = "linux") {
-        // The case for the "install" subcommand is handled before calling this function
-        return Err(anyhow::anyhow!("Building OBS Studio from source is required on Linux. You can install binaries by running `cargo-obs-build install` separately before building your project."));
+    let target = ObsBuildTarget::detect()?;
+    if target.os == ObsTargetOs::Linux {
+        return Err(anyhow::anyhow!(
+            "Linux uses a system/source OBS installation. Run `cargo obs-build install` on Debian/Ubuntu or install a compatible libobs development package for your distro."
+        ));
     }
+    target.require_native_macos_host()?;
 
     let ObsBuildConfig {
         mut cache_dir,
@@ -307,7 +313,14 @@ pub fn build_obs_binaries(config: ObsBuildConfig) -> anyhow::Result<()> {
         debug!("Fetching {} version of OBS Studio...", tag);
 
         let release = fetch_release(&repo_id, &Some(tag.clone()), &cache_dir)?;
-        build_obs(release, &build_out, browser, remove_pdbs, override_zip)?;
+        build_obs(
+            release,
+            &build_out,
+            browser,
+            remove_pdbs,
+            override_zip,
+            target,
+        )?;
 
         File::create(&success_file)?;
         drop(lock);
@@ -319,6 +332,10 @@ pub fn build_obs_binaries(config: ObsBuildConfig) -> anyhow::Result<()> {
         target_out_dir.display()
     );
     copy_to_dir(&build_out, &target_out_dir, None)?;
+    if target.os == ObsTargetOs::Macos {
+        macos::setup_files(&target_out_dir)?;
+        copy_helper_binaries_to_deps(&target_out_dir)?;
+    }
 
     info!("Done!");
 
@@ -331,28 +348,51 @@ fn build_obs(
     include_browser: bool,
     remove_pdbs: bool,
     override_zip: Option<PathBuf>,
+    target: ObsBuildTarget,
 ) -> anyhow::Result<()> {
     fs::create_dir_all(build_out)?;
 
     let obs_path = if let Some(e) = override_zip {
         e
     } else {
-        download_binaries(build_out, &release)?
+        download_binaries(build_out, &release, target)?
     };
 
-    let obs_archive = File::open(&obs_path)?;
-    let mut archive = ZipArchive::new(&obs_archive)?;
-
     info!("Extracting OBS Studio binaries...");
-    archive.extract(build_out)?;
-    let bin_path = build_out.join("bin").join("64bit");
-    copy_to_dir(&bin_path, build_out, None)?;
-    fs::remove_dir_all(build_out.join("bin"))?;
+    match target.os {
+        ObsTargetOs::Windows => {
+            let obs_archive = File::open(&obs_path)?;
+            let mut archive = ZipArchive::new(&obs_archive)?;
+            archive.extract(build_out)?;
+            let bin_path = build_out.join("bin").join("64bit");
+            copy_to_dir(&bin_path, build_out, None)?;
+            fs::remove_dir_all(build_out.join("bin"))?;
+        }
+        ObsTargetOs::Macos => macos::extract_dmg(&obs_path, build_out)?,
+        ObsTargetOs::Linux => unreachable!("Linux is rejected before archive preparation"),
+    }
 
     clean_up_files(build_out, remove_pdbs, include_browser)?;
 
     fs::remove_file(&obs_path)?;
 
+    Ok(())
+}
+
+fn copy_helper_binaries_to_deps(target_dir: &Path) -> anyhow::Result<()> {
+    let deps = target_dir.join("deps");
+    if !deps.is_dir() {
+        return Ok(());
+    }
+    let helper = "obs-ffmpeg-mux";
+    let src = target_dir.join(helper);
+    let dst = deps.join(helper);
+    if src.is_file() {
+        fs::copy(&src, &dst)?;
+        if let Ok(metadata) = fs::metadata(&src) {
+            fs::set_permissions(&dst, metadata.permissions())?;
+        }
+    }
     Ok(())
 }
 
@@ -394,7 +434,10 @@ fn clean_up_files(
     }
 
     info!("Cleaning up unnecessary files...");
-    for entry in WalkDir::new(build_out).into_iter().flatten() {
+    let walker = WalkDir::new(build_out)
+        .into_iter()
+        .filter_entry(|entry| !macos::is_inside_signed_bundle(entry.path()));
+    for entry in walker.flatten() {
         let path = entry.path();
         if to_exclude.iter().any(|e| {
             path.file_name().is_some_and(|x| {

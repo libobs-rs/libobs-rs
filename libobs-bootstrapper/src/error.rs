@@ -1,9 +1,10 @@
 #[derive(Debug)]
 pub enum ObsBootstrapError {
+    /// Runtime OBS download/install is intentionally disabled.
+    RuntimeBootstrapDisabled,
     GeneralError(String),
+    UnsupportedPlatform(String),
     InvalidFormatError(String),
-    /// Contains context and specific reqwest error
-    DownloadError(&'static str, reqwest::Error),
     ExtractError(String),
     /// Contains context and specific io error
     IoError(&'static str, std::io::Error),
@@ -20,10 +21,12 @@ pub enum ObsBootstrapError {
 impl std::fmt::Display for ObsBootstrapError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            ObsBootstrapError::RuntimeBootstrapDisabled => write!(
+                f,
+                "Runtime OBS bootstrap is disabled; package and authenticate OBS before process startup"
+            ),
             ObsBootstrapError::GeneralError(e) => write!(f, "Bootstrapper error: {:?}", e),
-            ObsBootstrapError::DownloadError(context, e) => {
-                write!(f, "Bootstrapper download error: {:?} ({:?})", context, e)
-            }
+            ObsBootstrapError::UnsupportedPlatform(e) => write!(f, "Unsupported platform: {}", e),
             ObsBootstrapError::ExtractError(e) => write!(f, "Bootstrapper extract error: {:?}", e),
             ObsBootstrapError::IoError(context, error) => write!(f, "{}: {:?}", context, error),
             ObsBootstrapError::VersionError(e) => write!(f, "Version error: {:?}", e),

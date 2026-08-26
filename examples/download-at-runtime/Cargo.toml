@@ -4,9 +4,5 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-anyhow = { workspace = true }
-env_logger = { workspace = true }
-indicatif = { workspace = true }
 libobs-bootstrapper = { workspace = true }
-libobs-wrapper = { workspace = true }
-tokio = { workspace = true, features = ["full"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

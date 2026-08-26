@@ -1,36 +1,24 @@
-# Bootstrap Options
+# OBS Runtime Setup
 
-`libobs-rs` offers two main ways to handle OBS binaries:
+`libobs-rs` requires the OBS runtime to be installed and authenticated before the application starts. Runtime network bootstrapping is intentionally disabled: downloading a mutable "latest compatible" release from inside the process cannot establish trustworthy provenance before native OBS libraries are loaded.
 
-## 1. Runtime Bootstrapping (Recommended)
+## Windows and macOS: build/package-time setup
 
-Using `libobs-bootstrapper` (integrated into `libobs-simple`), your application can download and install OBS binaries at runtime.
+Use `cargo-obs-build` during development, CI, or packaging. It selects the requested target architecture, downloads the matching OBS asset, verifies an advertised release checksum/digest when available, and prepares the runtime layout.
 
-### Pros:
-- Smaller application size (binaries downloaded on demand).
-- Automatic updates.
-- Easy distribution (just ship your exe).
+```bash
+cargo install cargo-obs-build
+cargo obs-build build --out-dir target/debug
+```
 
-### Cons:
-- Requires internet connection on first run.
-- Startup time is longer on first run.
+For test binaries, prepare `target/debug/deps` as well when needed. On macOS the helper uses the official architecture-specific OBS DMG and must run on a native macOS host for DMG extraction.
 
-[Example here](../examples/download-at-runtime)
+## Linux: system/source integration
 
-## 2. Build-time Setup
+Linux intentionally does not unpack an arbitrary distribution `.deb` as a portable runtime. Install a compatible `libobs` through your distribution/package manager or build OBS from source; on supported Ubuntu setups `cargo obs-build install` can perform the source/system installation flow.
 
-Using `cargo-obs-build`, you can download OBS binaries during development or build time and bundle them.
+## Inspecting a packaged runtime
 
-### Pros:
-- No internet required at runtime.
-- Faster startup.
+`libobs-bootstrapper` retains local installation/version inspection helpers. `ObsBootstrapperOptions::set_install_dir` is honored by the corresponding `*_with_options` helpers. Its `bootstrap` and `bootstrap_with_handler` methods always return `RuntimeBootstrapDisabled` and perform no network/extraction work.
 
-### Cons:
-- Larger distribution size.
-- Manual update management.
-
-[Docs here](../cargo-obs-build/README.md)
-
-## How to choose?
-
-For most users, **Runtime Bootstrapping** is the easiest and best choice. If you are deploying to an offline environment or need instant startup, use **Build-time Setup**.
+This model makes updates an explicit packaging/deployment decision instead of executable code fetched implicitly during application startup.

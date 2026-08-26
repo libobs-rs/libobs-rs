@@ -20,7 +20,7 @@ use std::mem::MaybeUninit;
 use std::{
     ffi::c_void,
     marker::PhantomPinned,
-    sync::{atomic::AtomicUsize, Arc, RwLock},
+    sync::{Arc, RwLock, atomic::AtomicUsize},
 };
 
 static ID_COUNTER: AtomicUsize = AtomicUsize::new(1);
@@ -139,6 +139,21 @@ impl ObsWindowHandle {
         windows::Win32::Foundation::HWND(self.window.0.hwnd)
     }
 
+    /// Creates a preview handle from a Cocoa `NSView`-compatible pointer.
+    ///
+    /// # Safety
+    ///
+    /// `view` must point to a valid Cocoa `NSView` (or an object accepted by OBS as
+    /// an `NSView`) and that view must remain alive and valid for every use of the
+    /// returned handle, including while an OBS display created from it is active.
+    #[cfg(target_os = "macos")]
+    pub unsafe fn new_from_cocoa(view: *mut c_void) -> Self {
+        Self {
+            window: Sendable(libobs::gs_window { view }),
+            is_wayland: false,
+        }
+    }
+
     #[cfg(target_os = "linux")]
     pub fn new_from_wayland(surface: *mut c_void) -> Self {
         Self {
@@ -216,7 +231,7 @@ impl ObsDisplayRef {
         let display = run_with_obs!(runtime, (init_data), move || {
             let display_ptr = unsafe {
                 // Safety: All pointers are valid because we are keeping them in this scope and because we are cloning init_data into this scope
-                libobs::obs_display_create(&init_data.0 .0, background_color)
+                libobs::obs_display_create(&init_data.0.0, background_color)
             };
 
             if display_ptr.is_null() {
@@ -226,10 +241,12 @@ impl ObsDisplayRef {
             }
         })??;
 
+        let id = ID_COUNTER.fetch_add(1, Ordering::Relaxed);
         let display = SmartPointerSendable::new(
             display.0,
             Arc::new(_ObsDisplayDropGuard {
                 display,
+                id,
                 runtime: runtime.clone(),
             }),
         );
@@ -245,7 +262,6 @@ impl ObsDisplayRef {
             (x, y)
         };
 
-        let id = ID_COUNTER.fetch_add(1, Ordering::Relaxed);
         DISPLAY_POSITIONS
             .write()
             .map_err(|e| ObsError::LockError(format!("{:?}", e)))?
@@ -300,15 +316,16 @@ impl ObsDisplayRef {
 #[derive(Debug)]
 struct _ObsDisplayDropGuard {
     display: Sendable<*mut libobs::obs_display_t>,
+    id: usize,
     runtime: ObsRuntime,
 }
 
 impl ObsDropGuard for _ObsDisplayDropGuard {}
 
-impl_obs_drop!(_ObsDisplayDropGuard, (display), move || unsafe {
+impl_obs_drop!(_ObsDisplayDropGuard, (display, id), move || unsafe {
     // Safety: The pointer is valid as long as we are in the runtime and the guard is alive.
     log::trace!("Removing callback of display {:?}...", display);
-    libobs::obs_display_remove_draw_callback(display.0, Some(render_display), std::ptr::null_mut());
+    libobs::obs_display_remove_draw_callback(display.0, Some(render_display), id as *mut c_void);
 
     libobs::obs_display_destroy(display.0);
 });

@@ -11,7 +11,7 @@ Documentation is available [here](https://libobs-rs.github.io/libobs-docs/libobs
 
 Simple and safe video recording through libobs.
 
-Currently only tested on Windows and Linux (Ubuntu Wayland / X11). MacOS doesn't work right now, but [we are working on that](https://github.com/libobs-rs/libobs-rs/pull/53). Currently the active contributors don't have a mac unfortunately. 
+Windows and Linux (Ubuntu Wayland / X11) are supported, and macOS support now includes native framework/plugin loading, official OBS DMG preparation, Cocoa previews, ScreenCaptureKit-backed capture sources, and dynamic VideoToolbox hardware encoding. A dedicated native macOS CI job validates the platform after changes are pushed.
 The API is currently unstable and will definitely have breaking revisions in the future.
 
 > [!NOTE]
@@ -19,14 +19,32 @@ The API is currently unstable and will definitely have breaking revisions in the
 
 
 ## Prerequisites
-Make sure that the OBS binaries are in your target directory. There's even a tool to help you build OBS from source! <br>
+
+### macOS
+
+Install SIMDe so the bundled libobs headers can be processed, then let `cargo-obs-build` prepare the official OBS DMG into your target directory:
+
+```bash
+brew install simde
+cargo obs-build build --out-dir target/debug/deps
+```
+
+`libobs-simple` exposes the native OBS `screen_capture` source on macOS for display, window, and application capture.
+
+### Linux
+
+Linux keeps using a system/source OBS installation rather than unpacking a portable runtime. On Ubuntu, `cargo obs-build install` builds and installs a compatible OBS; on other distributions use the distro packages or the official OBS build instructions.
+
+### Build helper
+
+Make sure that the OBS binaries are in your target directory on Windows/macOS. The helper can prepare them for you. <br>
 Install the tool
 ```bash
 cargo install cargo-obs-build
 ```
 
-> [!NOTE]
-> There is now a standalone `libobs-bootstrapper` crate that can download and install OBS binaries at runtime, which is useful for distributing applications without requiring users to install OBS separately. See the [libobs-bootstrapper documentation](https://crates.io/crates/libobs-bootstrapper) for more details.
+> [!IMPORTANT]
+> Runtime OBS downloading is intentionally disabled. Package an authenticated OBS runtime before process startup with `cargo-obs-build` (Windows/macOS), a signed installer, or your Linux distribution/system integration. `libobs-bootstrapper` remains available for local installation/version inspection only.
 
 Add the following to your `Cargo.toml`
 ```toml

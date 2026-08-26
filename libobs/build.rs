@@ -16,32 +16,47 @@ fn main() {
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
 
     if let Ok(path) = env::var("LIBOBS_PATH") {
-        println!("cargo:rustc-link-search=native={}", path);
-        println!("cargo:rustc-link-lib=dylib=obs");
+        if target_os == "macos" {
+            println!("cargo:rustc-link-search=framework={path}");
+            println!("cargo:rustc-link-search=native={path}");
+            println!("cargo:rustc-link-lib=framework=libobs");
+            configure_macos_linking();
+        } else {
+            println!("cargo:rustc-link-search=native={path}");
+            println!("cargo:rustc-link-lib=dylib=obs");
+        }
     } else if target_family == "windows" {
         let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
-        println!("cargo:rustc-link-search=native={}", manifest_dir);
+        println!("cargo:rustc-link-search=native={manifest_dir}");
         println!("cargo:rustc-link-lib=dylib=obs");
+    } else if target_os == "macos" {
+        // cargo-obs-build::install places libobs.framework in target/{profile}.
+        // OUT_DIR is normally target/{profile}/build/<crate>/out, so walk back to
+        // the profile directory and search both it and deps (tests/examples live there).
+        let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR is set by Cargo"));
+        let profile_dir = out_dir
+            .ancestors()
+            .nth(3)
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()));
+
+        println!(
+            "cargo:rustc-link-search=framework={}",
+            profile_dir.display()
+        );
+        println!(
+            "cargo:rustc-link-search=framework={}",
+            profile_dir.join("deps").display()
+        );
+        println!("cargo:rustc-link-search=native={}", profile_dir.display());
+        println!(
+            "cargo:rustc-link-search=native={}",
+            profile_dir.join("deps").display()
+        );
+        println!("cargo:rustc-link-lib=framework=libobs");
+        configure_macos_linking();
     } else if target_os == "linux" {
-        /*
-        let header = include_str!("./headers/obs/obs-config.h");
-        let mut major = "";
-        let mut minor = "";
-        let mut patch = "";
-        for line in header.lines() {
-            if line.starts_with("#define LIBOBS_API_MAJOR_VER") {
-                major = line.split_whitespace().last().unwrap();
-            } else if line.starts_with("#define LIBOBS_API_MINOR_VER") {
-                minor = line.split_whitespace().last().unwrap();
-            } else if line.starts_with("#define LIBOBS_API_PATCH_VER") {
-                patch = line.split_whitespace().last().unwrap();
-            }
-        }
-
-        let version = format!("{}.{}.{}", major, minor, patch);
-        */
-
-        let version = "30.0.0"; // Manually set for now, update when updating obs-studio version
+        let version = "30.0.0";
         pkg_config::Config::new()
             .atleast_version(version)
             .probe("libobs")
@@ -52,7 +67,6 @@ fn main() {
                 )
             });
     } else {
-        // Fallback: assume dynamic libobs available via system linker path
         println!("cargo:rustc-link-lib=dylib=obs");
     }
 
@@ -60,7 +74,48 @@ fn main() {
     let should_generate_bindings = feature_generate_bindings || target_family != "windows";
 
     if should_generate_bindings {
-        generate_bindings(&target_os);
+        let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
+        let can_use_pregenerated_linux = target_os == "linux"
+            && !feature_generate_bindings
+            && matches!(target_arch.as_str(), "x86_64" | "aarch64");
+
+        if can_use_pregenerated_linux {
+            let source = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
+                .join("src/bindings_linux.rs");
+            let destination = PathBuf::from(env::var("OUT_DIR").unwrap()).join("bindings.rs");
+            std::fs::copy(&source, &destination)
+                .expect("Failed to copy pre-generated Linux bindings");
+            println!("cargo:rerun-if-changed={}", source.display());
+        } else {
+            generate_bindings(&target_os);
+        }
+    }
+}
+
+fn configure_macos_linking() {
+    // libobs.framework references these Apple system frameworks. Listing them explicitly
+    // keeps standalone Rust binaries and examples linkable without Xcode project metadata.
+    for framework in [
+        "CoreFoundation",
+        "CoreVideo",
+        "CoreMedia",
+        "CoreGraphics",
+        "AppKit",
+        "IOKit",
+        "IOSurface",
+        "AudioToolbox",
+        "VideoToolbox",
+    ] {
+        println!("cargo:rustc-link-lib=framework={framework}");
+    }
+
+    for rpath in [
+        "@executable_path",
+        "@loader_path",
+        "@executable_path/..",
+        "@loader_path/..",
+    ] {
+        println!("cargo:rustc-link-arg=-Wl,-rpath,{rpath}");
     }
 }
 
@@ -106,6 +161,17 @@ fn generate_bindings(target_os: &str) {
         .blocklist_function("^_.*")
         .clang_arg(format!("-I{}", "headers/obs"));
 
+    if target_os == "macos" && env::consts::OS == "macos" {
+        let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
+        if target_arch == "aarch64" && std::path::Path::new("/opt/homebrew/include").exists() {
+            builder = builder
+                .clang_arg("-I/opt/homebrew/include")
+                .clang_arg("-DSIMDE_NO_NATIVE");
+        } else if target_arch == "x86_64" && std::path::Path::new("/usr/local/include").exists() {
+            builder = builder.clang_arg("-I/usr/local/include");
+        }
+    }
+
     // Apply previous windows/MSVC blocklists when not Linux and feature not enabled.
     if target_os != "linux" && !include_win_bindings {
         builder = builder
@@ -137,6 +203,7 @@ fn generate_bindings(target_os: &str) {
         .derive_partialord(false)
         .derive_ord(false)
         .merge_extern_blocks(true)
+        .layout_tests(false)
         .generate()
         .expect("Error generating bindings");
 

@@ -11,7 +11,6 @@ pub struct RunArgs {
 #[derive(Parser, Debug)]
 pub enum Commands {
     /// Build OBS Studio binaries
-    #[cfg(not(target_os = "linux"))]
     Build(BuildArgs),
 
     /// Install OBS Studio dependencies (Linux only)

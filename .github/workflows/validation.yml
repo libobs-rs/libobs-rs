@@ -183,6 +183,37 @@ jobs:
         run: cargo nextest r --profile ci --all-features --target-dir target/nextest-all-features
         env:
           TOP_SECRET_NO_DUMMY_DLL: true
+  build-test-macos:
+    name: Build and Test (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install macOS build dependencies
+        run: brew install simde
+
+      - name: Install this checkout's cargo-obs-build
+        run: cargo install --path cargo-obs-build --features cli --locked --force
+
+      - name: Prepare official OBS runtime
+        run: cargo obs-build build --out-dir target/debug/deps
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Check macOS wrapper and sources
+        run: cargo check -p libobs-wrapper -p libobs-simple --no-default-features
+        env:
+          TOP_SECRET_NO_DUMMY_DLL: true
+
+      - name: Test target selection and macOS source contract
+        run: |
+          cargo test -p cargo-obs-build --lib --no-default-features
+          cargo test -p libobs-bootstrapper --lib --no-default-features
+          cargo test -p libobs-simple --lib --no-default-features
+        env:
+          TOP_SECRET_NO_DUMMY_DLL: true
+
   build-test-nix:
     name: Build and Test (Nix)
     runs-on: ubuntu-latest

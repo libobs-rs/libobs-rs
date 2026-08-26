@@ -4,7 +4,15 @@ A library and CLI tool for building and installing libOBS binaries. It automatic
 
 Note: On Linux, you must build OBS Studio from source and install it manually. This can be automatically be done by `cargo-obs-build` on `Ubuntu`, just run `cargo-obs-build install`. For other platforms refer to these [Build Instructions For Linux](https://github.com/obsproject/obs-studio/wiki/Build-Instructions-For-Linux).
 
-For Windows and macOS, this tool will download prebuilt binaries.
+For Windows and macOS, this tool downloads prebuilt binaries. macOS uses the official Apple/Intel OBS DMG for the current architecture and preserves the framework/plugin bundle layout and signatures.
+
+On macOS, install the header dependency first:
+
+```bash
+brew install simde
+```
+
+DMG mounting/extraction uses native macOS tools (`hdiutil`, `ditto`, `codesign`), so preparing a macOS runtime must currently run on a macOS host. Target detection honors Cargo target environment variables instead of assuming the host platform.
 
 ## Usage
 
