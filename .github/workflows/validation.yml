@@ -48,11 +48,13 @@ jobs:
         run: |
           # cache-apt-pkgs-action restores package files, but packages with
           # installation metadata/scripts are not always fully registered on a
-          # cache hit. OBS 32 requires ECM during configure, so install/verify it
-          # explicitly instead of trusting the cache restore alone.
+          # cache hit. OBS 32 requires ECM and SIMDe during configure, so
+          # install/verify both explicitly instead of trusting the cache restore
+          # alone.
           sudo apt-get update
-          sudo apt-get install -y extra-cmake-modules
+          sudo apt-get install -y extra-cmake-modules libsimde-dev
           test -f /usr/share/ECM/cmake/ECMConfig.cmake
+          test -f /usr/include/simde/simde-common.h
       - name: Symlink libraries
         if: matrix.os == 'ubuntu-latest'
         run: |
@@ -218,6 +220,11 @@ jobs:
 
       - name: Test target selection and macOS source contract
         run: |
+          # Rust test binaries link libobs using @rpath. They are emitted into
+          # hashed target/debug/deps paths and therefore do not inherit an
+          # LC_RPATH from the framework preparation step.
+          test -f target/debug/deps/libobs.framework/Versions/A/libobs
+          export DYLD_FALLBACK_FRAMEWORK_PATH="$PWD/target/debug/deps${DYLD_FALLBACK_FRAMEWORK_PATH:+:$DYLD_FALLBACK_FRAMEWORK_PATH}"
           cargo test -p cargo-obs-build --lib --no-default-features
           cargo test -p libobs-bootstrapper --lib --no-default-features
           cargo test -p libobs-simple --lib --no-default-features
