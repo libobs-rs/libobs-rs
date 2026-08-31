@@ -214,6 +214,12 @@ jobs:
           # Platform-source integration tests use the exact runtime prepared
           # above instead of assuming an OBS installation on the runner.
           LIBOBS_TEST_RUNTIME_DIR: ${{ matrix.os == 'ubuntu-latest' && format('{0}/obs-install', github.workspace) || format('{0}/target/nextest-all-features/debug/deps', github.workspace) }}
+      - name: Record and inspect a real Windows window
+        if: matrix.os == 'windows-latest'
+        run: cargo nextest r -p libobs-simple -E 'binary(gpu_sources_test_window_capture)' --target-dir target/nextest-all-features
+        env:
+          TOP_SECRET_NO_DUMMY_DLL: true
+          LIBOBS_TEST_RUNTIME_DIR: ${{ github.workspace }}/target/nextest-all-features/debug/deps
   build-test-macos:
     name: Build and Test (macOS)
     runs-on: macos-latest
