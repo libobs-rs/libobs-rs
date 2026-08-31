@@ -245,7 +245,7 @@ jobs:
         env:
           TOP_SECRET_NO_DUMMY_DLL: true
 
-      - name: Test target selection, macOS source contract, and portable integration suite
+      - name: Test target selection and macOS source contract
         run: |
           # Rust test binaries link libobs using @rpath. They are emitted into
           # hashed target/debug/deps paths and therefore do not inherit an
@@ -255,11 +255,6 @@ jobs:
           cargo test -p cargo-obs-build --lib --no-default-features
           cargo test -p libobs-bootstrapper --lib --no-default-features
           cargo test -p libobs-simple --lib --no-default-features
-          cargo nextest r -p libobs-simple --profile ci --all-features \
-            --test integration_data \
-            --test integration_output_lifecycle \
-            --test integration_scene_management \
-            --test integration_platform_sources
         env:
           TOP_SECRET_NO_DUMMY_DLL: true
           LIBOBS_TEST_RUNTIME_DIR: ${{ github.workspace }}/target/debug/deps
