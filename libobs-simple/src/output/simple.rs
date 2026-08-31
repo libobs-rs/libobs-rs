@@ -171,12 +171,23 @@ pub struct OutputSettings {
     path: ObsPath,
     format: OutputFormat,
     custom_muxer_settings: Option<String>,
+    /// Quality for CRF-based x264 encoding, on a 0–100 scale.
+    crf: Option<u32>,
 }
 
 impl OutputSettings {
     /// Sets the video bitrate in Kbps.
     pub fn with_video_bitrate(mut self, bitrate: u32) -> Self {
         self.video_bitrate = bitrate;
+        self
+    }
+
+    /// Sets a quality target for x264 encoding on a 0–100 scale.
+    ///
+    /// A value of 100 maps to x264 CRF 0 (highest quality), while 0 maps to
+    /// CRF 51 (lowest quality). Hardware encoders retain bitrate-based control.
+    pub fn with_crf(mut self, crf: u32) -> Self {
+        self.crf = Some(crf.min(100));
         self
     }
 
@@ -277,6 +288,7 @@ impl SimpleOutputBuilder {
                 path: path.into(),
                 format: OutputFormat::default(),
                 custom_muxer_settings: None,
+                crf: None,
                 name: name.into(),
             },
             context,
@@ -292,6 +304,15 @@ impl SimpleOutputBuilder {
     /// Sets the video bitrate in Kbps.
     pub fn video_bitrate(mut self, bitrate: u32) -> Self {
         self.settings.video_bitrate = bitrate;
+        self
+    }
+
+    /// Sets a quality target for x264 encoding on a 0–100 scale.
+    ///
+    /// A value of 100 maps to x264 CRF 0 (highest quality), while 0 maps to
+    /// CRF 51 (lowest quality). Hardware encoders retain bitrate-based control.
+    pub fn crf(mut self, crf: u32) -> Self {
+        self.settings.crf = Some(crf.min(100));
         self
     }
 
@@ -574,6 +595,10 @@ impl SimpleOutputBuilder {
         *selected_encoder == ObsVideoEncoderType::OBS_X264
     }
 
+    fn x264_crf_from_quality(quality: u32) -> i64 {
+        (100u32.saturating_sub(quality.min(100)) * 51 / 100) as i64
+    }
+
     fn configure_video_encoder(
         &self,
         settings: &mut ObsData,
@@ -581,13 +606,26 @@ impl SimpleOutputBuilder {
     ) -> Result<(), ObsError> {
         // VideoToolbox universally exposes ABR. CBR is only exposed by some
         // Apple-Silicon/macOS combinations, so ABR is the portable bitrate mode.
-        let rate_control = if Self::is_videotoolbox_encoder(selected_encoder) {
+        let use_x264_crf = self.settings.crf.is_some() && Self::uses_x264_options(selected_encoder);
+        let rate_control = if use_x264_crf {
+            "CRF"
+        } else if Self::is_videotoolbox_encoder(selected_encoder) {
             "ABR"
         } else {
             "CBR"
         };
         settings.set_string("rate_control", rate_control)?;
-        settings.set_int("bitrate", self.settings.video_bitrate as i64)?;
+        if let Some(quality) = self.settings.crf.filter(|_| use_x264_crf) {
+            settings.set_int("crf", Self::x264_crf_from_quality(quality))?;
+        } else {
+            if self.settings.crf.is_some() {
+                log::warn!(
+                    "CRF is only supported by the selected x264 encoder; using {rate_control} at {} Kbps instead",
+                    self.settings.video_bitrate
+                );
+            }
+            settings.set_int("bitrate", self.settings.video_bitrate as i64)?;
+        }
 
         if let Some(preset) = self.selected_encoder_preset(selected_encoder) {
             settings.set_string("preset", preset)?;
@@ -698,6 +736,13 @@ mod tests {
         assert!(!SimpleOutputBuilder::uses_x264_options(
             &ObsVideoEncoderType::Other("com.apple.videotoolbox.videoencoder.ave.avc".into())
         ));
+    }
+
+    #[test]
+    fn x264_crf_quality_scale_is_clamped_and_inverted() {
+        assert_eq!(SimpleOutputBuilder::x264_crf_from_quality(100), 0);
+        assert_eq!(SimpleOutputBuilder::x264_crf_from_quality(0), 51);
+        assert_eq!(SimpleOutputBuilder::x264_crf_from_quality(150), 0);
     }
 
     #[test]
