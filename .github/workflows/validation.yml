@@ -206,16 +206,22 @@ jobs:
         run: cargo nextest r --profile ci --no-default-features --features "__test_environment"
         env:
           TOP_SECRET_NO_DUMMY_DLL: true
+          LIBOBS_TEST_RUNTIME_DIR: ${{ matrix.os == 'ubuntu-latest' && format('{0}/obs-install', github.workspace) || format('{0}/target/debug/deps', github.workspace) }}
       - name: Run tests (with default features)
         run: cargo nextest r --profile ci --all-features --target-dir target/nextest-all-features
         env:
           TOP_SECRET_NO_DUMMY_DLL: true
+          # Platform-source integration tests use the exact runtime prepared
+          # above instead of assuming an OBS installation on the runner.
+          LIBOBS_TEST_RUNTIME_DIR: ${{ matrix.os == 'ubuntu-latest' && format('{0}/obs-install', github.workspace) || format('{0}/target/nextest-all-features/debug/deps', github.workspace) }}
   build-test-macos:
     name: Build and Test (macOS)
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
+
+      - uses: taiki-e/install-action@nextest
 
       - name: Install macOS build dependencies
         run: brew install simde
@@ -233,7 +239,7 @@ jobs:
         env:
           TOP_SECRET_NO_DUMMY_DLL: true
 
-      - name: Test target selection and macOS source contract
+      - name: Test target selection, macOS source contract, and portable integration suite
         run: |
           # Rust test binaries link libobs using @rpath. They are emitted into
           # hashed target/debug/deps paths and therefore do not inherit an
@@ -243,8 +249,10 @@ jobs:
           cargo test -p cargo-obs-build --lib --no-default-features
           cargo test -p libobs-bootstrapper --lib --no-default-features
           cargo test -p libobs-simple --lib --no-default-features
+          cargo nextest r -p libobs-simple --profile ci --all-features
         env:
           TOP_SECRET_NO_DUMMY_DLL: true
+          LIBOBS_TEST_RUNTIME_DIR: ${{ github.workspace }}/target/debug/deps
 
   build-test-nix:
     name: Build and Test (Nix)
