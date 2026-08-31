@@ -1,4 +1,7 @@
-use libobs_bootstrapper::{ObsBootstrapError, ObsBootstrapper, ObsBootstrapperOptions};
+use libobs_bootstrapper::{ObsBootstrapper, ObsBootstrapperOptions};
+
+#[cfg(target_os = "linux")]
+use libobs_bootstrapper::ObsBootstrapError;
 
 #[cfg(target_os = "linux")]
 #[tokio::test]
