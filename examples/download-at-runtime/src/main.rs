@@ -5,6 +5,8 @@ use libobs_bootstrapper::{
 #[tokio::main]
 async fn main() {
     let options = ObsBootstrapperOptions::default();
+    // SAFETY: this provisioning-only call does not invoke libobs; on Windows
+    // it prepares the delay-loaded runtime before the first direct OBS call.
     match ObsBootstrapper::bootstrap(&options).await {
         Ok(ObsBootstrapperResult::None) => println!("OBS runtime is already ready"),
         Ok(ObsBootstrapperResult::Provisioned) => println!("OBS runtime was provisioned"),
@@ -23,7 +25,12 @@ async fn main() {
     {
         // This is intentionally the first direct OBS call in the process. The
         // linker delay-load thunk resolves obs.dll only now, after bootstrap.
-        let version = unsafe { libobs::obs_get_version() };
+        #[allow(ensure_obs_call_in_runtime)]
+        let version = {
+            // SAFETY: bootstrap completed above, so the delay-loaded OBS
+            // runtime is available before this first direct FFI call.
+            unsafe { libobs::obs_get_version() }
+        };
         println!("Loaded OBS version word: {version:#x}");
     }
 
