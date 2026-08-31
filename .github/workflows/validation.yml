@@ -48,13 +48,23 @@ jobs:
         run: |
           # cache-apt-pkgs-action restores package files, but packages with
           # installation metadata/scripts are not always fully registered on a
-          # cache hit. OBS 32 requires ECM and SIMDe during configure, so
-          # install/verify both explicitly instead of trusting the cache restore
-          # alone.
+          # cache hit. OBS 32 requires ECM, SIMDe, and FFmpeg during configure,
+          # so install/verify them explicitly instead of trusting the cache
+          # restore alone.
           sudo apt-get update
-          sudo apt-get install -y extra-cmake-modules libsimde-dev
+          sudo apt-get install -y \
+            extra-cmake-modules \
+            libsimde-dev \
+            libavcodec-dev \
+            libavdevice-dev \
+            libavfilter-dev \
+            libavformat-dev \
+            libavutil-dev \
+            libswresample-dev \
+            libswscale-dev
           test -f /usr/share/ECM/cmake/ECMConfig.cmake
           test -f /usr/include/simde/simde-common.h
+          pkg-config --atleast-version=6.1 libavcodec libavformat libavutil libswresample libswscale
       - name: Symlink libraries
         if: matrix.os == 'ubuntu-latest'
         run: |
