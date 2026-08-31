@@ -1,3 +1,5 @@
+#![allow(unknown_lints, ensure_obs_call_in_runtime)]
+
 use libobs_bootstrapper::{
     ObsBootstrapError, ObsBootstrapper, ObsBootstrapperOptions, ObsBootstrapperResult,
 };
@@ -25,7 +27,6 @@ async fn main() {
     {
         // This is intentionally the first direct OBS call in the process. The
         // linker delay-load thunk resolves obs.dll only now, after bootstrap.
-        #[allow(ensure_obs_call_in_runtime)]
         let version = {
             // SAFETY: bootstrap completed above, so the delay-loaded OBS
             // runtime is available before this first direct FFI call.
