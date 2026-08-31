@@ -4,6 +4,7 @@
 //! This crate provides convenient builders for OBS sources across different platforms:
 //! - **Windows**: Window capture, monitor capture, game capture
 //! - **Linux**: X11 screen capture, XComposite window capture, V4L2 camera, ALSA/PulseAudio/JACK audio, PipeWire
+//! - **macOS**: ScreenCaptureKit-backed display, window, and application capture
 //!
 //! You can find examples [here](https://github.com/libobs-rs/libobs-rs/tree/main/examples).
 
@@ -14,6 +15,10 @@ pub mod windows;
 #[cfg(any(target_os = "linux", doc))]
 #[cfg_attr(doc, doc(cfg(target_os = "linux")))]
 pub mod linux;
+
+#[cfg(any(target_os = "macos", test, doc))]
+#[cfg_attr(doc, doc(cfg(target_os = "macos")))]
+pub mod macos;
 
 mod either;
 mod macro_helper;

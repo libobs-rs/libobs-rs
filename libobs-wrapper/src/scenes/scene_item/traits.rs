@@ -92,40 +92,75 @@ impl SceneItemExtSceneTrait for ObsSceneRef {
     ) -> Result<(), ObsError> {
         let source_ptr = source.as_ptr().get_ptr();
 
-        self.attached_scene_items
-            .write()
-            .map_err(|e| ObsError::LockError(format!("{:?}", e)))?
-            .retain(|s, _| {
-                //TODO: Maybe find a better way to utilize the HashMap's capabilities here
-                s.as_ptr().get_ptr() != source_ptr
-            });
+        let removed = {
+            let mut guard = self
+                .attached_scene_items
+                .write()
+                .map_err(|e| ObsError::LockError(format!("{:?}", e)))?;
+            let keys = guard
+                .keys()
+                .filter(|s| s.as_ptr().get_ptr() == source_ptr)
+                .cloned()
+                .collect::<Vec<_>>();
+            keys.into_iter()
+                .filter_map(|key| guard.remove_entry(&key))
+                .collect::<Vec<_>>()
+        };
 
+        // Dropping scene-item guards can synchronously call into OBS and emit
+        // item_remove signals. Never hold the map lock across that re-entrant work.
+        drop(removed);
         Ok(())
     }
 
     fn remove_scene_item<K: SceneItemTrait>(&mut self, scene_item: K) -> Result<(), ObsError> {
-        let mut guard = self
-            .attached_scene_items
-            .write()
-            .map_err(|e| ObsError::LockError(format!("{:?}", e)))?;
+        let scene_item_ptr = scene_item.as_ptr().get_ptr();
+        let (removed_items, removed_entries) = {
+            let mut guard = self
+                .attached_scene_items
+                .write()
+                .map_err(|e| ObsError::LockError(format!("{:?}", e)))?;
+            let mut removed_items = Vec::new();
+            for items in guard.values_mut() {
+                let mut index = 0;
+                while index < items.len() {
+                    if items[index].as_ptr().get_ptr() == scene_item_ptr {
+                        removed_items.push(items.swap_remove(index));
+                    } else {
+                        index += 1;
+                    }
+                }
+            }
+            let empty_keys = guard
+                .iter()
+                .filter(|(_, items)| items.is_empty())
+                .map(|(source, _)| source.clone())
+                .collect::<Vec<_>>();
+            let removed_entries = empty_keys
+                .into_iter()
+                .filter_map(|key| guard.remove_entry(&key))
+                .collect::<Vec<_>>();
+            (removed_items, removed_entries)
+        };
 
-        guard.retain(|_, items| {
-            items.retain(|item| {
-                // Keep everything except this one scene item
-                item.as_ptr().get_ptr() != scene_item.as_ptr().get_ptr()
-            });
-            // Remove the entry if no items remain
-            !items.is_empty()
-        });
+        // See remove_every_item_of_source: OBS-backed values must be destroyed
+        // after releasing the bookkeeping lock.
+        drop(removed_items);
+        drop(removed_entries);
         Ok(())
     }
 
     fn remove_all_sources(&mut self) -> Result<(), ObsError> {
-        // Dropping the scene items is handled by the smart pointer drop guards
-        self.attached_scene_items
-            .write()
-            .map_err(|e| ObsError::LockError(format!("{:?}", e)))?
-            .clear();
+        // Move the values out under the lock, then let their OBS drop guards run
+        // only after the lock has been released.
+        let removed = {
+            let mut guard = self
+                .attached_scene_items
+                .write()
+                .map_err(|e| ObsError::LockError(format!("{:?}", e)))?;
+            std::mem::take(&mut *guard)
+        };
+        drop(removed);
 
         Ok(())
     }

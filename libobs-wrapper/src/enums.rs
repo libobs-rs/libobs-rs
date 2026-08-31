@@ -91,6 +91,8 @@ pub enum ObsScaleType {
 pub enum ObsGraphicsModule {
     OpenGL,
     DirectX11,
+    /// Native Metal renderer used by OBS on macOS.
+    Metal,
 }
 
 #[repr(i32)]

@@ -24,57 +24,110 @@ use log::{debug, info};
 use log::{error, trace};
 use sha2::{Digest, Sha256};
 
-use crate::git::ReleaseInfo;
+use crate::{
+    git::ReleaseInfo,
+    target::{ObsBuildTarget, ObsTargetArch, ObsTargetOs},
+};
 
 const DEFAULT_REQ_TIMEOUT: u64 = 60 * 60;
 
-pub fn download_binaries(build_dir: &Path, info: &ReleaseInfo) -> anyhow::Result<PathBuf> {
-    let architecture = if cfg!(target_arch = "x86_64") {
-        "x64"
-    } else {
-        "arm64"
-    };
-    let to_download = &info.assets.iter().find(|e| {
-        let name = e["name"].as_str().unwrap_or("").to_lowercase();
-
-        // OBS-Studio-30.2.1-Windows.zip
-        name.contains("obs-studio")
-            && (name.contains("windows") || name.contains("full"))
-            && name.contains(".zip")
-            && !name.contains("pdb")
-            && name.contains(architecture)
-    });
-
-    if to_download.is_none() {
-        bail!("No OBS Studio binaries found");
+pub fn download_binaries(
+    build_dir: &Path,
+    info: &ReleaseInfo,
+    target: ObsBuildTarget,
+    require_checksum: bool,
+) -> anyhow::Result<PathBuf> {
+    if target.os == ObsTargetOs::Linux {
+        bail!(
+            "Linux uses a system/source OBS installation. Run `cargo obs-build install` on \
+             Debian/Ubuntu or install a compatible libobs development package for your distro."
+        );
     }
 
-    let to_download = to_download.unwrap();
-    let url = to_download["browser_download_url"]
+    let asset = info
+        .assets
+        .iter()
+        .find(|asset| asset_matches_target(asset, target))
+        .ok_or_else(|| anyhow!("No OBS Studio binaries found for {}", target.display_name()))?;
+    let url = asset["browser_download_url"]
         .as_str()
-        .ok_or(anyhow!("No download url found"))?;
+        .ok_or_else(|| anyhow!("No download url found"))?;
 
-    let download_path = build_dir.join("obs-prebuilt-windows.zip");
+    let output_name = match target.os {
+        ObsTargetOs::Windows => "obs-prebuilt-windows.zip",
+        ObsTargetOs::Macos => "obs-prebuilt-macos.dmg",
+        ObsTargetOs::Linux => unreachable!(),
+    };
+    let download_path = build_dir.join(output_name);
 
     #[cfg(feature = "colored")]
     println!("Downloading OBS from {}", url.green());
     let hash = download_file(url, &download_path)?;
 
-    let name = to_download["name"].as_str().unwrap_or("");
-    let checksum = &info.checksums.get(&name.to_lowercase());
+    let name = asset["name"].as_str().unwrap_or("");
+    let expected = info
+        .checksums
+        .get(&name.to_lowercase())
+        .map(String::as_str)
+        .or_else(|| {
+            asset["digest"]
+                .as_str()
+                .and_then(|d| d.strip_prefix("sha256:"))
+        });
 
-    if let Some(checksum) = checksum {
-        if checksum.to_lowercase() != hash.to_lowercase() {
-            bail!("Checksums do not match");
-        } else {
-            #[cfg(feature = "colored")]
-            info!("{}", "Checksums match".on_green());
-        }
-    } else {
-        error!("No checksum found for {}", name);
-    }
+    verify_download_hash(name, expected, &hash, require_checksum)?;
 
     Ok(download_path)
+}
+
+fn verify_download_hash(
+    name: &str,
+    expected: Option<&str>,
+    actual: &str,
+    require_checksum: bool,
+) -> anyhow::Result<()> {
+    match expected {
+        Some(expected) if expected.eq_ignore_ascii_case(actual) => {
+            #[cfg(feature = "colored")]
+            info!("{}", "Checksums match".on_green());
+            Ok(())
+        }
+        Some(_) => bail!("Checksums do not match for {name}"),
+        None if require_checksum => bail!(
+            "No SHA-256 checksum/digest is advertised for {name}; refusing verified preparation"
+        ),
+        None => {
+            error!("No checksum found for {name}");
+            Ok(())
+        }
+    }
+}
+
+fn asset_matches_target(asset: &serde_json::Value, target: ObsBuildTarget) -> bool {
+    let name = asset["name"].as_str().unwrap_or("").to_lowercase();
+    if !name.contains("obs-studio") || name.contains("dsym") || name.contains("pdb") {
+        return false;
+    }
+
+    match target.os {
+        ObsTargetOs::Windows => {
+            let arch = match target.arch {
+                ObsTargetArch::X86_64 => "x64",
+                ObsTargetArch::Aarch64 => "arm64",
+            };
+            (name.contains("windows") || name.contains("full"))
+                && name.ends_with(".zip")
+                && name.contains(arch)
+        }
+        ObsTargetOs::Macos => {
+            let arch = match target.arch {
+                ObsTargetArch::X86_64 => "intel",
+                ObsTargetArch::Aarch64 => "apple",
+            };
+            name.contains("macos") && name.ends_with(".dmg") && name.contains(arch)
+        }
+        ObsTargetOs::Linux => false,
+    }
 }
 
 /// Returns hash
@@ -197,4 +250,42 @@ pub fn download_file(url: &str, path: &Path) -> anyhow::Result<String> {
     trace!("Hashing...");
     let _ = stdout().flush();
     Ok(hex::encode(hasher.finalize()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn selects_official_macos_assets_by_architecture() {
+        let apple = json!({"name": "OBS-Studio-32.1.0-macOS-Apple.dmg"});
+        let intel = json!({"name": "OBS-Studio-32.1.0-macOS-Intel.dmg"});
+        let dsym = json!({"name": "OBS-Studio-32.1.0-macOS-Apple-dSYMs.tar.xz"});
+        let target = ObsBuildTarget::parse("macos", "aarch64").unwrap();
+        assert!(asset_matches_target(&apple, target));
+        assert!(!asset_matches_target(&intel, target));
+        assert!(!asset_matches_target(&dsym, target));
+    }
+
+    #[test]
+    fn selects_windows_assets_without_debug_symbols() {
+        let binary = json!({"name": "OBS-Studio-32.1.0-Windows-x64.zip"});
+        let pdb = json!({"name": "OBS-Studio-32.1.0-Windows-x64-PDBs.zip"});
+        let target = ObsBuildTarget::parse("windows", "x86_64").unwrap();
+        assert!(asset_matches_target(&binary, target));
+        assert!(!asset_matches_target(&pdb, target));
+    }
+
+    #[test]
+    fn verified_download_requires_integrity_metadata() {
+        assert!(verify_download_hash("obs.zip", None, "abc", true).is_err());
+        assert!(verify_download_hash("obs.zip", None, "abc", false).is_ok());
+    }
+
+    #[test]
+    fn download_hash_must_match_when_present() {
+        assert!(verify_download_hash("obs.zip", Some("abc"), "ABC", true).is_ok());
+        assert!(verify_download_hash("obs.zip", Some("def"), "abc", false).is_err());
+    }
 }

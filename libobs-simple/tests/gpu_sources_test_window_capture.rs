@@ -50,6 +50,11 @@ pub fn record() {
     output.start().unwrap();
     println!("Recording started");
 
+    // Hosted runners generally have no extra application windows to switch to
+    // below. Record a baseline interval so the MP4 has complete video timing
+    // metadata before it is inspected.
+    std::thread::sleep(Duration::from_secs(2));
+
     let windows = WindowCaptureSourceBuilder::get_windows(WindowSearchMode::ExcludeMinimized)
         .unwrap()
         .into_iter()

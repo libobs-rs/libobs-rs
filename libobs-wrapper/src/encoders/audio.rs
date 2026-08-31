@@ -9,7 +9,7 @@ use crate::{
         object::{inner_fn_update_settings, ObsObjectTrait, ObsObjectTraitPrivate},
         ImmutableObsData, ObsDataPointers,
     },
-    encoders::{ObsEncoderTrait, _ObsEncoderDropGuard},
+    encoders::{_ObsEncoderDropGuard, ObsEncoderTrait},
     run_with_obs,
     runtime::ObsRuntime,
     unsafe_send::{Sendable, SmartPointerSendable},

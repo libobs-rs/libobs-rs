@@ -3,138 +3,97 @@
 [![Crates.io](https://img.shields.io/crates/v/libobs-bootstrapper.svg)](https://crates.io/crates/libobs-bootstrapper)
 [![Documentation](https://docs.rs/libobs-bootstrapper/badge.svg)](https://docs.rs/libobs-bootstrapper)
 
-A utility crate for automatically downloading and installing OBS (Open Broadcaster Software) Studio binaries at runtime. This crate is part of the libobs-rs ecosystem and is designed to make distributing OBS-based applications easier by handling the setup of OBS binaries.
+`libobs-bootstrapper` explicitly provisions and inspects OBS runtimes for applications built with libobs-rs. Runtime provisioning is **opt-in**: depending on this crate never downloads anything. Network access only begins when the application calls `ObsBootstrapper::bootstrap*`.
 
-Note: This crate currently supports Windows and MacOS platforms. Refer to the libobs-wrapper documentation for Linux setup instructions [here](../libobs-wrapper/README.md).
+The current design deliberately avoids the old dummy-`obs.dll` and PowerShell updater flow. Downloads use official OBS Studio GitHub releases by default, select a compatible architecture/version, require an advertised SHA-256 checksum/digest, verify it before extraction, and prepare the runtime with the same platform-aware machinery used by `cargo-obs-build`.
 
-## Features
+## Platform model
 
-- **Automatic OBS Download**: Downloads appropriate OBS binaries at runtime
-- **Progress Tracking**: Built-in progress reporting for downloads and extraction
-- **Version Management**: Handles OBS version checking and updates
-- **Custom Status Handlers**: Flexible progress reporting via custom handlers
-- **Async Support**: Built on Tokio for async operations
-- **Error Handling**: Comprehensive error types for reliable error handling
+- **Windows:** same-process first-run provisioning is supported when the final executable delay-loads `obs.dll`. This lets `main()` run before OBS exists and keeps the DLL unlocked until bootstrap has finished.
+- **macOS:** provisioning is supported, but an application that directly links `libobs.framework` cannot bootstrap a missing framework from its own `main()` because dyld resolves it before the entry point. Use a small launcher/helper that depends on `libobs-bootstrapper` but not `libobs`, then start the real application.
+- **Linux:** use the distribution/system or source-built `libobs`; portable runtime bootstrap is intentionally unsupported.
 
-## Usage
+## Windows: bootstrap before the first OBS call
 
-Add the crate to your dependencies:
+Microsoft's delay-load mechanism defers `obs.dll` loading until the first imported OBS function is called. Because Cargo cannot propagate a dependency's `rustc-link-arg` into the final application executable, add `libobs-bootstrapper` as a build dependency and call the helper from your application's own build script.
+
+`Cargo.toml`:
 
 ```toml
 [dependencies]
-libobs-bootstrapper = "0.2.0"
+libobs-bootstrapper = "0.4"
+libobs-wrapper = "9"
+
+[build-dependencies]
+libobs-bootstrapper = "0.4"
 ```
 
-### Basic Example
-
-Here's a simple example using the default console handler:
+`build.rs`:
 
 ```rust
-use std::{sync::Arc, time::Duration};
-use libobs_bootstrapper::{
-    ObsBootstrapper, ObsBootstrapperOptions, ObsBootstrapperResult
-};
-use libobs_wrapper::{context::ObsContext, utils::StartupInfo};
-
-
-#[tokio::main]
-async fn main() {
-    env_logger::init();
-    println!("Starting OBS bootstrapper...");
-    let handler = ObsBootstrapProgress::new();
-
-    let res = ObsBootstrapper::bootstrap(&ObsBootstrapperOptions::default())
-        .await
-        .unwrap();
-    if matches!(res, ObsBootstrapperResult::Restart) {
-        println!("OBS has been downloaded and extracted. The application will now restart.");
-        return;
-    }
-
-    let context = ObsContext::new(StartupInfo::default()).unwrap();
-    handler.done();
-
-    println!("Done");
-    // Use the context here
-    // For example creating new obs data
-    context.data().unwrap();
+fn main() {
+    libobs_bootstrapper::build::emit_windows_obs_delay_load();
 }
 ```
 
-### Custom Progress Handler
+Then bootstrap **before any call into `libobs` or `libobs-wrapper`**:
 
-You can implement your own progress handler for custom UI integration:
+```rust,no_run
+use libobs_bootstrapper::{ObsBootstrapper, ObsBootstrapperOptions};
 
-```rust
-use indicatif::{ProgressBar, ProgressStyle};
-use libobs_bootstrapper::status_handler::ObsBootstrapStatusHandler;
-use std::{sync::Arc, time::Duration};
+# async fn prepare() -> Result<(), libobs_bootstrapper::ObsBootstrapError> {
+let options = ObsBootstrapperOptions::default();
+ObsBootstrapper::bootstrap(&options).await?;
 
-#[derive(Debug, Clone)]
-struct CustomProgressHandler(Arc<ProgressBar>);
-
-impl CustomProgressHandler {
-    pub fn new() -> Self {
-        let bar = ProgressBar::new(200).with_style(
-            ProgressStyle::default_bar()
-                .template("{msg}\n{wide_bar} {pos}/{len}")
-                .unwrap(),
-        );
-
-        bar.set_message("Initializing bootstrapper...");
-        Self(Arc::new(bar))
-    }
-}
-
-impl ObsBootstrapStatusHandler for CustomProgressHandler {
-    fn handle_downloading(&mut self, prog: f32, msg: String) -> anyhow::Result<()> {
-        self.0.set_message(msg);
-        self.0.set_position((prog * 100.0) as u64);
-        Ok(())
-    }
-
-    fn handle_extraction(&mut self, prog: f32, msg: String) -> anyhow::Result<()> {
-        self.0.set_message(msg);
-        self.0.set_position(100 + (prog * 100.0) as u64);
-        Ok(())
-    }
-}
+// It is now safe to make the first OBS call / create ObsContext.
+# Ok(())
+# }
 ```
 
-### Setup Steps
+The default install directory is the executable directory, which also makes it discoverable by the Windows delay-load helper. If you use `set_install_dir` with a different directory, your application is responsible for adding that directory to the Windows DLL search path before the first OBS symbol is used.
 
-1. You can either: <br>
-   **a) RECOMMENDED** enable the `install_dummy_dll` feature for this crate <br>
-   **b)** Add a placeholder `obs.dll` file to your executable directory:
-     - Download a dummy DLL from [libobs-builds releases](https://github.com/sshcrack/libobs-builds/releases)
-     - Use the version matching your target OBS version
-     - Rename the downloaded file to `obs.dll`
+If OBS was already loaded before `bootstrap()`, the bootstrapper returns `ObsBootstrapError::RuntimeAlreadyLoaded` rather than attempting to overwrite in-use DLLs.
 
-2. Call `ObsBootstrapper::bootstrap()` at application startup
+## macOS launcher pattern
 
-3. If `ObsBootstrapperResult::Restart` is returned:
-   - Exit the application
-   - The updater will restart your application automatically
+Use a tiny launcher executable that depends on `libobs-bootstrapper` only:
 
-### Advanced Options
+```rust,no_run
+use libobs_bootstrapper::{ObsBootstrapper, ObsBootstrapperOptions};
 
-The `ObsBootstrapperOptions` struct allows you to customize the bootstrapper:
-
-```rust
-let options = ObsBootstrapperOptions::default()
-    .with_repository("sshcrack/libobs-builds")  // Custom repo
-    .with_update(true)                          // Force update check
-    .with_restart_after_update(true);           // Auto restart
+# async fn prepare() -> Result<(), libobs_bootstrapper::ObsBootstrapError> {
+ObsBootstrapper::bootstrap(&ObsBootstrapperOptions::default()).await?;
+// Start the real libobs-linked application after provisioning succeeds.
+# Ok(())
+# }
 ```
 
-## Error Handling
+Because the launcher does not depend on the native `libobs` crate, it can start when the framework is absent and can update the framework without it being mapped into the process.
 
-The crate provides the `ObsBootstrapError` enum for error handling:
+## Update and trust policy
 
-- `GeneralError`: Generic bootstrapper errors
-- `DownloadError`: Issues during OBS binary download
-- `ExtractError`: Problems extracting downloaded files
+The secure default is `UpdateTargetMode::Exact`: provision the OBS ABI version this libobs-rs release targets. Callers can explicitly choose `LatestCompatibleSameMajorMinor` or `LatestCompatibleSameMajor` if they want a broader update line.
 
-## License
+The default repository is `obsproject/obs-studio`. `set_repository` intentionally allows a different GitHub repository, but doing so is a caller-controlled trust decision. Runtime provisioning requires SHA-256 integrity metadata; unlike normal build-time preparation, it refuses downloads without a checksum/digest.
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+No bootstrap path creates a dummy DLL, launches PowerShell, replaces files after OBS has been loaded, or automatically restarts the application.
+
+## Local inspection
+
+Inspection APIs do not access the network:
+
+```rust,no_run
+use libobs_bootstrapper::{ObsBootstrapper, ObsBootstrapperOptions};
+
+# fn inspect() -> Result<(), libobs_bootstrapper::ObsBootstrapError> {
+let options = ObsBootstrapperOptions::new().set_install_dir("./runtime");
+let valid = ObsBootstrapper::is_valid_installation_with_options(&options)?;
+let needs_update = ObsBootstrapper::is_update_available_with_options(&options)?;
+println!("valid={valid}, needs_update={needs_update}");
+# Ok(())
+# }
+```
+
+`is_update_available_with_options` compares the local runtime with the configured base target. Release-server resolution only occurs during the explicit bootstrap operation when a non-exact update mode is selected.
+
+See [`examples/download-at-runtime`](../examples/download-at-runtime) for a complete example.

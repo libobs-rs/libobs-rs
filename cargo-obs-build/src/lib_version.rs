@@ -10,7 +10,10 @@ pub fn get_lib_obs_version() -> anyhow::Result<(u32, u32, u32)> {
         .context("Extracting OBS version from bindings.rs")?;
 
     info!("Getting libobs version from bindings...");
-    let meta = MetadataCommand::new().exec()?;
+    let meta = MetadataCommand::new()
+        .env_remove("RUSTFLAGS")
+        .env_remove("CARGO_ENCODED_RUSTFLAGS")
+        .exec()?;
 
     let pkgs = meta
         .packages

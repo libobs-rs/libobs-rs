@@ -47,24 +47,28 @@ pub fn get_meta_info(
     let meta = get_main_meta()?;
 
     if let Some(meta) = meta {
-        if let Ok(dir) = read_val_from_meta(&meta, "libobs-cache-dir").map(PathBuf::from) {
-            let d = if dir.is_relative() {
-                let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").ok().map(PathBuf::from);
+        if cache_dir.is_none() {
+            if let Ok(dir) = read_val_from_meta(&meta, "libobs-cache-dir").map(PathBuf::from) {
+                let d = if dir.is_relative() {
+                    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").ok().map(PathBuf::from);
 
-                if let Some(manifest_dir) = manifest_dir {
-                    manifest_dir.join(dir)
+                    if let Some(manifest_dir) = manifest_dir {
+                        manifest_dir.join(dir)
+                    } else {
+                        dir
+                    }
                 } else {
                     dir
-                }
-            } else {
-                dir
-            };
+                };
 
-            *cache_dir = Some(d);
+                *cache_dir = Some(d);
+            }
         }
 
-        if let Ok(version) = read_val_from_meta(&meta, "libobs-version") {
-            *tag = Some(version);
+        if tag.is_none() {
+            if let Ok(version) = read_val_from_meta(&meta, "libobs-version") {
+                *tag = Some(version);
+            }
         }
     }
 

@@ -1,7 +1,7 @@
 use crate::{
     data::object::ObsObjectTrait,
     macros::impl_eq_of_ptr,
-    sources::{ObsFilterRef, ObsSourceSignals, _ObsRemoveFilterOnDrop},
+    sources::{_ObsRemoveFilterOnDrop, ObsFilterRef, ObsSourceSignals},
     utils::ObsError,
 };
 use std::sync::Arc;
