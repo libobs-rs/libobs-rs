@@ -1,9 +1,12 @@
+#[cfg(target_os = "linux")]
 use std::ptr;
 
 #[cfg(target_os = "linux")]
 use super::PlatformType;
-#[cfg(target_os = "linux")]
 use std::rc::Rc;
+
+#[cfg(target_os = "linux")]
+use crate::unsafe_send::Sendable;
 
 #[cfg(target_os = "linux")]
 use crate::utils::initialization::NixDisplay;
@@ -12,14 +15,16 @@ use crate::utils::ObsError;
 #[cfg(target_os = "linux")]
 use crate::utils::linux::{wl_display_disconnect, XCloseDisplay};
 
+#[cfg(target_os = "linux")]
 #[derive(Debug)]
 pub(crate) struct PlatformSpecificGuard {
-    display: *mut std::os::raw::c_void,
+    display: Sendable<*mut std::os::raw::c_void>,
     platform: PlatformType,
     /// Whether the guard owns the display connection and should close it on drop
     owned: bool,
 }
 
+#[cfg(target_os = "linux")]
 impl Drop for PlatformSpecificGuard {
     fn drop(&mut self) {
         if !self.owned {
@@ -30,7 +35,7 @@ impl Drop for PlatformSpecificGuard {
             PlatformType::X11 => {
                 let result = unsafe {
                     // Safety: We do own the display connection, so we can close it.
-                    XCloseDisplay(self.display)
+                    XCloseDisplay(self.display.0)
                 };
                 if result != 0 {
                     eprintln!(
@@ -42,7 +47,7 @@ impl Drop for PlatformSpecificGuard {
             PlatformType::Wayland => {
                 unsafe {
                     // Safety: We do own the display connection, so we can disconnect it.
-                    wl_display_disconnect(self.display);
+                    wl_display_disconnect(self.display.0);
                 };
             }
             _ => {}
@@ -51,8 +56,14 @@ impl Drop for PlatformSpecificGuard {
 }
 
 #[cfg(not(target_os = "linux"))]
-pub(crate) fn platform_specific_setup() -> Result<Option<Rc<PlatformSpecificGuard>>, ObsError> {
-    return Ok(None);
+#[derive(Debug)]
+pub(crate) struct PlatformSpecificGuard;
+
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn platform_specific_setup(
+    _display: Option<crate::utils::initialization::NixDisplay>,
+) -> Result<Option<Rc<PlatformSpecificGuard>>, ObsError> {
+    Ok(None)
 }
 
 /// Detects the current display server and initializes OBS platform accordingly
@@ -105,7 +116,7 @@ pub(crate) unsafe fn platform_specific_setup(
             }
 
             // Try to get X11 display - note: this may fail in headless environments
-            let display = display_ptr.map(|e| e.as_ptr()).unwrap_or_else(|| unsafe {
+            let display = display_ptr.map(|e| e.0).unwrap_or_else(|| unsafe {
                 // Safety: We are in the runtime and using X11, so we can open the display and the display name should be inherited from env variables.
                 XOpenDisplay(ptr::null())
             });
@@ -127,7 +138,7 @@ pub(crate) unsafe fn platform_specific_setup(
 
             //TODO make sure when creating a display that the same platform is used
             Ok(Some(Rc::new(PlatformSpecificGuard {
-                display,
+                display: Sendable(display),
                 platform: PlatformType::X11,
                 owned,
             })))
@@ -141,7 +152,7 @@ pub(crate) unsafe fn platform_specific_setup(
 
             // Try to get Wayland display - note: this may fail in headless environments
             let display = display_ptr
-                .map(|e| e.as_ptr())
+                .map(|e| e.0)
                 .unwrap_or_else(|| wl_display_connect(ptr::null()));
 
             if display.is_null() {
@@ -158,7 +169,7 @@ pub(crate) unsafe fn platform_specific_setup(
             );
 
             Ok(Some(Rc::new(PlatformSpecificGuard {
-                display,
+                display: Sendable(display),
                 platform: PlatformType::Wayland,
                 owned,
             })))
@@ -209,44 +220,25 @@ fn symlink_required_muxers() -> Result<(), ObsError> {
             ))
         })?;
 
-        match std::fs::symlink_metadata(&link_name) {
-            Ok(metadata) if metadata.file_type().is_symlink() => {
-                let existing_target = std::fs::read_link(&link_name).map_err(|err| {
-                    ObsError::PlatformInitError(format!(
-                        "Failed to inspect existing symlink for {exe}: {err}"
-                    ))
-                })?;
-                if existing_target == target {
-                    continue;
-                }
+        if link_name.exists() {
+            let should_warn = link_name
+                .read_link()
+                .map(|existing_target| existing_target != target)
+                .unwrap_or(true);
 
-                // A stale helper symlink is safe to replace. This commonly happens when a
-                // disposable validation install moves between sandbox sessions.
-                std::fs::remove_file(&link_name).map_err(|err| {
-                    ObsError::PlatformInitError(format!(
-                        "Failed to remove stale symlink for {exe}: {err}"
-                    ))
-                })?;
-            }
-            Ok(_) => {
+            if should_warn {
                 log::warn!(
-                    "[libobs-wrapper]: '{}' already exists at '{}' and is not a symlink; leaving it untouched.",
+                    "[libobs-wrapper]: Symlink for '{}' already exists at '{}', skipping creation. If this is not intentional, please remove the existing file and restart the application.",
                     exe,
                     link_name.display()
                 );
-                continue;
-            }
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-            Err(err) => {
-                return Err(ObsError::PlatformInitError(format!(
-                    "Failed to inspect helper path for {exe}: {err}"
-                )));
             }
         }
 
-        std::os::unix::fs::symlink(&target, &link_name).map_err(|err| {
-            ObsError::PlatformInitError(format!("Failed to create symlink for {exe}: {err}"))
-        })?;
+        std::process::Command::new("ln")
+            .args(["-s", target.to_str().unwrap(), link_name.to_str().unwrap()])
+            .status()
+            .expect("Failed to create symlink");
     }
 
     Ok(())
