@@ -17,7 +17,7 @@ keywords = ["obs", "libobs", "video", "bootstrapper"]
 license = "GPL-3.0"
 
 [dependencies]
-cargo-obs-build = { path = "../cargo-obs-build", version = "2.0.5", default-features = false }
+cargo-obs-build = { path = "../cargo-obs-build", version = "3.0.0", default-features = false }
 libloading = { workspace = true }
 log = { workspace = true }
 semver = "1"

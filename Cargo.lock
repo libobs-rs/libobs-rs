@@ -333,7 +333,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-obs-build"
-version = "2.0.5"
+version = "3.0.0"
 dependencies = [
  "anyhow",
  "cargo_metadata",
@@ -345,7 +345,6 @@ dependencies = [
  "http_req",
  "indicatif",
  "log",
- "regex",
  "serde_json",
  "sha2",
  "toml",

@@ -34,7 +34,9 @@ jobs:
             ${{ github.workspace }}/obs-install
           # libobs bindings are generated for a specific OBS ABI. Never restore
           # a cache produced from a different OBS release line.
-          key: ${{ runner.os }}-obs-studio-${{ hashFiles('libobs/Cargo.toml', '.github/workflows/validation.yml') }}-v4
+          key: ${{ runner.os }}-obs-studio-${{ hashFiles('libobs/OBS_VERSION', '.github/workflows/validation.yml') }}-v4
+          restore-keys: |
+            ${{ runner.os }}-obs-studio-
 
       - uses: taiki-e/install-action@nextest
 
@@ -82,7 +84,7 @@ jobs:
           # Keep CI on the exact OBS ABI encoded in the libobs crate version.
           # Building "latest" makes an unrelated upstream OBS release silently
           # change both the C ABI and the Linux build dependencies underneath us.
-          OBS_VERSION=$(sed -nE 's/^version = "[^"]*\+([0-9]+\.[0-9]+\.[0-9]+)"/\1/p' "${{ github.workspace }}/libobs/Cargo.toml" | head -n1)
+          OBS_VERSION=$(cat "${{ github.workspace }}/libobs/OBS_VERSION")
           test -n "$OBS_VERSION"
           echo "Building OBS Studio version: $OBS_VERSION"
 

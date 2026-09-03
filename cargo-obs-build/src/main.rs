@@ -62,6 +62,7 @@ fn main() -> anyhow::Result<()> {
                 cache_dir: args.cache_dir,
                 tag: args.tag,
                 out_dir: PathBuf::from(args.out_dir),
+                target: None,
                 repo_id: Some(args.repo_id),
                 override_zip: args.override_zip,
                 rebuild: args.rebuild,

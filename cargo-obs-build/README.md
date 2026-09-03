@@ -12,7 +12,9 @@ On macOS, install the header dependency first:
 brew install simde
 ```
 
-DMG mounting/extraction uses native macOS tools (`hdiutil`, `ditto`, `codesign`), so preparing a macOS runtime must currently run on a macOS host. Target detection honors Cargo target environment variables instead of assuming the host platform.
+DMG mounting/extraction uses native macOS tools (`hdiutil`, `ditto`, `codesign`), so preparing a macOS runtime must currently run on a macOS host. Target detection honors Cargo target environment variables instead of assuming the host platform. Prebuilt selection is target-aware and fails loudly if the target is unsupported (for example, Linux requires a system/source install).
+
+
 
 ## Usage
 
@@ -35,7 +37,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [build-dependencies]
-cargo-obs-build = { version = "1.2.4", default-features = false }
+cargo-obs-build = { version = "3", default-features = false }
 ```
 
 **Simple Usage (Recommended)**:
@@ -63,6 +65,8 @@ fn main() {
 
     let config = ObsBuildConfig {
         out_dir: target_dir,
+        // Optional explicit Cargo target triple. In build.rs, TARGET is detected automatically.
+        target: None,
         browser: true, // Include browser support
         ..Default::default()
     };
@@ -94,7 +98,8 @@ libobs-cache-dir = "../obs-build" # Optional, defaults to "obs-build", relative 
 
 ## Features
 
-- **Automatic Version Detection**: Automatically selects the correct OBS version based on your `libobs` crate version
+- **Canonical Version Detection**: Uses the exact OBS version represented by the checked-in `libobs/OBS_VERSION` file
+- **Target-Aware Resolution**: Uses Cargo `TARGET` (or an explicit target) so host and target architecture cannot be confused
 - **Smart Caching**:
   - Downloads are cached to avoid re-downloading binaries
   - GitHub API responses are cached to prevent rate limiting

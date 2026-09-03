@@ -274,6 +274,7 @@ fn execute_bootstrap(plan: BootstrapPlan) -> Result<Version, ObsBootstrapError> 
 
     let config = ObsBuildConfig {
         out_dir: plan.install_dir.clone(),
+        target: None,
         cache_dir: Some(plan.cache_dir),
         repo_id: Some(plan.repository),
         override_zip: None,

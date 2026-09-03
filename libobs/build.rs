@@ -10,6 +10,7 @@ fn main() {
     println!("cargo:rerun-if-changed=headers/vec4.c");
     println!("cargo:rerun-if-changed=headers/window_capture.h");
     println!("cargo:rerun-if-changed=Cargo.toml");
+    println!("cargo:rerun-if-changed=OBS_VERSION");
     println!("cargo:rerun-if-env-changed=LIBOBS_PATH");
     println!("cargo:rerun-if-env-changed=HOMEBREW_PREFIX");
 
@@ -57,7 +58,7 @@ fn main() {
         println!("cargo:rustc-link-lib=framework=libobs");
         configure_macos_linking();
     } else if target_os == "linux" {
-        let version = "30.0.0";
+        let version = include_str!("OBS_VERSION").trim();
         pkg_config::Config::new()
             .atleast_version(version)
             .probe("libobs")

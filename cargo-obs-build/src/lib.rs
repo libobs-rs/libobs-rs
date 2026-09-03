@@ -10,7 +10,7 @@ use std::{
 use util::{copy_to_dir, delete_all_except};
 use walkdir::WalkDir;
 
-use lib_version::get_lib_obs_version;
+pub use lib_version::get_lib_obs_version;
 
 use download::download_binaries;
 use target::{ObsBuildTarget, ObsTargetOs};
@@ -98,6 +98,10 @@ pub struct ObsBuildConfig {
     /// The directory the libobs binaries should be installed to (this is typically your `target/debug` or `target/release` directory)
     pub out_dir: PathBuf,
 
+    /// Cargo target triple to prepare OBS for. When omitted, `TARGET` is used in
+    /// build scripts and the host triple is used by the CLI.
+    pub target: Option<String>,
+
     /// The location where the OBS Studio binaries should be downloaded to. If this is set to None, it defaults to reading the `Cargo.toml` metadata. If no metadata is set, it defaults to `obs-build`.
     pub cache_dir: Option<PathBuf>,
 
@@ -130,6 +134,7 @@ impl Default for ObsBuildConfig {
     fn default() -> Self {
         Self {
             out_dir: PathBuf::from("obs-out"),
+            target: None,
             cache_dir: None,
             repo_id: None,
             override_zip: None,
@@ -207,7 +212,9 @@ pub fn build_obs_binaries_verified(config: ObsBuildConfig) -> anyhow::Result<()>
 }
 
 fn build_obs_binaries_inner(config: ObsBuildConfig, require_checksum: bool) -> anyhow::Result<()> {
-    let target = ObsBuildTarget::detect()?;
+    // PR 187 adds explicit target support; keep main's env-var detection as fallback.
+    let explicit = config.target.clone();
+    let target = ObsBuildTarget::detect_with_explicit(explicit.as_deref())?;
     if target.os == ObsTargetOs::Linux {
         return Err(anyhow::anyhow!(
             "Linux uses a system/source OBS installation. Run `cargo obs-build install` on Debian/Ubuntu or install a compatible libobs development package for your distro."
@@ -219,6 +226,7 @@ fn build_obs_binaries_inner(config: ObsBuildConfig, require_checksum: bool) -> a
         mut cache_dir,
         repo_id,
         out_dir,
+        target: _explicit_target,
         rebuild,
         browser,
         mut tag,
@@ -323,7 +331,7 @@ fn build_obs_binaries_inner(config: ObsBuildConfig, require_checksum: bool) -> a
         }
     }
 
-    let repo_dir = cache_dir.join(&tag);
+    let repo_dir = cache_dir.join(&tag).join(target.cache_key());
     let repo_exists = repo_dir.is_dir();
 
     if !repo_exists {
