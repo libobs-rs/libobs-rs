@@ -33,9 +33,9 @@ pub fn record() {
 
     let window = window.expect("Couldn't find notepad window");
 
-    println!("Recording {:?}", window.0.obs_id);
+    println!("Recording {:?}", window.obs_id);
 
-    let (mut context, mut output) = initialize_obs(rec_file);
+    let (mut context, output) = initialize_obs(rec_file);
     let mut scene = context.scene("main", Some(0)).unwrap();
 
     let source_name = "test_capture";
@@ -59,13 +59,12 @@ pub fn record() {
         .unwrap()
         .into_iter()
         .filter(|e| {
-            e.0.obs_id.to_lowercase().contains("code")
-                || e.0.obs_id.to_lowercase().contains("rover")
+            e.obs_id.to_lowercase().contains("code") || e.obs_id.to_lowercase().contains("rover")
         })
         .collect::<Vec<_>>();
     for i in 0..cmp::min(5, windows.len()) {
         let w = windows.get(i).unwrap();
-        println!("Setting to {:?}", w.0.obs_id);
+        println!("Setting to {:?}", w.obs_id);
 
         scene_item
             .inner_source_mut()

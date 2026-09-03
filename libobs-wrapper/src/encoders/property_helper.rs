@@ -1,11 +1,11 @@
-use std::{collections::HashMap, ffi::CStr, str::FromStr, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
 use duplicate::duplicate_item;
 
 use crate::{
     context::ObsContext,
     data::{
-        output::{ObsOutputRef, ObsOutputTrait},
+        output::ObsOutputTrait,
         properties::{
             _ObsPropertiesDropGuard, property_ptr_to_struct, ObsProperty, ObsPropertyObject,
             ObsPropertyObjectPrivate,
@@ -45,7 +45,7 @@ pub struct StructName {
 impl StructName {
     pub fn new(context: ObsContext, encoder_id: &str) -> Self {
         Self {
-            encoder_id: EncoderType::from_str(encoder_id).unwrap(),
+            encoder_id: EncoderType::from(encoder_id),
             runtime: context.runtime().clone(),
             _context: context,
             settings: None,
@@ -87,7 +87,7 @@ impl StructName {
 impl ObsAudioEncoderBuilder {
     pub fn apply_to_context(
         self,
-        output: &mut dyn ObsOutputTrait,
+        output: &dyn ObsOutputTrait,
         name: &str,
         settings: Option<ObsData>,
         hotkey_data: Option<ObsData>,
@@ -101,43 +101,9 @@ impl ObsAudioEncoderBuilder {
 }
 
 impl ObsVideoEncoderBuilder {
-    /// Returns the codec advertised by libobs for this encoder type.
-    ///
-    /// Dynamic encoder plugins such as macOS VideoToolbox can register different
-    /// IDs on different machines, so callers should use this metadata rather than
-    /// inferring the codec from an encoder ID.
-    pub fn get_encoder_codec(&self) -> Result<Option<String>, ObsError> {
-        let encoder_name: ObsString = self.encoder_id.clone().into();
-        run_with_obs!(self.runtime, (encoder_name), move || unsafe {
-            // Safety: encoder_name owns the NUL-terminated ID for the duration of
-            // this call. libobs owns the returned codec string.
-            let codec = libobs::obs_get_encoder_codec(encoder_name.as_ptr().0);
-            if codec.is_null() {
-                None
-            } else {
-                Some(CStr::from_ptr(codec).to_string_lossy().into_owned())
-            }
-        })
-    }
-
-    /// Returns the display name advertised by libobs for this encoder type.
-    pub fn get_encoder_display_name(&self) -> Result<Option<String>, ObsError> {
-        let encoder_name: ObsString = self.encoder_id.clone().into();
-        run_with_obs!(self.runtime, (encoder_name), move || unsafe {
-            // Safety: encoder_name remains alive for the call and libobs owns the
-            // returned display-name string.
-            let name = libobs::obs_encoder_get_display_name(encoder_name.as_ptr().0);
-            if name.is_null() {
-                None
-            } else {
-                Some(CStr::from_ptr(name).to_string_lossy().into_owned())
-            }
-        })
-    }
-
     pub fn set_to_output(
         self,
-        output: &mut ObsOutputRef,
+        output: &dyn ObsOutputTrait,
         name: &str,
     ) -> Result<Arc<ObsVideoEncoder>, ObsError> {
         let e_id: ObsString = self.encoder_id.into();
@@ -190,7 +156,11 @@ impl ObsPropertyObjectPrivate for StructName {
             self.runtime.clone(),
         ));
 
-        Ok(SmartPointerSendable::new(property_ptr.0, drop_guard))
+        Ok(SmartPointerSendable::new(
+            property_ptr.0,
+            drop_guard,
+            self.runtime.native_registry(),
+        ))
     }
 
     fn get_properties_by_id_raw<T: Into<ObsString> + Sync + Send>(
@@ -215,6 +185,10 @@ impl ObsPropertyObjectPrivate for StructName {
 
         let drop_guard = Arc::new(_ObsPropertiesDropGuard::new(ptr.clone(), runtime.clone()));
 
-        Ok(SmartPointerSendable::new(ptr.0, drop_guard))
+        Ok(SmartPointerSendable::new(
+            ptr.0,
+            drop_guard,
+            runtime.native_registry(),
+        ))
     }
 }

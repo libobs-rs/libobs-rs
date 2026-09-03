@@ -18,7 +18,7 @@ use crate::common::assert_not_black;
 #[test]
 pub fn record() {
     let mut context = StartupInfo::default().start().unwrap();
-    let mut replay_output = context
+    let replay_output = context
         .replay_buffer_builder("test-replay-buffer", ObsPath::from_relative("."))
         .max_time_sec(3)
         .build()

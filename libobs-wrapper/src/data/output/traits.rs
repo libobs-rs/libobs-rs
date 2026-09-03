@@ -1,8 +1,8 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     ffi::CStr,
     fmt::Debug,
-    sync::{Arc, RwLock},
+    sync::{Arc, Mutex, RwLock},
 };
 
 use crate::{
@@ -12,54 +12,423 @@ use crate::{
     macros::trait_with_optional_send_sync,
     run_with_obs,
     runtime::ObsRuntime,
+    services::ObsServiceRef,
     utils::{AudioEncoderInfo, ObsError, OutputInfo, VideoEncoderInfo},
 };
 
 use super::ObsOutputSignals;
 
+#[derive(Clone, Debug, Default)]
+/// Desired encoder/service wiring for an OBS output.
+///
+/// Applying a composition replaces the complete managed wiring in one actor command: an
+/// omitted video encoder or service is detached, and audio mixer slots not present in
+/// `audio_encoders` are cleared. All handles are validated for runtime affinity before any
+/// native state is changed.
+pub struct ObsOutputComposition {
+    video_encoder: Option<Arc<ObsVideoEncoder>>,
+    audio_encoders: HashMap<usize, Arc<ObsAudioEncoder>>,
+    service: Option<Arc<ObsServiceRef>>,
+}
+
+impl ObsOutputComposition {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_video_encoder(mut self, encoder: Arc<ObsVideoEncoder>) -> Self {
+        self.video_encoder = Some(encoder);
+        self
+    }
+
+    pub fn with_audio_encoder(mut self, mixer_idx: usize, encoder: Arc<ObsAudioEncoder>) -> Self {
+        self.audio_encoders.insert(mixer_idx, encoder);
+        self
+    }
+
+    pub fn with_service(mut self, service: Arc<ObsServiceRef>) -> Self {
+        self.service = Some(service);
+        self
+    }
+
+    pub fn without_video_encoder(mut self) -> Self {
+        self.video_encoder = None;
+        self
+    }
+
+    pub fn without_audio_encoder(mut self, mixer_idx: usize) -> Self {
+        self.audio_encoders.remove(&mixer_idx);
+        self
+    }
+
+    pub fn without_service(mut self) -> Self {
+        self.service = None;
+        self
+    }
+
+    pub fn video_encoder(&self) -> Option<&Arc<ObsVideoEncoder>> {
+        self.video_encoder.as_ref()
+    }
+
+    pub fn audio_encoders(&self) -> &HashMap<usize, Arc<ObsAudioEncoder>> {
+        &self.audio_encoders
+    }
+
+    pub fn service(&self) -> Option<&Arc<ObsServiceRef>> {
+        self.service.as_ref()
+    }
+}
+
 trait_with_optional_send_sync! {
     pub(crate) trait ObsOutputTraitSealed: Debug {
         /// Creates a new output reference from the given output info and runtime.
-        ///
-        /// # Arguments
-        /// * `output` - The output information containing ID, name, and optional settings
-        /// * `runtime` - The OBS runtime instance
-        ///
-        /// # Returns
-        /// A Result containing the new ObsOutputRef or an error
         fn new(output: OutputInfo, runtime: ObsRuntime) -> Result<Self, ObsError>
         where
             Self: Sized;
+
+        fn video_encoder_slot(&self) -> &Arc<RwLock<Option<Arc<ObsVideoEncoder>>>>;
+        fn audio_encoder_slots(&self) -> &Arc<RwLock<HashMap<usize, Arc<ObsAudioEncoder>>>>;
+        fn service_slot(&self) -> &Arc<RwLock<Option<Arc<ObsServiceRef>>>>;
+        fn configuration_lock(&self) -> &Arc<Mutex<()>>;
     }
 }
 
 #[allow(private_bounds)]
-pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsObjectTrait<*mut libobs::obs_output_t> {
+pub trait ObsOutputTrait:
+    ObsOutputTraitSealed + ObsObjectTrait<Native = *mut libobs::obs_output_t>
+{
     fn signals(&self) -> &Arc<ObsOutputSignals>;
 
-    fn video_encoder(&self) -> &Arc<RwLock<Option<Arc<ObsVideoEncoder>>>>;
-    fn audio_encoders(&self) -> &Arc<RwLock<HashMap<usize, Arc<ObsAudioEncoder>>>>;
+    #[doc(hidden)]
+    fn native_output_flags(&self) -> Result<u32, ObsError> {
+        let output_ptr = self.__native_handle();
+        let runtime = self.runtime().clone();
+        run_with_obs!(runtime, (output_ptr), move || {
+            // Safety: the managed output handle remains alive for the actor call.
+            unsafe { libobs::obs_output_get_flags(output_ptr.get_ptr()) }
+        })
+    }
 
-    /// Returns the current video encoder attached to this output, if any.
-    fn get_current_video_encoder(&self) -> Result<Option<Arc<ObsVideoEncoder>>, ObsError> {
+    /// Returns the video encoder currently attached to this output, if any.
+    fn attached_video_encoder(&self) -> Result<Option<Arc<ObsVideoEncoder>>, ObsError> {
         let curr = self
-            .video_encoder()
+            .video_encoder_slot()
             .read()
             .map_err(|e| ObsError::LockError(e.to_string()))?;
 
         Ok(curr.clone())
     }
 
+    /// Returns the audio encoder attached at the requested mixer index, if any.
+    fn attached_audio_encoder(
+        &self,
+        mixer_idx: usize,
+    ) -> Result<Option<Arc<ObsAudioEncoder>>, ObsError> {
+        self.audio_encoder_slots()
+            .read()
+            .map_err(|e| ObsError::LockError(e.to_string()))
+            .map(|encoders| encoders.get(&mixer_idx).cloned())
+    }
+
+    /// Returns a snapshot of all managed audio encoder attachments keyed by mixer index.
+    fn attached_audio_encoders(&self) -> Result<HashMap<usize, Arc<ObsAudioEncoder>>, ObsError> {
+        self.audio_encoder_slots()
+            .read()
+            .map_err(|e| ObsError::LockError(e.to_string()))
+            .map(|encoders| encoders.clone())
+    }
+
+    /// Returns the streaming service attached to this output, if any.
+    fn attached_service(&self) -> Result<Option<Arc<ObsServiceRef>>, ObsError> {
+        self.service_slot()
+            .read()
+            .map_err(|e| ObsError::LockError(e.to_string()))
+            .map(|service| service.clone())
+    }
+
+    #[deprecated = "Use attached_video_encoder"]
+    fn get_current_video_encoder(&self) -> Result<Option<Arc<ObsVideoEncoder>>, ObsError> {
+        self.attached_video_encoder()
+    }
+
+    #[deprecated = "Use attached_audio_encoder"]
+    fn get_current_audio_encoder(
+        &self,
+        mixer_idx: usize,
+    ) -> Result<Option<Arc<ObsAudioEncoder>>, ObsError> {
+        self.attached_audio_encoder(mixer_idx)
+    }
+
+    #[deprecated = "Use attached_audio_encoders"]
+    fn get_current_audio_encoders(&self) -> Result<HashMap<usize, Arc<ObsAudioEncoder>>, ObsError> {
+        self.attached_audio_encoders()
+    }
+
+    #[deprecated = "Use attached_service"]
+    fn get_current_service(&self) -> Result<Option<Arc<ObsServiceRef>>, ObsError> {
+        self.attached_service()
+    }
+
+    /// Returns an owned, coherent snapshot of the currently managed encoder/service wiring.
+    fn current_composition(&self) -> Result<ObsOutputComposition, ObsError> {
+        let _configuration = self
+            .configuration_lock()
+            .lock()
+            .map_err(|e| ObsError::LockError(e.to_string()))?;
+        Ok(ObsOutputComposition {
+            video_encoder: self.attached_video_encoder()?,
+            audio_encoders: self.attached_audio_encoders()?,
+            service: self.attached_service()?,
+        })
+    }
+
+    /// Attaches a streaming service to this output. Fails while the output is active.
+    fn set_service(&self, service: Arc<ObsServiceRef>) -> Result<(), ObsError> {
+        let _configuration = self
+            .configuration_lock()
+            .lock()
+            .map_err(|e| ObsError::LockError(e.to_string()))?;
+        if self.is_active()? {
+            return Err(ObsError::OutputAlreadyActive);
+        }
+        let flags = self.native_output_flags()?;
+        ensure_output_supports_service(self, flags)?;
+        self.runtime().ensure_same_runtime(service.runtime())?;
+
+        let mut slot = self
+            .service_slot()
+            .write()
+            .map_err(|e| ObsError::LockError(e.to_string()))?;
+        let output_ptr = self.__native_handle();
+        let service_ptr = service.__native_handle();
+        let runtime = self.runtime().clone();
+        run_with_obs!(runtime, (output_ptr, service_ptr), move || {
+            // Safety: both managed handles retain their native objects for the actor call.
+            unsafe { libobs::obs_output_set_service(output_ptr.get_ptr(), service_ptr.get_ptr()) };
+        })?;
+
+        slot.replace(service);
+        Ok(())
+    }
+
+    /// Replaces the complete managed output wiring in one actor command.
+    ///
+    /// This is the preferred API when constructing an output from discovered capabilities: it
+    /// validates all runtime affinities before touching libobs, detaches omitted components, and
+    /// updates the Rust-side ownership graph only after the native calls complete.
+    fn apply_composition(&self, composition: ObsOutputComposition) -> Result<(), ObsError> {
+        let _configuration = self
+            .configuration_lock()
+            .lock()
+            .map_err(|e| ObsError::LockError(e.to_string()))?;
+        if self.is_active()? {
+            return Err(ObsError::OutputAlreadyActive);
+        }
+        let flags = self.native_output_flags()?;
+        if composition.video_encoder.is_some() {
+            ensure_output_supports_video_encoder(self, flags)?;
+        }
+        if !composition.audio_encoders.is_empty() {
+            ensure_output_supports_audio_encoder(self, flags)?;
+        }
+        if composition.service.is_some() {
+            ensure_output_supports_service(self, flags)?;
+        }
+
+        for mixer_idx in composition.audio_encoders.keys() {
+            validate_audio_mixer(*mixer_idx)?;
+        }
+        if let Some(encoder) = composition.video_encoder.as_ref() {
+            self.runtime().ensure_same_runtime(encoder.runtime())?;
+        }
+        for encoder in composition.audio_encoders.values() {
+            self.runtime().ensure_same_runtime(encoder.runtime())?;
+        }
+        if let Some(service) = composition.service.as_ref() {
+            self.runtime().ensure_same_runtime(service.runtime())?;
+        }
+
+        // Take all locks before changing native state so poisoned Rust-side state cannot leave
+        // libobs and the managed ownership graph out of sync.
+        let mut video_slot = self
+            .video_encoder_slot()
+            .write()
+            .map_err(|e| ObsError::LockError(e.to_string()))?;
+        let mut audio_slots = self
+            .audio_encoder_slots()
+            .write()
+            .map_err(|e| ObsError::LockError(e.to_string()))?;
+        let mut service_slot = self
+            .service_slot()
+            .write()
+            .map_err(|e| ObsError::LockError(e.to_string()))?;
+
+        let output_ptr = self.__native_handle();
+        let video_ptr = composition
+            .video_encoder
+            .as_ref()
+            .map(|encoder| encoder.__native_handle());
+        let service_ptr = composition
+            .service
+            .as_ref()
+            .map(|service| service.__native_handle());
+        let audio_ptrs = composition
+            .audio_encoders
+            .iter()
+            .map(|(mixer_idx, encoder)| (*mixer_idx, encoder.__native_handle()))
+            .collect::<HashMap<_, _>>();
+        let mixer_indices = audio_slots
+            .keys()
+            .copied()
+            .chain(audio_ptrs.keys().copied())
+            .collect::<HashSet<_>>();
+        let runtime = self.runtime().clone();
+
+        run_with_obs!(
+            runtime,
+            (
+                output_ptr,
+                video_ptr,
+                service_ptr,
+                audio_ptrs,
+                mixer_indices,
+                flags
+            ),
+            move || unsafe {
+                // Safety: every non-null pointer is retained by a managed handle captured for the
+                // actor call. Null is the documented libobs detach value for these setters.
+                // Only call setters supported by the concrete output: libobs warns (and third-party
+                // plugins may do worse) when service/encoder setters are used on the wrong category.
+                if output_supports_video_encoder(flags) {
+                    libobs::obs_output_set_video_encoder(
+                        output_ptr.get_ptr(),
+                        video_ptr
+                            .as_ref()
+                            .map_or(std::ptr::null_mut(), |encoder| encoder.get_ptr()),
+                    );
+                }
+                if output_supports_audio_encoder(flags) {
+                    for mixer_idx in mixer_indices {
+                        libobs::obs_output_set_audio_encoder(
+                            output_ptr.get_ptr(),
+                            audio_ptrs
+                                .get(&mixer_idx)
+                                .map_or(std::ptr::null_mut(), |encoder| encoder.get_ptr()),
+                            mixer_idx,
+                        );
+                    }
+                }
+                if output_supports_service(flags) {
+                    libobs::obs_output_set_service(
+                        output_ptr.get_ptr(),
+                        service_ptr
+                            .as_ref()
+                            .map_or(std::ptr::null_mut(), |service| service.get_ptr()),
+                    );
+                }
+            }
+        )?;
+
+        *video_slot = composition.video_encoder;
+        *audio_slots = composition.audio_encoders;
+        *service_slot = composition.service;
+        Ok(())
+    }
+
+    /// Detaches the current video encoder while the output is inactive.
+    fn clear_video_encoder(&self) -> Result<(), ObsError> {
+        let _configuration = self
+            .configuration_lock()
+            .lock()
+            .map_err(|e| ObsError::LockError(e.to_string()))?;
+        if self.is_active()? {
+            return Err(ObsError::OutputAlreadyActive);
+        }
+        let flags = self.native_output_flags()?;
+        let output_ptr = self.__native_handle();
+        let runtime = self.runtime().clone();
+        let mut slot = self
+            .video_encoder_slot()
+            .write()
+            .map_err(|e| ObsError::LockError(e.to_string()))?;
+        if output_supports_video_encoder(flags) {
+            run_with_obs!(runtime, (output_ptr), move || unsafe {
+                // Safety: the managed output handle remains valid for the actor call; null detaches.
+                libobs::obs_output_set_video_encoder(output_ptr.get_ptr(), std::ptr::null_mut());
+            })?;
+        }
+        *slot = None;
+        Ok(())
+    }
+
+    /// Detaches the audio encoder at `mixer_idx` while the output is inactive.
+    fn clear_audio_encoder(&self, mixer_idx: usize) -> Result<(), ObsError> {
+        let _configuration = self
+            .configuration_lock()
+            .lock()
+            .map_err(|e| ObsError::LockError(e.to_string()))?;
+        validate_audio_mixer(mixer_idx)?;
+        if self.is_active()? {
+            return Err(ObsError::OutputAlreadyActive);
+        }
+        let flags = self.native_output_flags()?;
+        let output_ptr = self.__native_handle();
+        let runtime = self.runtime().clone();
+        let mut slots = self
+            .audio_encoder_slots()
+            .write()
+            .map_err(|e| ObsError::LockError(e.to_string()))?;
+        if output_supports_audio_encoder(flags) {
+            run_with_obs!(runtime, (output_ptr), move || unsafe {
+                // Safety: the managed output handle remains valid for the actor call; null detaches.
+                libobs::obs_output_set_audio_encoder(
+                    output_ptr.get_ptr(),
+                    std::ptr::null_mut(),
+                    mixer_idx,
+                );
+            })?;
+        }
+        slots.remove(&mixer_idx);
+        Ok(())
+    }
+
+    /// Detaches the current streaming service while the output is inactive.
+    fn clear_service(&self) -> Result<(), ObsError> {
+        let _configuration = self
+            .configuration_lock()
+            .lock()
+            .map_err(|e| ObsError::LockError(e.to_string()))?;
+        if self.is_active()? {
+            return Err(ObsError::OutputAlreadyActive);
+        }
+        let flags = self.native_output_flags()?;
+        let output_ptr = self.__native_handle();
+        let runtime = self.runtime().clone();
+        let mut slot = self
+            .service_slot()
+            .write()
+            .map_err(|e| ObsError::LockError(e.to_string()))?;
+        if output_supports_service(flags) {
+            run_with_obs!(runtime, (output_ptr), move || unsafe {
+                // Safety: the managed output handle remains valid for the actor call; null detaches.
+                libobs::obs_output_set_service(output_ptr.get_ptr(), std::ptr::null_mut());
+            })?;
+        }
+        *slot = None;
+        Ok(())
+    }
+
     /// Creates and attaches a new video encoder to this output.
     ///
     /// Fails if the output is active.
     fn create_and_set_video_encoder(
-        &mut self,
+        &self,
         info: VideoEncoderInfo,
     ) -> Result<Arc<ObsVideoEncoder>, ObsError> {
         if self.is_active()? {
             return Err(ObsError::OutputAlreadyActive);
         }
+        ensure_output_supports_video_encoder(self, self.native_output_flags()?)?;
 
         let video_enc = ObsVideoEncoder::new_from_info(info, self.runtime().clone())?;
 
@@ -70,13 +439,23 @@ pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsObjectTrait<*mut libobs::obs
     /// Attaches an existing video encoder to this output.
     ///
     /// Fails if the output is active.
-    fn set_video_encoder(&mut self, encoder: Arc<ObsVideoEncoder>) -> Result<(), ObsError> {
+    fn set_video_encoder(&self, encoder: Arc<ObsVideoEncoder>) -> Result<(), ObsError> {
+        let _configuration = self
+            .configuration_lock()
+            .lock()
+            .map_err(|e| ObsError::LockError(e.to_string()))?;
         if self.is_active()? {
             return Err(ObsError::OutputAlreadyActive);
         }
+        ensure_output_supports_video_encoder(self, self.native_output_flags()?)?;
+        self.runtime().ensure_same_runtime(encoder.runtime())?;
 
-        let output_ptr = self.as_ptr();
-        let encoder_ptr = encoder.as_ptr();
+        let mut slot = self
+            .video_encoder_slot()
+            .write()
+            .map_err(|e| ObsError::LockError(e.to_string()))?;
+        let output_ptr = self.__native_handle();
+        let encoder_ptr = encoder.__native_handle();
         let runtime = self.runtime().clone();
 
         run_with_obs!(runtime, (output_ptr, encoder_ptr), move || {
@@ -86,23 +465,22 @@ pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsObjectTrait<*mut libobs::obs
             }
         })?;
 
-        self.video_encoder()
-            .write()
-            .map_err(|e| ObsError::LockError(e.to_string()))?
-            .replace(encoder);
+        slot.replace(encoder);
 
         Ok(())
     }
 
     /// Creates and attaches a new audio encoder for the given mixer index. Fails if output active.
     fn create_and_set_audio_encoder(
-        &mut self,
+        &self,
         info: AudioEncoderInfo,
         mixer_idx: usize,
     ) -> Result<Arc<ObsAudioEncoder>, ObsError> {
+        validate_audio_mixer(mixer_idx)?;
         if self.is_active()? {
             return Err(ObsError::OutputAlreadyActive);
         }
+        ensure_output_supports_audio_encoder(self, self.native_output_flags()?)?;
 
         let audio_enc = ObsAudioEncoder::new_from_info(info, mixer_idx, self.runtime().clone())?;
         self.set_audio_encoder(audio_enc.clone(), mixer_idx)?;
@@ -113,16 +491,28 @@ pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsObjectTrait<*mut libobs::obs
     ///
     /// Fails if the output is active.
     fn set_audio_encoder(
-        &mut self,
+        &self,
         encoder: Arc<ObsAudioEncoder>,
         mixer_idx: usize,
     ) -> Result<(), ObsError> {
+        let _configuration = self
+            .configuration_lock()
+            .lock()
+            .map_err(|e| ObsError::LockError(e.to_string()))?;
+        validate_audio_mixer(mixer_idx)?;
         if self.is_active()? {
             return Err(ObsError::OutputAlreadyActive);
         }
+        ensure_output_supports_audio_encoder(self, self.native_output_flags()?)?;
 
-        let encoder_ptr = encoder.as_ptr();
-        let output_ptr = self.as_ptr();
+        self.runtime().ensure_same_runtime(encoder.runtime())?;
+
+        let mut slots = self
+            .audio_encoder_slots()
+            .write()
+            .map_err(|e| ObsError::LockError(e.to_string()))?;
+        let encoder_ptr = encoder.__native_handle();
+        let output_ptr = self.__native_handle();
         let runtime = self.runtime().clone();
         run_with_obs!(runtime, (output_ptr, encoder_ptr), move || {
             unsafe {
@@ -135,10 +525,7 @@ pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsObjectTrait<*mut libobs::obs
             }
         })?;
 
-        self.audio_encoders()
-            .write()
-            .map_err(|e| ObsError::LockError(e.to_string()))?
-            .insert(mixer_idx, encoder);
+        slots.insert(mixer_idx, encoder);
 
         Ok(())
     }
@@ -146,26 +533,30 @@ pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsObjectTrait<*mut libobs::obs
     /// Starts the output, wiring encoders to global contexts and invoking obs_output_start.
     /// Returns an error with last OBS message when start fails.
     fn start(&self) -> Result<(), ObsError> {
+        let _configuration = self
+            .configuration_lock()
+            .lock()
+            .map_err(|e| ObsError::LockError(e.to_string()))?;
         if self.is_active()? {
             return Err(ObsError::OutputAlreadyActive);
         }
 
         let vid_encoder_ptr = self
-            .video_encoder()
+            .video_encoder_slot()
             .read()
             .map_err(|e| ObsError::LockError(e.to_string()))?
             .as_ref()
-            .map(|enc| enc.as_ptr());
+            .map(|enc| enc.__native_handle());
 
         let audio_encoder_pointers = self
-            .audio_encoders()
+            .audio_encoder_slots()
             .read()
             .map_err(|e| ObsError::LockError(e.to_string()))?
             .values()
-            .map(|enc| enc.as_ptr())
+            .map(|enc| enc.__native_handle())
             .collect::<Vec<_>>();
 
-        let output_ptr = self.as_ptr();
+        let output_ptr = self.__native_handle();
         let runtime = self.runtime().clone();
         let res = run_with_obs!(
             runtime,
@@ -222,16 +613,19 @@ pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsObjectTrait<*mut libobs::obs
     }
 
     fn set_paused(&self, should_pause: bool) -> Result<(), ObsError> {
+        if self.runtime().is_actor_thread() {
+            return Err(ObsError::RuntimeReentrantBlocking);
+        }
         if !self.is_active()? {
             return Err(ObsError::OutputPauseFailure(Some(
                 "Output is not active.".to_string(),
             )));
         }
 
-        let output_ptr = self.as_ptr();
+        let output_ptr = self.__native_handle();
         let runtime = self.runtime().clone();
 
-        let mut rx = if should_pause {
+        let rx = if should_pause {
             self.signals().on_pause()?
         } else {
             self.signals().on_unpause()?
@@ -280,8 +674,15 @@ pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsObjectTrait<*mut libobs::obs
     }
 
     /// Stops the output and waits for stop and deactivate signals.
-    fn stop(&mut self) -> Result<(), ObsError> {
-        let output_ptr = self.as_ptr();
+    fn stop(&self) -> Result<(), ObsError> {
+        if self.runtime().is_actor_thread() {
+            return Err(ObsError::RuntimeReentrantBlocking);
+        }
+        let _configuration = self
+            .configuration_lock()
+            .lock()
+            .map_err(|e| ObsError::LockError(e.to_string()))?;
+        let output_ptr = self.__native_handle();
         let runtime = self.runtime().clone();
         let output_active = run_with_obs!(runtime, (output_ptr), move || {
             unsafe {
@@ -296,8 +697,8 @@ pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsObjectTrait<*mut libobs::obs
             )));
         }
 
-        let mut rx = self.signals().on_stop()?;
-        let mut rx_deactivate = self.signals().on_deactivate()?;
+        let rx = self.signals().on_stop()?;
+        let rx_deactivate = self.signals().on_deactivate()?;
 
         let runtime = self.runtime().clone();
         run_with_obs!(runtime, (output_ptr), move || {
@@ -323,7 +724,7 @@ pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsObjectTrait<*mut libobs::obs
 
     /// Returns whether the output is currently active.
     fn is_active(&self) -> Result<bool, ObsError> {
-        let output_ptr = self.as_ptr();
+        let output_ptr = self.__native_handle();
         let runtime = self.runtime().clone();
         let output_active = run_with_obs!(runtime, (output_ptr), move || {
             unsafe {
@@ -333,5 +734,73 @@ pub trait ObsOutputTrait: ObsOutputTraitSealed + ObsObjectTrait<*mut libobs::obs
         })?;
 
         Ok(output_active)
+    }
+}
+
+fn output_supports_video_encoder(flags: u32) -> bool {
+    flags & libobs::OBS_OUTPUT_ENCODED != 0 && flags & libobs::OBS_OUTPUT_VIDEO != 0
+}
+
+fn output_supports_audio_encoder(flags: u32) -> bool {
+    flags & libobs::OBS_OUTPUT_ENCODED != 0 && flags & libobs::OBS_OUTPUT_AUDIO != 0
+}
+
+fn output_supports_service(flags: u32) -> bool {
+    flags & libobs::OBS_OUTPUT_SERVICE != 0
+}
+
+fn unsupported_component<T: ObsOutputTrait + ?Sized>(output: &T, component: &str) -> ObsError {
+    ObsError::OutputPipelineUnexpectedComponent {
+        output_id: output.id().to_string(),
+        component: component.to_owned(),
+    }
+}
+
+fn ensure_output_supports_video_encoder<T: ObsOutputTrait + ?Sized>(
+    output: &T,
+    flags: u32,
+) -> Result<(), ObsError> {
+    output_supports_video_encoder(flags)
+        .then_some(())
+        .ok_or_else(|| unsupported_component(output, "a video encoder"))
+}
+
+fn ensure_output_supports_audio_encoder<T: ObsOutputTrait + ?Sized>(
+    output: &T,
+    flags: u32,
+) -> Result<(), ObsError> {
+    output_supports_audio_encoder(flags)
+        .then_some(())
+        .ok_or_else(|| unsupported_component(output, "audio encoders"))
+}
+
+fn ensure_output_supports_service<T: ObsOutputTrait + ?Sized>(
+    output: &T,
+    flags: u32,
+) -> Result<(), ObsError> {
+    output_supports_service(flags)
+        .then_some(())
+        .ok_or_else(|| unsupported_component(output, "a service"))
+}
+
+fn validate_audio_mixer(mixer_idx: usize) -> Result<(), ObsError> {
+    if mixer_idx >= libobs::MAX_AUDIO_MIXES as usize {
+        return Err(ObsError::AudioMixerIndexOutOfBounds {
+            index: mixer_idx,
+            max: (libobs::MAX_AUDIO_MIXES - 1) as usize,
+        });
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_audio_mixer;
+
+    #[test]
+    fn audio_mixer_indices_are_bounded_before_ffi() {
+        assert!(validate_audio_mixer(0).is_ok());
+        assert!(validate_audio_mixer((libobs::MAX_AUDIO_MIXES - 1) as usize).is_ok());
+        assert!(validate_audio_mixer(libobs::MAX_AUDIO_MIXES as usize).is_err());
     }
 }

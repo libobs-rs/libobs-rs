@@ -2,7 +2,7 @@ macro_rules! inner_fn_update_settings {
     ($self:expr, $update_fn:path, $settings:expr) => {{
         let settings = $settings.into_immutable();
         let settings_ptr = settings.as_ptr();
-        let obs_ptr = $self.as_ptr();
+        let obs_ptr = $self.__native_handle();
         let runtime = $self.runtime().clone();
 
         run_with_obs!(runtime, (obs_ptr, settings_ptr), move || {
@@ -39,7 +39,13 @@ macro_rules! forward_obs_object_impl {
             }
         }
 
-        impl $crate::data::object::ObsObjectTrait<$t> for $struct_name {
+        impl $crate::data::object::ObsObjectTrait for $struct_name {
+            type Native = $t;
+
+            fn __native_handle(&self) -> $crate::unsafe_send::SmartPointerSendable<Self::Native> {
+                self.$var_name.__native_handle()
+            }
+
             fn name(&self) -> $crate::utils::ObsString {
                 self.$var_name.name()
             }
@@ -67,10 +73,6 @@ macro_rules! forward_obs_object_impl {
                 settings: $crate::data::ObsData,
             ) -> Result<(), $crate::utils::ObsError> {
                 self.$var_name.update_settings(settings)
-            }
-
-            fn as_ptr(&self) -> $crate::unsafe_send::SmartPointerSendable<$t> {
-                self.$var_name.as_ptr()
             }
         }
     };

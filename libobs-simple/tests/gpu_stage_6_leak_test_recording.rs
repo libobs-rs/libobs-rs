@@ -29,11 +29,11 @@ pub fn test_recording() {
 
     let window = window.expect("Couldn't find notepad window");
 
-    println!("Recording {:?}", window.0.obs_id);
+    println!("Recording {:?}", window.obs_id);
 
-    let (mut context, mut output) = initialize_obs(rec_file);
+    let (mut context, output) = initialize_obs(rec_file);
 
-    let mut replay_buffer = context
+    let replay_buffer = context
         .replay_buffer_builder("replay_output", ObsPath::from_relative("."))
         .build()
         .unwrap();

@@ -8,31 +8,21 @@
 //!
 //! ```no_run
 //! use libobs_simple::output::replay::ReplayBufferBuilder;
-//! use libobs_wrapper::{context::ObsContext, utils::StartupInfo, data::video::ObsVideoInfoBuilder};
+//! use libobs_wrapper::{data::video::ObsVideoInfoBuilder, utils::{ObsPath, StartupInfo}};
 //!
-//! #[tokio::main]
-//! async fn main() {
+//! fn main() -> Result<(), Box<dyn std::error::Error>> {
 //!     let context = StartupInfo::new()
-//!         .set_video_info(
-//!             ObsVideoInfoBuilder::new()
-//!                 // Configure video info as needed
-//!                 .build()
-//!         ).start()
-//!         .unwrap();
-//!     
-//!     let replay = ReplayBufferBuilder::new(context, "my_replay")
+//!         .set_video_info(ObsVideoInfoBuilder::new().build())
+//!         .start()?;
+//!
+//!     let _replay = ReplayBufferBuilder::new(context, "my_replay", ObsPath::new("."))
 //!         .max_time_sec(30)
 //!         .max_size_mb(1000)
 //!         .format("%CCYY-%MM-%DD %hh-%mm-%ss")
 //!         .extension("mp4")
-//!         .build()
-//!         .unwrap();
+//!         .build()?;
 //!
-//!     // Configure video and audio encoders on the replay buffer
-//!     // Start the replay buffer
-//!     // Call replay.save_buffer() when you want to save the buffer
-//!
-//!     println!("Replay buffer created!");
+//!     Ok(())
 //! }
 //! ```
 
@@ -42,11 +32,14 @@ use libobs_wrapper::{
         output::{ObsOutputTrait, ObsReplayBufferOutputRef},
         ObsData, ObsDataGetters, ObsDataSetters,
     },
-    encoders::{ObsAudioEncoderType, ObsContextEncoders, ObsVideoEncoderType},
+    encoders::{ObsAudioEncoderType, ObsVideoEncoderType},
     utils::{AudioEncoderInfo, ObsError, ObsPath, ObsString, OutputInfo, VideoEncoderInfo},
 };
 
-use super::simple::{AudioEncoder, HardwareCodec, HardwarePreset, VideoEncoder, X264Preset};
+use super::simple::{
+    select_video_encoder_type, AudioEncoder, HardwareCodec, HardwarePreset, VideoEncoder,
+    X264Preset,
+};
 
 /// Settings for replay buffer output
 #[derive(Debug)]
@@ -292,10 +285,11 @@ impl ReplayBufferBuilder {
             None,
         );
 
-        let mut output = self.context.replay_buffer(output_info)?;
+        let output = self.context.replay_buffer(output_info)?;
 
         // Create and configure video encoder (with hardware fallback)
-        let video_encoder_type = self.select_video_encoder_type(&self.settings.video_encoder)?;
+        let video_encoder_type =
+            select_video_encoder_type(&self.context, &self.settings.video_encoder)?;
         let mut video_settings = self.context.data()?;
 
         self.configure_video_encoder(&mut video_settings)?;
@@ -334,63 +328,9 @@ impl ReplayBufferBuilder {
         Ok(output)
     }
 
-    fn select_video_encoder_type(
-        &self,
-        encoder: &VideoEncoder,
-    ) -> Result<ObsVideoEncoderType, ObsError> {
-        match encoder {
-            VideoEncoder::X264(_) => Ok(ObsVideoEncoderType::OBS_X264),
-            VideoEncoder::Custom(t) => Ok(t.clone()),
-            VideoEncoder::Hardware { codec, .. } => {
-                // Build preferred candidates for the requested codec
-                let candidates = self.hardware_candidates(*codec);
-                // Query available encoders
-                let available = self
-                    .context
-                    .available_video_encoders()?
-                    .into_iter()
-                    .map(|b| b.get_encoder_id().clone())
-                    .collect::<Vec<_>>();
-                // Pick first preferred candidate that is available
-                for cand in candidates {
-                    if available.iter().any(|a| a == &cand) {
-                        return Ok(cand);
-                    }
-                }
-                // Fallback to x264 if no hardware encoder is available
-                Ok(ObsVideoEncoderType::OBS_X264)
-            }
-        }
-    }
-
-    fn hardware_candidates(&self, codec: HardwareCodec) -> Vec<ObsVideoEncoderType> {
-        match codec {
-            HardwareCodec::H264 => vec![
-                ObsVideoEncoderType::OBS_NVENC_H264_TEX,
-                ObsVideoEncoderType::H264_TEXTURE_AMF,
-                ObsVideoEncoderType::OBS_QSV11_V2,
-                ObsVideoEncoderType::OBS_NVENC_H264_SOFT,
-                ObsVideoEncoderType::OBS_QSV11_SOFT_V2,
-            ],
-            HardwareCodec::HEVC => vec![
-                ObsVideoEncoderType::OBS_NVENC_HEVC_TEX,
-                ObsVideoEncoderType::H265_TEXTURE_AMF,
-                ObsVideoEncoderType::OBS_QSV11_HEVC,
-                ObsVideoEncoderType::OBS_NVENC_HEVC_SOFT,
-                ObsVideoEncoderType::OBS_QSV11_HEVC_SOFT,
-            ],
-            HardwareCodec::AV1 => vec![
-                ObsVideoEncoderType::OBS_NVENC_AV1_TEX,
-                ObsVideoEncoderType::AV1_TEXTURE_AMF,
-                ObsVideoEncoderType::OBS_QSV11_AV1,
-                ObsVideoEncoderType::OBS_NVENC_AV1_SOFT,
-                ObsVideoEncoderType::OBS_QSV11_AV1_SOFT,
-            ],
-        }
-    }
-
     fn get_encoder_preset(&self, encoder: &VideoEncoder) -> Option<&str> {
         match encoder {
+            VideoEncoder::Auto(_) => None,
             VideoEncoder::X264(preset) => Some(preset.as_str()),
             VideoEncoder::Hardware { preset, .. } => Some(preset.as_str()),
             VideoEncoder::Custom(_) => None,

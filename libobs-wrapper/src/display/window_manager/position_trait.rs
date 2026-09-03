@@ -9,7 +9,6 @@ use windows::Win32::{
 };
 
 use crate::display::window_manager::WindowPositionTrait;
-use crate::display::DISPLAY_POSITIONS;
 use crate::utils::ObsError;
 use crate::{display::ObsDisplayRef, run_with_obs};
 
@@ -48,10 +47,11 @@ impl WindowPositionTrait for ObsDisplayRef {
                 .write()
                 .map_err(|e| ObsError::LockError(format!("{:?}", e)))?;
 
-            assert!(
-                m.obs_display.is_some(),
-                "Invalid state. The display should have been created and set, but it wasn't."
-            );
+            if !m.has_display_handle() {
+                return Err(ObsError::InvalidOperation(
+                    "preview child has no OBS display handle".to_string(),
+                ));
+            }
 
             let insert_after = if m.render_at_bottom {
                 HWND_BOTTOM
@@ -85,11 +85,9 @@ impl WindowPositionTrait for ObsDisplayRef {
             return Ok(());
         }
 
-        *DISPLAY_POSITIONS
-            .write()
-            .map_err(|e| ObsError::LockError(format!("{:?}", e)))?
-            .get_mut(&self.id)
-            .ok_or_else(|| ObsError::LockError("Position not found".to_string()))? = (x, y);
+        *self.render_state.position.write().map_err(|_| {
+            ObsError::LockError("display render position lock poisoned".to_string())
+        })? = (x, y);
 
         self.update_color_space()?;
         Ok(())
@@ -104,10 +102,11 @@ impl WindowPositionTrait for ObsDisplayRef {
                 .write()
                 .map_err(|e| ObsError::LockError(format!("{:?}", e)))?;
 
-            assert!(
-                m.obs_display.is_some(),
-                "Invalid state. The display should have been created and set, but it wasn't."
-            );
+            if !m.has_display_handle() {
+                return Err(ObsError::InvalidOperation(
+                    "preview child has no OBS display handle".to_string(),
+                ));
+            }
 
             m.width = width;
             m.height = height;
@@ -144,8 +143,7 @@ impl WindowPositionTrait for ObsDisplayRef {
                 // Update color space when window size changes
                 libobs::obs_display_update_color_space(pointer.get_ptr());
             }
-        })
-        .map_err(|e| ObsError::InvocationError(format!("{:?}", e)))?;
+        })?;
         Ok(())
     }
 
@@ -158,13 +156,9 @@ impl WindowPositionTrait for ObsDisplayRef {
             return Ok((m.x, m.y));
         }
 
-        let pos = DISPLAY_POSITIONS
-            .read()
-            .map_err(|e| ObsError::LockError(format!("{:?}", e)))?;
-        let pos = pos
-            .get(&self.id)
-            .ok_or_else(|| ObsError::LockError("Position not found".to_string()))?;
-
+        let pos = self.render_state.position.read().map_err(|_| {
+            ObsError::LockError("display render position lock poisoned".to_string())
+        })?;
         Ok(*pos)
     }
 
@@ -188,8 +182,7 @@ impl WindowPositionTrait for ObsDisplayRef {
             };
 
             (w, h)
-        })
-        .map_err(|e| ObsError::InvocationError(format!("{:?}", e)))?;
+        })?;
 
         Ok((width, height))
     }

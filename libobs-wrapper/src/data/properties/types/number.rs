@@ -71,14 +71,11 @@ macro_rules! impl_from_property {
                             libobs::[<obs_property_ $obs_number_name _type >](pointer.0)
                         };
 
-                        let number_type = crate::macros::enum_from_number!(ObsNumberType, number_type);
-
-                        if number_type.is_none() {
-                            return Err(crate::utils::ObsError::EnumConversionError(format!(
+                        let number_type = crate::macros::enum_from_number!(ObsNumberType, number_type)
+                            .ok_or_else(|| crate::utils::ObsError::EnumConversionError(format!(
                                 "ObsNumberType for property {}",
                                 name
-                            )));
-                        }
+                            )))?;
 
                         Ok(ObsNumberProperty {
                             name,
@@ -87,7 +84,7 @@ macro_rules! impl_from_property {
                             max,
                             step,
                             suffix,
-                            number_type: number_type.unwrap(),
+                            number_type,
                         })
                     })?
                 }

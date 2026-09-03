@@ -86,6 +86,7 @@ impl ObsVideoEncoder {
                 encoder: encoder_ptr,
                 runtime: runtime.clone(),
             }),
+            runtime.native_registry(),
         );
 
         let hotkey_data = match hotkey_data {
@@ -118,11 +119,9 @@ impl ObsVideoEncoder {
     /// This is only needed once for global video context
     /// # Safety
     /// The handler pointer must be a valid pointer to a video_output that lives as long as this function call.
-    pub unsafe fn set_video_context(
-        &mut self,
-        handler: Sendable<*mut video_output>,
-    ) -> Result<(), ObsError> {
-        let self_ptr = self.as_ptr();
+    pub unsafe fn set_video_context(&self, handler: *mut video_output) -> Result<(), ObsError> {
+        let handler = Sendable(handler);
+        let self_ptr = self.__native_handle();
         run_with_obs!(self.runtime, (handler, self_ptr), move || {
             unsafe {
                 // Safety: Caller must make sure that the handler pointer is valid and the self pointer is a SmartPointer.
@@ -163,7 +162,13 @@ impl ObsObjectTraitPrivate for ObsVideoEncoder {
     }
 }
 
-impl ObsObjectTrait<*mut libobs::obs_encoder> for ObsVideoEncoder {
+impl ObsObjectTrait for ObsVideoEncoder {
+    type Native = *mut libobs::obs_encoder;
+
+    fn __native_handle(&self) -> SmartPointerSendable<Self::Native> {
+        self.encoder.clone()
+    }
+
     fn runtime(&self) -> &ObsRuntime {
         &self.runtime
     }
@@ -205,10 +210,6 @@ impl ObsObjectTrait<*mut libobs::obs_encoder> for ObsVideoEncoder {
         }
 
         inner_fn_update_settings!(self, libobs::obs_encoder_update, settings)
-    }
-
-    fn as_ptr(&self) -> SmartPointerSendable<*mut obs_encoder> {
-        self.encoder.clone()
     }
 }
 

@@ -74,7 +74,7 @@ fn main() -> anyhow::Result<()> {
     }
 
     // Set up output to ./recording.mp4
-    let mut output = context
+    let output = context
         .simple_output_builder("monitor-capture-output", ObsPath::new("record.mp4"))
         .build()?;
 

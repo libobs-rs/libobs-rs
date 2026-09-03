@@ -95,7 +95,7 @@ impl ObsVideoInfo {
     }
 
     /// Returns a pointer to the pinned `obs_video_info`.
-    pub fn as_ptr(&self) -> *mut obs_video_info {
+    pub(crate) fn as_ptr(&self) -> *mut obs_video_info {
         // Safe because ovi is pinned for the lifetime of this struct
         let ptr: *const obs_video_info = &*Pin::as_ref(&self.ovi.0);
         ptr as *mut obs_video_info

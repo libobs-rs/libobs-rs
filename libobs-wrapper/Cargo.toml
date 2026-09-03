@@ -1,7 +1,7 @@
 [package]
 name = "libobs-wrapper"
 description = "A safe wrapper around libobs"
-version = "9.0.4+32.0.2"
+version = "10.0.0+32.1.0"
 repository = "https://github.com/libobs-rs/libobs-rs"
 documentation = "https://libobs-rs.github.io/libobs-rs/libobs_wrapper/"
 readme = "README.md"
@@ -31,11 +31,11 @@ chrono = { workspace = true }
 getters0 = "0.1.1"
 colored = { workspace = true, optional = true }
 oneshot = { version = "0.2", default-features = false, features = ["std"] }
+crossbeam-channel = { workspace = true }
 arboard = { version = "3", optional = true }
 dialog = { version = "0.3", optional = true }
 paste = { workspace = true }
 duplicate = "2"
-tokio = { workspace = true, default-features = false, features = ["sync"] }
 libc = "0.2"
 bitflags = "2.11"
 
@@ -62,7 +62,7 @@ targets = ["x86_64-pc-windows-msvc"]
 
 [features]
 default = ["color-logger", "dialog_crash_handler", "enable_runtime"]
-no_blocking_drops = ["tokio/rt"]
+no_blocking_drops = []
 generate_bindings = ["libobs/generate_bindings"]
 color-logger = ["dep:colored"]
 enable_runtime = []

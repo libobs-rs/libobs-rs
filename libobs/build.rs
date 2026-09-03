@@ -163,6 +163,17 @@ fn generate_bindings(target_os: &str) {
     let mut builder = bindgen::builder()
         .header("headers/wrapper.h")
         .blocklist_function("^_.*")
+        // Block C runtime symbols that trigger `suspicious_runtime_symbol_definitions`
+        // when bindgen emits them with `c_ulonglong` instead of `usize` on Windows
+        // (c_ulonglong == u64 == usize on x86_64 win, but lint expects usize).
+        // The lint is now allowed in `src/lib.rs` as fallback, but blocking avoids
+        // pulling unrelated CRT declarations into the bindings.
+        .blocklist_function("memcmp")
+        .blocklist_function("memcpy")
+        .blocklist_function("memmove")
+        .blocklist_function("memset")
+        .blocklist_function("strlen")
+        .size_t_is_usize(true)
         .clang_arg(format!("-I{}", "headers/obs"));
 
     if target_os == "macos" && env::consts::OS == "macos" {

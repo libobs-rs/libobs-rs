@@ -56,10 +56,10 @@ impl ObsPipeWireSourceRef {
     ///
     /// The restore token will most probably be of `Some(String)` after the user has selected a screen or window to capture.
     pub fn get_restore_token(&self) -> Result<Option<String>, ObsError> {
-        let source_ptr = self.as_ptr();
+        let source_ptr = self.__native_handle();
         run_with_obs!(self.runtime(), (source_ptr), move || unsafe {
             // Safety: Safe because we are using a smart pointer
-            libobs::obs_source_save(source_ptr.get_ptr());
+            libobs::obs_source_save(source_ptr.raw_ptr_unchecked());
         })?;
 
         let settings = self.settings()?;

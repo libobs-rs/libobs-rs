@@ -4,32 +4,12 @@ use crate::{
     data::{ImmutableObsData, ObsData, ObsObjectUpdater},
     macros::trait_with_optional_send_sync,
     runtime::ObsRuntime,
-    unsafe_send::SmartPointerSendable,
+    unsafe_send::{NativePointer, SmartPointerSendable},
     utils::{ObsError, ObsString},
 };
 
 mod macros;
 pub(crate) use macros::*;
-
-/// Helper trait to enable cloning boxed outputs.
-pub trait ObsObjectClone<K: Clone> {
-    fn clone_box(&self) -> Box<dyn ObsObjectTrait<K>>;
-}
-
-impl<T, K: Clone> ObsObjectClone<K> for T
-where
-    T: ObsObjectTrait<K> + Clone + 'static,
-{
-    fn clone_box(&self) -> Box<dyn ObsObjectTrait<K>> {
-        Box::new(self.clone())
-    }
-}
-
-impl<K: Clone> Clone for Box<dyn ObsObjectTrait<K>> {
-    fn clone(&self) -> Self {
-        self.clone_box()
-    }
-}
 
 trait_with_optional_send_sync! {
     #[doc(hidden)]
@@ -49,7 +29,10 @@ trait_with_optional_send_sync! {
 #[allow(private_bounds)]
 /// Trait representing an OBS object.
 /// A OBs object has an id, a name, `settings` and `hotkey_data`.
-pub trait ObsObjectTrait<K: Clone>: ObsObjectClone<K> + ObsObjectTraitPrivate {
+pub trait ObsObjectTrait: ObsObjectTraitPrivate {
+    #[doc(hidden)]
+    type Native: NativePointer;
+
     fn runtime(&self) -> &ObsRuntime;
     fn settings(&self) -> Result<ImmutableObsData, ObsError>;
     fn hotkey_data(&self) -> Result<ImmutableObsData, ObsError>;
@@ -62,7 +45,7 @@ pub trait ObsObjectTrait<K: Clone>: ObsObjectClone<K> + ObsObjectTraitPrivate {
 
     /// Updates the object with the current settings.
     /// For examples please take a look at the [Github repository](https://github.com/libobs-rs/libobs-rs/blob/main/examples).
-    fn create_updater<'a, T: ObsObjectUpdater<'a, K, ToUpdate = Self> + Send + Sync>(
+    fn create_updater<'a, T: ObsObjectUpdater<'a, ToUpdate = Self> + Send + Sync>(
         &'a mut self,
     ) -> Result<T, ObsError>
     where
@@ -72,7 +55,11 @@ pub trait ObsObjectTrait<K: Clone>: ObsObjectClone<K> + ObsObjectTraitPrivate {
         T::create_update(runtime, self)
     }
 
-    /// Creates a new reference to the drop guard.
-    /// This is useful if you are using the underlying raw pointer, make sure to store it along the drop guard
-    fn as_ptr(&self) -> SmartPointerSendable<K>;
+    /// Stable opaque identity for this native object. It is scoped to the owning runtime.
+    fn object_id(&self) -> crate::unsafe_send::NativeObjectId {
+        self.__native_handle().native_id()
+    }
+
+    #[doc(hidden)]
+    fn __native_handle(&self) -> SmartPointerSendable<Self::Native>;
 }

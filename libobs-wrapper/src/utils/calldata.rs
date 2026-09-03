@@ -16,7 +16,7 @@ use crate::{
 };
 
 /// RAII wrapper for libobs `calldata_t` ensuring stable address and proper free.
-pub struct CalldataWrapper {
+pub(crate) struct CalldataWrapper {
     // We need to make sure the data is freed in OBS BEFORE it is dropped
     _drop_guard: Arc<_CalldataWrapperDropGuard>,
     // Not using a SmartPointerSendable here because its just way too complicated if we want to get the inner mut pointer
@@ -32,7 +32,7 @@ impl CalldataWrapper {
     /// This function is unsafe. You must guarantee that you will never move
     /// the data out of the mutable reference you receive when you call this
     /// function, so that the invariants on the `Pin` type can be upheld.
-    pub unsafe fn as_mut_ptr(&mut self) -> Sendable<*mut calldata_t> {
+    pub(crate) unsafe fn as_mut_ptr(&mut self) -> Sendable<*mut calldata_t> {
         // Safe: pinned box guarantees stable location; we only get a mutable reference.
         let r: &mut calldata_t = Pin::as_mut(&mut self.data.0).get_unchecked_mut();
         Sendable(r as *mut _)
@@ -78,14 +78,9 @@ impl CalldataWrapper {
                     // Safety: data_ptr is a valid C string pointer because it is not null.
                     CStr::from_ptr(data_ptr)
                 };
-                let data = data.to_str();
-                if let Err(_e) = data {
-                    return Err(ObsError::Unexpected(format!(
-                        "Calldata String {key} is not valid UTF-8."
-                    )));
-                }
-
-                let data = data.unwrap();
+                let data = data.to_str().map_err(|_| {
+                    ObsError::Unexpected(format!("Calldata String {key} is not valid UTF-8."))
+                })?;
                 Ok(data.to_string())
             }
         )??;
@@ -107,7 +102,7 @@ impl_obs_drop!(_CalldataWrapperDropGuard, (calldata_ptr), move || unsafe {
 });
 
 /// Extension trait on `ObsRuntime` to call a proc handler and return a RAII calldata wrapper.
-pub trait ObsCalldataExt {
+pub(crate) trait ObsCalldataExt {
     /// # Safety
     /// Make sure that the proc_handler pointer is valid.
     unsafe fn call_proc_handler<T: Into<ObsString>>(

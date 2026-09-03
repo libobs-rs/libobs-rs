@@ -332,6 +332,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "capability-discovery"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "libobs-wrapper",
+]
+
+[[package]]
 name = "cargo-obs-build"
 version = "3.0.0"
 dependencies = [
@@ -620,6 +628,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9481c1c90cbf2ac953f07c8d4a58aa3945c425b7185c9154d67a65e4230da511"
 dependencies = [
  "cfg-if 1.0.4",
+]
+
+[[package]]
+name = "crossbeam-channel"
+version = "0.5.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d85363c37faeca707aef026efa9f3b34d077bce547e48f770770625c6013679e"
+dependencies = [
+ "crossbeam-utils",
 ]
 
 [[package]]
@@ -1532,7 +1549,7 @@ dependencies = [
 
 [[package]]
 name = "libobs-simple"
-version = "8.0.1+32.0.2"
+version = "9.0.0+32.1.0"
 dependencies = [
  "anyhow",
  "display-info",
@@ -1574,12 +1591,13 @@ dependencies = [
 
 [[package]]
 name = "libobs-wrapper"
-version = "9.0.4+32.0.2"
+version = "10.0.0+32.1.0"
 dependencies = [
  "arboard",
  "bitflags 2.11.1",
  "chrono",
  "colored 3.1.1",
+ "crossbeam-channel",
  "dialog",
  "display-info",
  "duplicate",
@@ -1594,7 +1612,6 @@ dependencies = [
  "num-traits",
  "oneshot",
  "paste",
- "tokio",
  "vsprintf",
  "which",
  "windows",

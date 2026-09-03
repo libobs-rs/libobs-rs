@@ -11,7 +11,20 @@ Documentation is available [here](https://libobs-rs.github.io/libobs-docs/libobs
 
 Simple and safe video recording through libobs.
 
-Windows and Linux (Ubuntu Wayland / X11) are supported, and macOS support now includes native framework/plugin loading, official OBS DMG preparation, Cocoa previews, ScreenCaptureKit-backed capture sources, and dynamic VideoToolbox hardware encoding. A dedicated native macOS CI job validates the platform after changes are pushed.
+## Which layer should I use?
+
+The repository deliberately separates complete OBS coverage from convenience workflows:
+
+| Crate | Use it when |
+| --- | --- |
+| **`libobs-simple`** | You want recording, RTMP streaming, replay buffers, or capture sources with sensible defaults and automatic capability selection. Start here for most applications. |
+| **`libobs-wrapper`** | You are building an OBS-like editor, custom media application, remote control, or need direct safe access to sources, scenes/groups, dynamic plugin settings, encoders, outputs, services, displays, and signals. |
+| **`libobs`** | You need raw generated FFI for functionality the safe wrapper does not expose yet. Prefer contributing a safe wrapper when the operation is generally useful. |
+| **`libobs-bootstrapper` / `cargo-obs-build`** | You need to install compatible OBS binaries at runtime / build time. |
+
+A good rule is: **`libobs-simple` chooses for you; `libobs-wrapper` exposes the choices.** See the [API orientation guide](./docs/api_orientation.md) for a task-to-module map and common workflows.
+
+Currently only tested on Windows and Linux (Ubuntu Wayland / X11). MacOS doesn't work right now, but [we are working on that](https://github.com/libobs-rs/libobs-rs/pull/53). Currently the active contributors don't have a mac unfortunately. 
 The API is currently unstable and will definitely have breaking revisions in the future.
 
 > [!NOTE]
@@ -19,32 +32,14 @@ The API is currently unstable and will definitely have breaking revisions in the
 
 
 ## Prerequisites
-
-### macOS
-
-Install SIMDe so the bundled libobs headers can be processed, then let `cargo-obs-build` prepare the official OBS DMG into your target directory:
-
-```bash
-brew install simde
-cargo obs-build build --out-dir target/debug/deps
-```
-
-`libobs-simple` exposes the native OBS `screen_capture` source on macOS for display, window, and application capture.
-
-### Linux
-
-Linux keeps using a system/source OBS installation rather than unpacking a portable runtime. On Ubuntu, `cargo obs-build install` builds and installs a compatible OBS; on other distributions use the distro packages or the official OBS build instructions.
-
-### Build helper
-
-Make sure that the OBS binaries are in your target directory on Windows/macOS. The helper can prepare them for you. <br>
+Make sure that the OBS binaries are in your target directory. There's even a tool to help you build OBS from source! <br>
 Install the tool
 ```bash
 cargo install cargo-obs-build
 ```
 
 > [!NOTE]
-> `libobs-bootstrapper` can explicitly provision a verified OBS runtime at first run on Windows/macOS. On Windows, same-process bootstrap requires delay-loading `obs.dll`; on macOS, use a small launcher/helper if the framework may be missing. Nothing downloads implicitly. Linux continues to use the system/source `libobs`. See [OBS Runtime Setup](./docs/bootstrap_options.md).
+> There is now a standalone `libobs-bootstrapper` crate that can download and install OBS binaries at runtime, which is useful for distributing applications without requiring users to install OBS separately. See the [libobs-bootstrapper documentation](https://crates.io/crates/libobs-bootstrapper) for more details.
 
 Add the following to your `Cargo.toml`
 ```toml
@@ -75,15 +70,18 @@ More details can be found in the [cargo-obs-build documentation](./cargo-obs-bui
 
 ## Quick Start
 
-Below is an example that will record video-only footage of an exclusive fullscreen application. Note that the API is extremely limited right now, but you can already record both video and audio with full control over the output already. If you need more, libobs is exposed.
+For a normal recorder or stream client, start with [libobs-simple](./libobs-simple/README.md). Its recording builder automatically selects a compatible H.264 encoder and its RTMP builder assembles the encoder/service/output graph for you.
 
-Examples are located in the [examples](./examples) directory.
-Documentation is also available for [libobs-simple](libobs-simple/README.md)
-or [libobs-wrapper](./libobs-wrapper/README.md).
+For plugin-generic applications, start with [libobs-wrapper](./libobs-wrapper/README.md): discover capabilities, build dynamic settings schemas, compose scenes/groups, and validate custom output pipelines without hard-coding the installed OBS plugins.
+
+Examples are located in the [examples](./examples) directory. The [API orientation guide](./docs/api_orientation.md) explains how the modules fit together and when to move from the simple layer to the full wrapper.
 
 ## Documentation
+- [API Orientation / Where to Start](./docs/api_orientation.md)
 - [Bootstrap Options](./docs/bootstrap_options.md)
 - [How it Works](./docs/how_it_works.md)
+- [v10 Migration](./docs/v10_migration.md)
+- [Capability Discovery & Generic Creation Example](./examples/capability-discovery)
 
 ## Disclaimer
 

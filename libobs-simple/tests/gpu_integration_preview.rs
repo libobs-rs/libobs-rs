@@ -24,7 +24,6 @@ use libobs_wrapper::display::{
     ObsDisplayCreationData, ObsDisplayRef, ObsWindowHandle, WindowPositionTrait,
 };
 use libobs_wrapper::sources::ObsSourceBuilder;
-use libobs_wrapper::unsafe_send::Sendable;
 use libobs_wrapper::{context::ObsContext, utils::StartupInfo};
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
@@ -63,9 +62,8 @@ impl ObsInner {
         //NOTE - This is very important if you are running a GUI application, ensure that a nix display is set on linux!
         #[cfg(target_os = "linux")]
         if let RawDisplayHandle::Wayland(handle) = _event_loop.display_handle().unwrap().as_raw() {
-            info = unsafe {
-                info.set_nix_display(NixDisplay::Wayland(Sendable(handle.display.as_ptr() as _)))
-            };
+            info =
+                unsafe { info.set_nix_display(NixDisplay::wayland(handle.display.as_ptr() as _)) };
         }
 
         let mut context = info.start()?;
@@ -141,7 +139,9 @@ impl ObsInner {
                 panic!("Expected a Win32 window handle");
             };
 
-            ObsWindowHandle::new_from_handle(hwnd.get() as *mut _)
+            // SAFETY: winit supplied this live HWND for `window`, which remains owned by
+            // this preview for at least as long as the OBS display.
+            unsafe { ObsWindowHandle::new_from_handle(hwnd.get() as *mut _) }
         };
 
         #[cfg(target_os = "linux")]
@@ -150,7 +150,9 @@ impl ObsInner {
                 //TODO check if this is actually u32
                 ObsWindowHandle::new_from_x11(context.runtime(), handle.window as u32).unwrap()
             } else if let RawWindowHandle::Wayland(handle) = hwnd {
-                ObsWindowHandle::new_from_wayland(handle.surface.as_ptr() as *mut _)
+                // SAFETY: winit owns this live wl_surface for `window`; the window outlives
+                // the OBS display created below and shares the configured Wayland display.
+                unsafe { ObsWindowHandle::new_from_wayland(handle.surface.as_ptr() as *mut _) }
             } else {
                 panic!("Unsupported window handle for this platform");
             }
@@ -175,7 +177,7 @@ impl ObsInner {
 }
 
 struct App {
-    window: Arc<RwLock<Option<Sendable<Window>>>>,
+    window: Arc<RwLock<Option<Window>>>,
     obs: Arc<RwLock<Option<ObsInner>>>,
     start_time: Option<std::time::Instant>,
 }
@@ -193,7 +195,7 @@ impl ApplicationHandler for App {
             .unwrap()
             .replace(ObsInner::new(event_loop, &window).unwrap());
 
-        let _ = self.window.write().unwrap().replace(Sendable(window));
+        let _ = self.window.write().unwrap().replace(window);
 
         self.start_time = Some(std::time::Instant::now());
     }
@@ -239,7 +241,7 @@ impl ApplicationHandler for App {
                 event_loop.exit();
             }
             WindowEvent::RedrawRequested => {
-                window.0.request_redraw();
+                window.request_redraw();
             }
             WindowEvent::Resized(size) => {
                 let window_width = size.width;

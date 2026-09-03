@@ -1,7 +1,23 @@
+//! Managed OBS outputs and validated output composition.
+//!
+//! # Which level should I use?
+//!
+//! Prefer [`ObsOutputPipelineBuilder`] when creating a complete encoded output: it validates the
+//! selected output flags, codecs, protocol/service, audio mixer indices, and runtime affinity before
+//! native creation.
+//!
+//! Use [`ObsOutputComposition`] / [`ObsOutputTrait`] when an application intentionally needs to
+//! inspect or replace encoder/service attachments on an existing output. Attachment storage and
+//! lifecycle serialization are implementation details; public callers work through behavior only.
+//!
+//! Pair this module with [`crate::capabilities`] to choose concrete implementations from the OBS
+//! plugins available at runtime. For conventional recording or RTMP streaming, `libobs-simple`
+//! provides a shorter opinionated path.
+
 use libobs::obs_output;
 use std::collections::HashMap;
 use std::ptr;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 
 use crate::data::object::{inner_fn_update_settings, ObsObjectTrait, ObsObjectTraitPrivate};
 use crate::data::ImmutableObsData;
@@ -13,6 +29,7 @@ use crate::{impl_obs_drop, impl_signal_manager, run_with_obs};
 
 use crate::{
     encoders::{audio::ObsAudioEncoder, video::ObsVideoEncoder},
+    services::ObsServiceRef,
     utils::{ObsError, ObsString},
 };
 
@@ -21,6 +38,9 @@ use super::ObsData;
 pub(crate) mod macros;
 mod traits;
 pub use traits::*;
+
+mod pipeline;
+pub use pipeline::*;
 
 mod replay_buffer;
 pub use replay_buffer::*;
@@ -50,9 +70,9 @@ impl_obs_drop!(_ObsOutputDropGuard, (output), move || unsafe {
 /// The output is associated with video and audio encoders that convert
 /// raw media to the required format before sending/storing.
 ///
-/// If encoders are attached to this struct, they are stored internally, so they will not get removed
-/// As of right now, there is no way to remove the encoders again, rather you'll need to replace them with another encoder or drop this struct and
-/// recreate a output.
+/// Attached encoders and services are retained internally for as long as the output owns them.
+/// They can be replaced or detached while the output is inactive, either individually or by
+/// applying a complete [`ObsOutputComposition`] desired state.
 pub struct ObsOutputRef {
     /// Disconnect signals first
     signal_manager: Arc<ObsOutputSignals>,
@@ -68,6 +88,12 @@ pub struct ObsOutputRef {
 
     /// Audio encoders attached to this output
     audio_encoders: Arc<RwLock<HashMap<usize, Arc<ObsAudioEncoder>>>>,
+
+    /// Streaming service attached to this output, if any.
+    service: Arc<RwLock<Option<Arc<ObsServiceRef>>>>,
+
+    /// Serializes output configuration with start/stop so encoder/service snapshots cannot race.
+    configuration_lock: Arc<Mutex<()>>,
 
     /// The type identifier of this output
     id: ObsString,
@@ -134,6 +160,7 @@ impl ObsOutputTraitSealed for ObsOutputRef {
                 output: output.clone(),
                 runtime: runtime.clone(),
             }),
+            runtime.native_registry(),
         );
 
         // We are getting the settings from OBS because OBS will have updated it with default values.
@@ -166,6 +193,8 @@ impl ObsOutputTraitSealed for ObsOutputRef {
 
             curr_video_encoder: Arc::new(RwLock::new(None)),
             audio_encoders: Arc::new(RwLock::new(HashMap::new())),
+            service: Arc::new(RwLock::new(None)),
+            configuration_lock: Arc::new(Mutex::new(())),
 
             output: output.clone(),
             id,
@@ -174,6 +203,22 @@ impl ObsOutputTraitSealed for ObsOutputRef {
             runtime,
             signal_manager: Arc::new(signal_manager),
         })
+    }
+
+    fn video_encoder_slot(&self) -> &Arc<RwLock<Option<Arc<ObsVideoEncoder>>>> {
+        &self.curr_video_encoder
+    }
+
+    fn audio_encoder_slots(&self) -> &Arc<RwLock<HashMap<usize, Arc<ObsAudioEncoder>>>> {
+        &self.audio_encoders
+    }
+
+    fn service_slot(&self) -> &Arc<RwLock<Option<Arc<ObsServiceRef>>>> {
+        &self.service
+    }
+
+    fn configuration_lock(&self) -> &Arc<Mutex<()>> {
+        &self.configuration_lock
     }
 }
 
@@ -200,7 +245,13 @@ impl ObsObjectTraitPrivate for ObsOutputRef {
     }
 }
 
-impl ObsObjectTrait<*mut libobs::obs_output> for ObsOutputRef {
+impl ObsObjectTrait for ObsOutputRef {
+    type Native = *mut libobs::obs_output;
+
+    fn __native_handle(&self) -> SmartPointerSendable<Self::Native> {
+        self.output.clone()
+    }
+
     fn name(&self) -> ObsString {
         self.name.clone()
     }
@@ -231,29 +282,21 @@ impl ObsObjectTrait<*mut libobs::obs_output> for ObsOutputRef {
     }
 
     fn update_settings(&self, settings: ObsData) -> Result<(), ObsError> {
+        let _configuration = self
+            .configuration_lock
+            .lock()
+            .map_err(|e| ObsError::LockError(e.to_string()))?;
         if self.is_active()? {
             return Err(ObsError::OutputAlreadyActive);
         }
 
         inner_fn_update_settings!(self, libobs::obs_output_update, settings)
     }
-
-    fn as_ptr(&self) -> SmartPointerSendable<*mut obs_output> {
-        self.output.clone()
-    }
 }
 
 impl ObsOutputTrait for ObsOutputRef {
     fn signals(&self) -> &Arc<ObsOutputSignals> {
         &self.signal_manager
-    }
-
-    fn video_encoder(&self) -> &Arc<RwLock<Option<Arc<ObsVideoEncoder>>>> {
-        &self.curr_video_encoder
-    }
-
-    fn audio_encoders(&self) -> &Arc<RwLock<HashMap<usize, Arc<ObsAudioEncoder>>>> {
-        &self.audio_encoders
     }
 }
 

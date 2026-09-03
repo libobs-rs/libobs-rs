@@ -4,11 +4,17 @@
 //! The core type `ObsString` wraps C-compatible strings in a memory-safe way,
 //! ensuring proper lifetime management and UTF-8 validation.
 
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::fmt;
 use std::os::raw::c_char;
 
 use crate::unsafe_send::Sendable;
+
+fn cstring_without_nul(mut bytes: Vec<u8>) -> CString {
+    bytes.retain(|byte| *byte != 0);
+    // SAFETY: all interior NUL bytes were removed immediately above.
+    unsafe { CString::from_vec_unchecked(bytes) }
+}
 
 /// String wrapper for OBS function calls.
 ///
@@ -30,11 +36,7 @@ use crate::unsafe_send::Sendable;
 /// // Create an ObsString from a Rust string
 /// let obs_string = ObsString::new("Hello, OBS!");
 ///
-/// // Use in OBS API calls
-/// unsafe {
-///     let ptr = obs_string.as_ptr();
-///     // Pass ptr.0 to OBS functions
-/// }
+/// assert_eq!(obs_string.as_c_str().to_bytes(), b"Hello, OBS!");
 /// ```
 #[derive(Clone, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ObsString {
@@ -56,27 +58,17 @@ impl ObsString {
     /// let obs_string = ObsString::new("source_name");
     /// ```
     pub fn new<S: AsRef<str>>(s: S) -> Self {
-        let s = s.as_ref().replace("\0", "");
         Self {
-            c_string: CString::new(s).unwrap(),
+            c_string: cstring_without_nul(s.as_ref().as_bytes().to_vec()),
         }
     }
 
-    /// Returns a pointer to the underlying C string along with sendable wrapper.
-    ///
-    /// The returned pointer is suitable for passing to OBS C API functions.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use libobs_wrapper::utils::ObsString;
-    ///
-    /// let obs_string = ObsString::new("source_name");
-    /// let ptr = obs_string.as_ptr();
-    ///
-    /// // Use ptr.0 in OBS API calls
-    /// ```
-    pub fn as_ptr(&self) -> Sendable<*const c_char> {
+    /// Borrows this value as a standard C string.
+    pub fn as_c_str(&self) -> &CStr {
+        self.c_string.as_c_str()
+    }
+
+    pub(crate) fn as_ptr(&self) -> Sendable<*const c_char> {
         Sendable(self.c_string.as_ptr())
     }
 }
@@ -107,9 +99,8 @@ impl From<&str> for ObsString {
     /// let obs_string: ObsString = "Hello".into();
     /// ```
     fn from(value: &str) -> Self {
-        let value = value.replace("\0", "");
         Self {
-            c_string: CString::new(value).unwrap(),
+            c_string: cstring_without_nul(value.as_bytes().to_vec()),
         }
     }
 }
@@ -127,10 +118,9 @@ impl From<Vec<u8>> for ObsString {
     /// let bytes = b"Hello".to_vec();
     /// let obs_string: ObsString = bytes.into();
     /// ```
-    fn from(mut value: Vec<u8>) -> Self {
-        value.retain(|&c| c != 0);
+    fn from(value: Vec<u8>) -> Self {
         Self {
-            c_string: CString::new(value).unwrap(),
+            c_string: cstring_without_nul(value),
         }
     }
 }
@@ -147,9 +137,8 @@ impl From<String> for ObsString {
     /// let obs_string: ObsString = s.into();
     /// ```
     fn from(value: String) -> Self {
-        let value = value.replace("\0", "");
         Self {
-            c_string: CString::new(value).unwrap(),
+            c_string: cstring_without_nul(value.as_bytes().to_vec()),
         }
     }
 }

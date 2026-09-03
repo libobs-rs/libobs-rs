@@ -33,14 +33,13 @@ macro_rules! forward_obs_source_impl {
             ///
             /// You can still update this source (if created by libobs-simple) and create an updater like so:
             ///
-            /// ```no_run
-            /// # This is how you would typically use it
+            /// ```ignore
             /// let updater = my_custom_source.create_updater()?;
             ///
-            /// # but you can still use the inner source directly (although you'd loose the custom source methods)
+            /// // Or consume the custom wrapper and work with the generic source directly.
             /// let source = my_custom_source.into_inner_source();
             /// let updater = source.create_updater::<MyCustomSourceUpdater>()?;
-            /// ````
+            /// ```
             pub fn into_inner_source(self) -> $crate::sources::ObsSourceRef {
                 self.$var_name
             }

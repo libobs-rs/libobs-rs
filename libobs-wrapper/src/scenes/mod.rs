@@ -1,17 +1,31 @@
-//! This module is important, as it holds the scene items and scenes themselves.
-//! Scenes are essential, as they hold the sources which are then being rendered in the output.
-//! You'll need to add sources to the scenes if you want to have an output that is not black.
-//! You can also use the `libobs-simple` crate to simplify the creation of ObsSourceRefs.
+//! Scenes, managed scene items, native OBS groups, ordering, and transform state.
+//!
+//! [`ObsSceneRef`] is the scene-level entry point. Add typed sources with [`ObsSceneRef::add`], inspect
+//! actual bottom-to-top libobs order with [`ObsSceneRef::items_in_order`], and create native groups
+//! with [`ObsSceneRef::create_group`].
+//!
+//! Scene-item behavior is exposed through [`SceneItemTrait`]: position/scale/rotation, bounds, edge
+//! crop, scale filtering, blending, visibility, locking, order, and complete transform/state
+//! snapshots. Ordinary source insertion returns [`ObsSceneItemRef<T>`], preserving the source type.
+//! [`ObsSceneItemHandle`] is the type-erased managed handle used when libobs itself replaces an item.
+//!
+//! # Group identity semantics
+//!
+//! libobs reuses child objects when moving them into/out of a group, but *ungrouping the whole group*
+//! creates replacement parent-scene items. [`ObsSceneGroupRef::ungroup`] models that explicitly by
+//! returning [`ObsUngroupedItem`] mappings and marking replaced child handles removed.
 
 mod transform_info;
 pub use transform_info::*;
 
+mod group;
 mod scene_drop_guards;
 mod scene_item;
 
 mod filter_traits;
 pub use filter_traits::*;
 
+pub use group::*;
 pub use scene_item::*;
 
 use std::collections::HashMap;
@@ -23,8 +37,8 @@ use libobs::{obs_scene_t, obs_source_t};
 use crate::macros::impl_eq_of_ptr;
 use crate::scenes::scene_drop_guards::_SceneDropGuard;
 use crate::sources::{ObsFilterGuardPair, ObsSourceTrait};
-use crate::unsafe_send::SmartPointerSendable;
-use crate::utils::{GeneralTraitHashMap, ObsDropGuard};
+use crate::unsafe_send::{NativeObjectId, SmartPointerSendable};
+use crate::utils::ObsDropGuard;
 use crate::{
     impl_signal_manager, run_with_obs,
     runtime::ObsRuntime,
@@ -36,12 +50,24 @@ use crate::{
 struct _NoOpDropGuard;
 impl ObsDropGuard for _NoOpDropGuard {}
 
+pub(super) type SceneItemsBySource = Arc<
+    RwLock<
+        HashMap<
+            NativeObjectId,
+            (
+                Arc<dyn ObsSourceTrait>,
+                Vec<Arc<dyn SceneItemTrait + 'static>>,
+            ),
+        >,
+    >,
+>;
+
 #[derive(Debug, Clone)]
 /// This struct holds every ObsSourceRef that is attached to the scene by using `add_source`.
 pub struct ObsSceneRef {
     name: ObsString,
-    attached_scene_items:
-        GeneralTraitHashMap<dyn ObsSourceTrait, Vec<Arc<Box<dyn SceneItemTrait + 'static>>>>,
+    attached_scene_items: SceneItemsBySource,
+    attached_groups: group::SceneGroups,
     attached_filters: Arc<RwLock<Vec<ObsFilterGuardPair>>>,
     runtime: ObsRuntime,
     signals: Arc<ObsSceneSignals>,
@@ -80,13 +106,14 @@ impl ObsSceneRef {
         })??;
 
         let drop_guard = Arc::new(_SceneDropGuard::new(scene.clone(), runtime.clone()));
-        let scene = SmartPointerSendable::new(scene.0, drop_guard);
+        let scene = SmartPointerSendable::new(scene.0, drop_guard, runtime.native_registry());
 
         let signals = Arc::new(ObsSceneSignals::new(&scene, runtime.clone())?);
         Ok(Self {
             name,
             scene,
             attached_scene_items: Arc::new(RwLock::new(HashMap::new())),
+            attached_groups: Arc::new(RwLock::new(Vec::new())),
             attached_filters: Arc::new(RwLock::new(Vec::new())),
             runtime,
             signals,
@@ -136,7 +163,7 @@ impl ObsSceneRef {
     }
 
     /// Gets the underlying source pointer of this scene, which is used internally when setting it to a channel.
-    pub fn get_scene_source_ptr(&self) -> Result<Sendable<*mut obs_source_t>, ObsError> {
+    pub(crate) fn get_scene_source_ptr(&self) -> Result<Sendable<*mut obs_source_t>, ObsError> {
         let scene_ptr = self.scene.clone();
         run_with_obs!(self.runtime, (scene_ptr), move || {
             unsafe {
@@ -146,16 +173,59 @@ impl ObsSceneRef {
         })
     }
 
-    pub fn as_ptr(&self) -> SmartPointerSendable<*mut obs_scene_t> {
+    pub(crate) fn as_ptr(&self) -> SmartPointerSendable<*mut obs_scene_t> {
         self.scene.clone()
+    }
+
+    pub fn object_id(&self) -> NativeObjectId {
+        self.scene.native_id()
     }
 
     pub fn name(&self) -> ObsString {
         self.name.clone()
     }
 
+    pub fn runtime(&self) -> &ObsRuntime {
+        &self.runtime
+    }
+
     pub fn signals(&self) -> Arc<ObsSceneSignals> {
         self.signals.clone()
+    }
+
+    /// Adds an existing typed source and returns its managed scene-item handle.
+    pub fn add<T>(&mut self, source: T) -> Result<ObsSceneItemRef<T>, ObsError>
+    where
+        T: ObsSourceTrait + Clone + 'static,
+    {
+        SceneItemExtSceneTrait::add_source(self, source)
+    }
+
+    /// Creates a source from `SourceInfo`, adds it, and returns the typed scene-item handle.
+    pub fn add_new_source(
+        &mut self,
+        info: crate::utils::SourceInfo,
+    ) -> Result<ObsSceneItemRef<crate::sources::ObsSourceRef>, ObsError> {
+        SceneItemExtSceneTrait::add_and_create_source(self, info)
+    }
+
+    /// Removes a managed item immediately without consuming handles held by the caller.
+    pub fn remove_item<T: SceneItemTrait + ?Sized>(&mut self, item: &T) -> Result<(), ObsError> {
+        SceneItemExtSceneTrait::remove_item(self, item)
+    }
+
+    /// Returns all managed scene items for a source.
+    pub fn items_for_source<T>(&self, source: &T) -> Result<Vec<Arc<dyn SceneItemTrait>>, ObsError>
+    where
+        T: ObsSourceTrait + Clone,
+    {
+        SceneItemExtSceneTrait::items_for_source(self, source)
+    }
+
+    /// Removes every managed item from this scene.
+    pub fn clear(&mut self) -> Result<(), ObsError> {
+        SceneItemExtSceneTrait::remove_all_sources(self)?;
+        self.clear_groups()
     }
 }
 

@@ -7,27 +7,6 @@ macro_rules! forward_obs_output_impl {
             fn signals(&self) -> &std::sync::Arc<$crate::data::output::ObsOutputSignals> {
                 self.$var_name.signals()
             }
-
-            fn video_encoder(
-                &self,
-            ) -> &std::sync::Arc<
-                std::sync::RwLock<Option<Arc<$crate::data::output::ObsVideoEncoder>>>,
-            > {
-                self.$var_name.video_encoder()
-            }
-
-            fn audio_encoders(
-                &self,
-            ) -> &std::sync::Arc<
-                std::sync::RwLock<
-                    std::collections::HashMap<
-                        usize,
-                        std::sync::Arc<$crate::data::output::ObsAudioEncoder>,
-                    >,
-                >,
-            > {
-                self.$var_name.audio_encoders()
-            }
         }
 
         impl $struct_name {

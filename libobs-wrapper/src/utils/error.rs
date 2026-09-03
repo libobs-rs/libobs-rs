@@ -7,14 +7,15 @@ use crate::enums::ObsResetVideoStatus;
 pub enum ObsError {
     /// The `obs_startup` function failed on libobs.
     Failure,
-    /// The loaded libobs library did not report a valid version.
-    /// Ensure a real, compatible OBS runtime was packaged before process startup.
+    /// This error is emitted if a dummy DLL was loaded instead of the real libobs DLL. Make sure you bootstrap properly with libobs-bootstrapper
     InvalidDll,
     /// Failed to lock mutex describing whether there is a
     /// thread using libobs or not. Report to crate maintainer.
     MutexFailure,
     /// Some or no thread is already using libobs. This is a bug!
     ThreadFailure,
+    /// Unable to initialize/reset the OBS audio subsystem.
+    ResetAudioFailure,
     /// Unable to reset video.
     ResetVideoFailure(ObsResetVideoStatus),
     /// Unable to reset video because the program attempted to
@@ -68,8 +69,102 @@ pub enum ObsError {
     /// Failed to convert an enum from a code
     EnumConversionError(String),
 
+    /// The caller requested metadata using the wrong OBS property category.
+    PropertyTypeMismatch {
+        expected: String,
+    },
+
+    /// A runtime-discovered settings schema does not contain the requested property.
+    PropertyNotFound {
+        name: String,
+    },
+
+    /// A generic property value has the wrong scalar category for the discovered property.
+    PropertyValueTypeMismatch {
+        name: String,
+        expected: String,
+        actual: String,
+    },
+
+    /// A numeric generic property value is outside the range reported by libobs.
+    PropertyValueOutOfRange {
+        name: String,
+        value: String,
+        min: String,
+        max: String,
+    },
+
+    /// A generic value is correctly typed but not accepted by the discovered property metadata.
+    PropertyValueNotAllowed {
+        name: String,
+        value: String,
+    },
+
+    /// The discovered property category is structural/action-oriented and cannot be represented by a scalar setting value.
+    PropertyValueUnsupported {
+        name: String,
+        property_type: String,
+    },
+
     /// Failed to send/receive on a runtime channel
     RuntimeChannelError(String),
+
+    /// The bounded OBS actor queue is full.
+    RuntimeQueueFull {
+        capacity: usize,
+    },
+
+    /// The OBS actor panicked while executing a command or cleanup task.
+    RuntimePanicked,
+
+    /// An object from a different OBS runtime/context was passed to this operation.
+    RuntimeMismatch,
+
+    /// A discovered OBS type was used with an incompatible typed creation operation.
+    CapabilityKindMismatch {
+        id: String,
+        expected: String,
+        actual: String,
+    },
+
+    /// A required encoder/service was omitted from a high-level output pipeline.
+    OutputPipelineMissingComponent {
+        output_id: String,
+        component: String,
+    },
+
+    /// A component was supplied to an output that does not accept that component category.
+    OutputPipelineUnexpectedComponent {
+        output_id: String,
+        component: String,
+    },
+
+    /// An encoder codec is incompatible with the selected output type.
+    OutputPipelineUnsupportedCodec {
+        output_id: String,
+        media: String,
+        codec: String,
+    },
+
+    /// A service protocol is incompatible with the selected output type.
+    OutputPipelineUnsupportedProtocol {
+        output_id: String,
+        protocol: String,
+    },
+
+    /// No runtime-discovered output/encoder combination satisfies a high-level request.
+    NoCompatibleOutputGraph {
+        summary: String,
+    },
+
+    /// An audio encoder mixer index exceeded libobs's supported mixer range.
+    AudioMixerIndexOutOfBounds {
+        index: usize,
+        max: usize,
+    },
+
+    /// A blocking operation was requested recursively from the OBS actor thread.
+    RuntimeReentrantBlocking,
 
     /// Attempted to call a OBS runtime function from outside the OBS thread.
     /// This error should NEVER occur. If you are not using the runtime manually or have the "enable_runtime" feature enabled
@@ -89,6 +184,7 @@ impl Display for ObsError {
             ObsError::Failure => write!(f, "`obs-startup` function failed on libobs"),
             ObsError::MutexFailure => write!(f, "Failed to lock mutex describing whether there is a thread using libobs or not. Report to crate maintainer."),
             ObsError::ThreadFailure => write!(f, "Some or no thread is already using libobs. This is a bug!"),
+            ObsError::ResetAudioFailure => write!(f, "Could not initialize/reset OBS audio."),
             ObsError::ResetVideoFailure(status) => write!(f, "Could not reset obs video. Status: {:?}", status),
             ObsError::ResetVideoFailureGraphicsModule => write!(f, "Unable to reset video because the program attempted to change the graphics module. This is a bug!"),
             ObsError::ResetVideoFailureOutputActive => write!(f, "Unable to reset video because some outputs were still active."),
@@ -115,8 +211,25 @@ impl Display for ObsError {
             ObsError::IoError(e) => write!(f, "I/O error: {}", e),
             ObsError::SignalDataError(e) => write!(f, "Signal data error: {}", e),
             ObsError::EnumConversionError(e) => write!(f, "Enum conversion error: {}", e),
+            ObsError::PropertyTypeMismatch { expected } => write!(f, "OBS property type mismatch; expected {expected}"),
+            ObsError::PropertyNotFound { name } => write!(f, "OBS settings schema has no property named '{name}'."),
+            ObsError::PropertyValueTypeMismatch { name, expected, actual } => write!(f, "OBS property '{name}' expects {expected}, but received {actual}."),
+            ObsError::PropertyValueOutOfRange { name, value, min, max } => write!(f, "OBS property '{name}' value {value} is outside the supported range {min}..={max}."),
+            ObsError::PropertyValueNotAllowed { name, value } => write!(f, "OBS property '{name}' does not accept value {value}."),
+            ObsError::PropertyValueUnsupported { name, property_type } => write!(f, "OBS property '{name}' ({property_type}) is not a scalar setting value."),
             ObsError::RuntimeChannelError(e) => write!(f, "Runtime channel error: {}", e),
-            ObsError::InvalidDll => write!(f, "The loaded libobs library is invalid or incompatible. Package a real OBS runtime before process startup."),
+            ObsError::RuntimeQueueFull { capacity } => write!(f, "OBS runtime queue is full (capacity: {}). Batch work or retry later.", capacity),
+            ObsError::RuntimePanicked => write!(f, "The OBS actor panicked and has been shut down."),
+            ObsError::RuntimeMismatch => write!(f, "The operation mixed objects owned by different OBS runtimes."),
+            ObsError::CapabilityKindMismatch { id, expected, actual } => write!(f, "Discovered OBS type '{id}' has kind '{actual}', but this operation requires '{expected}'."),
+            ObsError::OutputPipelineMissingComponent { output_id, component } => write!(f, "Output pipeline for '{output_id}' requires {component}."),
+            ObsError::OutputPipelineUnexpectedComponent { output_id, component } => write!(f, "Output pipeline for '{output_id}' does not accept {component}."),
+            ObsError::OutputPipelineUnsupportedCodec { output_id, media, codec } => write!(f, "Output '{output_id}' does not support {media} codec '{codec}'."),
+            ObsError::OutputPipelineUnsupportedProtocol { output_id, protocol } => write!(f, "Output '{output_id}' does not support service protocol '{protocol}'."),
+            ObsError::NoCompatibleOutputGraph { summary } => write!(f, "No compatible OBS output graph: {summary}"),
+            ObsError::AudioMixerIndexOutOfBounds { index, max } => write!(f, "Audio mixer index {index} is out of bounds (max {max})."),
+            ObsError::RuntimeReentrantBlocking => write!(f, "A blocking operation cannot wait for an OBS callback from the OBS actor thread."),
+            ObsError::InvalidDll => write!(f, "A dummy DLL was loaded instead of the real libobs DLL. Make sure you bootstrap properly with libobs-bootstrapper"),
             #[cfg(feature="enable_runtime")]
             ObsError::RuntimeOutsideThread => write!(f, "Attempted to call a OBS runtime function from outside the OBS thread. This is a bug in the crate!"),
             #[cfg(not(feature="enable_runtime"))]

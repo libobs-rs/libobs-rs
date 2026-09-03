@@ -39,11 +39,44 @@ impl ObsOutputTraitSealed for ObsReplayBufferOutputRef {
         output.id = ObsString::new("replay_buffer");
         let output = ObsOutputRef::new(output, runtime.clone())?;
 
-        let replay_signal_manager = ObsReplayOutputSignals::new(&output.as_ptr(), runtime)?;
+        let replay_signal_manager =
+            ObsReplayOutputSignals::new(&output.__native_handle(), runtime)?;
         Ok(Self {
             replay_signal_manager: Arc::new(replay_signal_manager),
             output,
         })
+    }
+
+    fn video_encoder_slot(
+        &self,
+    ) -> &std::sync::Arc<
+        std::sync::RwLock<Option<std::sync::Arc<crate::encoders::video::ObsVideoEncoder>>>,
+    > {
+        self.output.video_encoder_slot()
+    }
+
+    fn audio_encoder_slots(
+        &self,
+    ) -> &std::sync::Arc<
+        std::sync::RwLock<
+            std::collections::HashMap<
+                usize,
+                std::sync::Arc<crate::encoders::audio::ObsAudioEncoder>,
+            >,
+        >,
+    > {
+        self.output.audio_encoder_slots()
+    }
+
+    fn service_slot(
+        &self,
+    ) -> &std::sync::Arc<std::sync::RwLock<Option<std::sync::Arc<crate::services::ObsServiceRef>>>>
+    {
+        self.output.service_slot()
+    }
+
+    fn configuration_lock(&self) -> &std::sync::Arc<std::sync::Mutex<()>> {
+        self.output.configuration_lock()
     }
 }
 
@@ -80,8 +113,11 @@ impl ObsReplayBufferOutputRef {
     ///   - Failure to call "get_last_replay" procedure
     ///   - Failure to extract the path from calldata
     pub fn save_buffer(&self) -> Result<Box<Path>, ObsError> {
+        if self.runtime().is_actor_thread() {
+            return Err(ObsError::RuntimeReentrantBlocking);
+        }
         log::trace!("Saving replay buffer...");
-        let output_ptr = self.as_ptr();
+        let output_ptr = self.__native_handle();
 
         log::trace!("Getting procedure handler for replay buffer output...");
         let proc_handler = run_with_obs!(self.runtime().clone(), (output_ptr), move || {

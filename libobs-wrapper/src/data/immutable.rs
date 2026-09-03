@@ -35,14 +35,14 @@ impl ImmutableObsData {
             runtime: runtime.clone(),
         });
 
-        let ptr = SmartPointerSendable::new(ptr.0, drop_guard);
+        let ptr = SmartPointerSendable::new(ptr.0, drop_guard, runtime.native_registry());
         Ok(ImmutableObsData {
             ptr,
             runtime: runtime.clone(),
         })
     }
 
-    pub fn from_raw_pointer(data: Sendable<*mut obs_data_t>, runtime: ObsRuntime) -> Self {
+    pub(crate) fn from_raw_pointer(data: Sendable<*mut obs_data_t>, runtime: ObsRuntime) -> Self {
         ImmutableObsData {
             ptr: SmartPointerSendable::new(
                 data.0,
@@ -50,6 +50,7 @@ impl ImmutableObsData {
                     data_ptr: data.clone(),
                     runtime: runtime.clone(),
                 }),
+                runtime.native_registry(),
             ),
             runtime,
         }

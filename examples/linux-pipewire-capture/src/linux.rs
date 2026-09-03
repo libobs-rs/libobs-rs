@@ -50,7 +50,7 @@ pub fn main() -> anyhow::Result<()> {
     scene.set_to_channel(0)?;
 
     let obs_path = ObsPath::from_relative("linux-window-recording.mp4");
-    let mut output = context
+    let output = context
         .simple_output_builder("window-capture", obs_path.clone())
         .build()?;
 

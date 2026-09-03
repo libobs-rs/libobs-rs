@@ -27,6 +27,14 @@ macro_rules! encoder_enum {
                 });
             }
         }
+        impl From<&str> for $name {
+            fn from(value: &str) -> Self {
+                match Self::from_str(value) {
+                    Ok(value) => value,
+                    Err(never) => match never {},
+                }
+            }
+        }
         impl From<$name> for ObsString {
             fn from(v: $name) -> ObsString {
                 #[allow(deprecated)]

@@ -17,7 +17,6 @@ use libobs_wrapper::{
     data::{ObsObjectBuilder, ObsObjectUpdater},
     scenes::ObsSceneRef,
     sources::{ObsSourceBuilder, ObsSourceRef, ObsSourceTrait},
-    unsafe_send::Sendable,
     utils::ObsError,
 };
 use num_traits::ToPrimitive;
@@ -54,16 +53,12 @@ define_object_manager!(
 #[obs_object_impl]
 impl MonitorCaptureSource {
     /// Gets all available monitors
-    pub fn get_monitors() -> Result<Vec<Sendable<DisplayInfo>>, ObsSimpleError> {
-        Ok(DisplayInfo::all()
-            .map_err(ObsSimpleError::DisplayInfoError)?
-            .into_iter()
-            .map(Sendable)
-            .collect())
+    pub fn get_monitors() -> Result<Vec<DisplayInfo>, ObsSimpleError> {
+        DisplayInfo::all().map_err(ObsSimpleError::DisplayInfoError)
     }
 
-    pub fn set_monitor(self, monitor: &Sendable<DisplayInfo>) -> Self {
-        self.set_monitor_id_raw(monitor.0.name.as_str())
+    pub fn set_monitor(self, monitor: &DisplayInfo) -> Self {
+        self.set_monitor_id_raw(monitor.name.as_str())
     }
 }
 
@@ -119,7 +114,7 @@ impl MonitorCaptureSourceBuilder {
     }
 }
 
-pub type GeneralSourceRef = Arc<Box<dyn ObsSourceTrait>>;
+pub type GeneralSourceRef = Arc<dyn ObsSourceTrait>;
 impl ObsSourceBuilder for MonitorCaptureSourceBuilder {
     type T = MonitorCaptureSource;
 

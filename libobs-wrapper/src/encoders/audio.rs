@@ -1,4 +1,4 @@
-use libobs::{audio_output, obs_encoder};
+use libobs::audio_output;
 use std::{
     ptr,
     sync::{Arc, RwLock},
@@ -86,6 +86,7 @@ impl ObsAudioEncoder {
                 encoder,
                 runtime: runtime.clone(),
             }),
+            runtime.native_registry(),
         );
 
         let settings = {
@@ -115,10 +116,8 @@ impl ObsAudioEncoder {
     /// This is only needed once for global audio context
     /// # Safety
     /// You must ensure that the `handler` pointer is valid and lives as long as this function call.
-    pub unsafe fn set_audio_context(
-        &mut self,
-        handler: Sendable<*mut audio_output>,
-    ) -> Result<(), ObsError> {
+    pub unsafe fn set_audio_context(&self, handler: *mut audio_output) -> Result<(), ObsError> {
+        let handler = Sendable(handler);
         let encoder_ptr = self.encoder.clone();
 
         run_with_obs!(self.runtime, (handler, encoder_ptr), move || {
@@ -161,7 +160,13 @@ impl ObsObjectTraitPrivate for ObsAudioEncoder {
     }
 }
 
-impl ObsObjectTrait<*mut libobs::obs_encoder> for ObsAudioEncoder {
+impl ObsObjectTrait for ObsAudioEncoder {
+    type Native = *mut libobs::obs_encoder;
+
+    fn __native_handle(&self) -> SmartPointerSendable<Self::Native> {
+        self.encoder.clone()
+    }
+
     fn runtime(&self) -> &ObsRuntime {
         &self.runtime
     }
@@ -200,10 +205,6 @@ impl ObsObjectTrait<*mut libobs::obs_encoder> for ObsAudioEncoder {
         }
 
         inner_fn_update_settings!(self, libobs::obs_encoder_update, settings)
-    }
-
-    fn as_ptr(&self) -> SmartPointerSendable<*mut obs_encoder> {
-        self.encoder.clone()
     }
 }
 

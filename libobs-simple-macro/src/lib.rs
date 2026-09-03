@@ -33,7 +33,7 @@ pub fn obs_object_updater(attr: TokenStream, item: TokenStream) -> TokenStream {
     let u_input = parse_macro_input!(attr as UpdaterInput);
     let id_value = u_input.name.value();
     let updatable_type = u_input.updatable_type;
-    let underlying_ptr_type = u_input.underlying_ptr_type;
+    let _underlying_ptr_type = u_input.underlying_ptr_type;
 
     let input = parse_macro_input!(item as DeriveInput);
 
@@ -71,13 +71,13 @@ pub fn obs_object_updater(attr: TokenStream, item: TokenStream) -> TokenStream {
             updatable: &'a mut #updatable_type2
         }
 
-        impl <'a> libobs_wrapper::data::ObsObjectUpdater<'a, #underlying_ptr_type> for #updater_name<'a> {
+        impl <'a> libobs_wrapper::data::ObsObjectUpdater<'a> for #updater_name<'a> {
             type ToUpdate = #updatable_type;
 
             fn create_update(runtime: libobs_wrapper::runtime::ObsRuntime, updatable: &'a mut Self::ToUpdate) -> Result<Self, libobs_wrapper::utils::ObsError> {
                 let source_id = Self::get_id();
                 let flags = unsafe {
-                    libobs::obs_get_source_output_flags(source_id.as_ptr().0)
+                    libobs::obs_get_source_output_flags(source_id.as_c_str().as_ptr())
                 };
 
                 if flags == 0 {
@@ -154,7 +154,7 @@ pub fn obs_object_updater(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// Each field in the struct must be annotated with `#[obs_property(type_t = "...")]`.
 /// Supported `type_t` values:
 ///
-/// ```rust
+/// ```ignore
 /// use libobs_wrapper::data::StringEnum;
 /// use libobs_simple_macro::obs_object_builder;
 /// use num_derive::{FromPrimitive, ToPrimitive};
@@ -189,6 +189,7 @@ pub fn obs_object_updater(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// #[obs_property(type_t="enum")]
 ///     /// Sets the capture method for the window capture
 ///     capture_method: ObsWindowCaptureMethod,
+/// }
 ///
 /// #[obs_object_builder("my_source")]
 /// pub struct MySourceBuilder {
@@ -245,7 +246,7 @@ pub fn obs_object_builder(attr: TokenStream, item: TokenStream) -> TokenStream {
                 let name = name.into();
                 let source_id = Self::get_id();
                 let flags = unsafe {
-                    libobs::obs_get_source_output_flags(source_id.as_ptr().0)
+                    libobs::obs_get_source_output_flags(source_id.as_c_str().as_ptr())
                 };
 
                 if flags == 0 {

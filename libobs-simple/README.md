@@ -1,84 +1,91 @@
-# libOBS Sources
-This crate makes it really easy to create new sources for OBS Studio using the [libobs-wrapper](https://crates.io/crates/libobs-wrapper) crate.
+# libobs-simple
 
-(This example is outdated, look at tests and examples for more up-to-date code)
-## Example
-```rust
-fn main() {
-    let rec_file = ObsPath::from_relative("monitor_capture.mp4").build();
-    let path_out = PathBuf::from(rec_file.to_string());
+The opinionated convenience layer for `libobs-rs`. Use this crate when you want to **record, stream, replay, or create common capture sources without assembling the native OBS graph yourself**.
 
-    // Start the OBS context
-    let startup_info = StartupInfo::default();
+`libobs-simple` deliberately does not maintain its own native lifetime or plugin-discovery model. It builds on [`libobs-wrapper`](../libobs-wrapper/README.md), which remains the full safe OBS object model.
 
-    // You can also create use a logger to log to a file
-    // let _l = DebugLogger { f: File::create(current_dir().unwrap().join("obs.log")).unwrap() };
-    // startup_info = startup_info.set_logger(Box::new(_l));
+> **Rule of thumb:** `libobs-simple` chooses for you; `libobs-wrapper` exposes the choices.
 
-    let mut context = ObsContext::new(startup_info).unwrap();
+## Where do I start?
 
-    // Set up output to ./recording.mp4
-    let mut output_settings = ObsData::new();
-    output_settings.set_string("path", rec_file);
+| Goal | Start with |
+| --- | --- |
+| Record to a file | `output::simple::ObsContextSimpleExt::simple_output_builder` |
+| Stream to a custom RTMP endpoint | `output::streaming::ObsContextStreamingExt::simple_rtmp_stream` |
+| Replay buffer | `output::replay` |
+| Common monitor/window/platform capture sources | `sources` |
+| Need groups, generic plugin settings, custom output graphs, arbitrary services, or exact capability control | Drop down to the re-exported `libobs_simple::wrapper` / `libobs-wrapper` |
 
-    let output_name = "output";
-    let output_info = OutputInfo::new("ffmpeg_muxer", output_name, Some(output_settings), None);
+See the repository [API orientation guide](../docs/api_orientation.md) for the complete module map.
 
-    let mut output = context.output(output_info).unwrap();
+## Recording
 
-    // Register the video encoder
-    let mut video_settings = ObsData::new();
-    video_settings
-        .set_int("bf", 0)
-        .set_bool("psycho_aq", true)
-        .set_bool("lookahead", true)
-        .set_string("profile", "high")
-        .set_string("preset", "fast")
-        .set_string("rate_control", "cbr")
-        .set_int("bitrate", 10000);
+```rust,no_run
+use libobs_simple::output::simple::ObsContextSimpleExt;
+use libobs_wrapper::{
+    data::{output::ObsOutputTrait, video::ObsVideoInfoBuilder},
+    utils::{ObsPath, StartupInfo},
+};
 
-    let encoders = ObsContext::get_available_video_encoders();
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let context = StartupInfo::new()
+        .set_video_info(ObsVideoInfoBuilder::new().build())
+        .start()?;
 
-    println!("Available encoders: {:?}", encoders);
-    let encoder =  encoders.iter().find(|e| **e == ObsVideoEncoderType::H264_TEXTURE_AMF || **e == ObsVideoEncoderType::AV1_TEXTURE_AMF).unwrap();
+    let output = context
+        .simple_output_builder("recording", ObsPath::new("recording.mp4"))
+        .video_bitrate(6_000)
+        .audio_bitrate(160)
+        .build()?;
 
-    println!("Using encoder {:?}", encoder);
-    let video_info = VideoEncoderInfo::new(
-        encoder.clone(),
-        "video_encoder",
-        Some(video_settings),
-        None,
-    );
-
-    let video_handler = ObsContext::get_video_ptr().unwrap();
-    output.video_encoder(video_info, video_handler).unwrap();
-
-    // Register the audio encoder
-    let mut audio_settings = ObsData::new();
-    audio_settings.set_int("bitrate", 160);
-
-    let audio_info =
-        AudioEncoderInfo::new("ffmpeg_aac", "audio_encoder", Some(audio_settings), None);
-
-    let audio_handler = ObsContext::get_audio_ptr().unwrap();
-    output.audio_encoder(audio_info, 0, audio_handler).unwrap();
-    let mut scene = context.scene("main");
-
-    let monitor = MonitorCaptureSourceBuilder::get_monitors().unwrap()[1].clone();
-    println!("Using monitor {:?}", monitor);
-    let mut capture_source = MonitorCaptureSourceBuilder::new("monitor_test")
-        .set_monitor(&monitor)
-        .add_to_scene(&mut scene)
-        .unwrap();
-
-    scene.add_and_set(0);
-    output.start().unwrap();
-
-    println!("Recording started");
-    std::thread::sleep(Duration::from_secs(5));
-    println!("Recording stop");
-
-    output.stop().unwrap();
-    // And now your monitor is recorded to ./recording.mp4 !
+    output.start()?;
+    std::thread::sleep(std::time::Duration::from_secs(5));
+    output.stop()?;
+    Ok(())
 }
 ```
+
+By default the builder asks the loaded OBS installation for H.264, **prefers an available hardware encoder, and transparently falls back to software**. You can still explicitly select x264, a hardware codec/preset, or a custom encoder when you need control.
+
+## RTMP streaming
+
+```rust,no_run
+use libobs_simple::output::streaming::ObsContextStreamingExt;
+use libobs_wrapper::{
+    data::output::ObsOutputTrait,
+    utils::StartupInfo,
+};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let context = StartupInfo::new().start()?;
+
+    let output = context
+        .simple_rtmp_stream("live", "rtmp://example.invalid/live", "stream-key")
+        .video_bitrate(6_000)
+        .audio_bitrate(160)
+        .build()?;
+
+    // build() only prepares the graph. Network I/O starts here:
+    output.start()?;
+    // ...
+    output.stop()?;
+    Ok(())
+}
+```
+
+The streaming builder discovers a compatible encoded RTMP output, H.264 encoder and AAC encoder at runtime, configures the standard custom RTMP service, then uses the wrapper's validated output pipeline. It does not hard-code NVENC/QSV/AMF/x264 as the only valid installation.
+
+## When to move down to `libobs-wrapper`
+
+Use the full wrapper when the application needs any of these:
+
+- enumerate arbitrary OBS plugins and modules;
+- generate settings UIs from OBS property metadata;
+- inspect current/default typed property values;
+- create plugin-generic sources/encoders/services;
+- work with native scene ordering, groups, transform snapshots or blend modes;
+- assemble a custom codec/protocol/output graph;
+- create displays/previews or subscribe to detailed signals;
+- access libobs functionality that has no simple opinionated workflow.
+
+You do not need a second context. `libobs-simple` uses the same `libobs_wrapper::context::ObsContext`, and `libobs_simple::wrapper` re-exports the wrapper crate so an application can mix simple and advanced calls naturally.

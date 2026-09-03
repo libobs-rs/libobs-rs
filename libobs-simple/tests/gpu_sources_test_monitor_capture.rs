@@ -23,7 +23,7 @@ pub fn record() {
     let rec_file = ObsPath::from_relative("monitor_capture.mp4");
     let path_out: PathBuf = rec_file.clone().into();
 
-    let (mut context, mut output) = initialize_obs(rec_file);
+    let (mut context, output) = initialize_obs(rec_file);
     let mut scene = context.scene("main", Some(0)).unwrap();
 
     let monitor = MonitorCaptureSourceBuilder::get_monitors().unwrap()[0].clone();

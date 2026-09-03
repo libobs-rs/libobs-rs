@@ -85,6 +85,29 @@ pub enum ObsScaleType {
     Point = libobs::obs_scale_type_OBS_SCALE_POINT,
 }
 
+#[cfg_attr(target_os = "windows", repr(i32))]
+#[cfg_attr(not(target_os = "windows"), repr(u32))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, FromPrimitive, ToPrimitive)]
+/// Selects whether scene-item blending uses OBS's default sRGB conversion behavior.
+pub enum ObsBlendMethod {
+    Default = libobs::obs_blending_method_OBS_BLEND_METHOD_DEFAULT,
+    SrgbOff = libobs::obs_blending_method_OBS_BLEND_METHOD_SRGB_OFF,
+}
+
+#[cfg_attr(target_os = "windows", repr(i32))]
+#[cfg_attr(not(target_os = "windows"), repr(u32))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, FromPrimitive, ToPrimitive)]
+/// Selects the scene-item blend equation used by libobs.
+pub enum ObsBlendMode {
+    Normal = libobs::obs_blending_type_OBS_BLEND_NORMAL,
+    Additive = libobs::obs_blending_type_OBS_BLEND_ADDITIVE,
+    Subtract = libobs::obs_blending_type_OBS_BLEND_SUBTRACT,
+    Screen = libobs::obs_blending_type_OBS_BLEND_SCREEN,
+    Multiply = libobs::obs_blending_type_OBS_BLEND_MULTIPLY,
+    Lighten = libobs::obs_blending_type_OBS_BLEND_LIGHTEN,
+    Darken = libobs::obs_blending_type_OBS_BLEND_DARKEN,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// Describes which graphics backend should be used
 /// in the OBS video context. Used in `ObsVideoInfo`.
@@ -288,6 +311,17 @@ pub enum ObsBoundsType {
     ScaleToWidth = libobs::obs_bounds_type_OBS_BOUNDS_SCALE_TO_WIDTH,
     ScaleToHeight = libobs::obs_bounds_type_OBS_BOUNDS_SCALE_TO_HEIGHT,
     MaxOnly = libobs::obs_bounds_type_OBS_BOUNDS_MAX_ONLY,
+}
+
+#[cfg_attr(target_os = "windows", repr(i32))]
+#[cfg_attr(not(target_os = "windows"), repr(u32))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, FromPrimitive, ToPrimitive)]
+/// Relative movement operations for reordering an item within a scene.
+pub enum ObsOrderMovement {
+    Up = libobs::obs_order_movement_OBS_ORDER_MOVE_UP,
+    Down = libobs::obs_order_movement_OBS_ORDER_MOVE_DOWN,
+    Top = libobs::obs_order_movement_OBS_ORDER_MOVE_TOP,
+    Bottom = libobs::obs_order_movement_OBS_ORDER_MOVE_BOTTOM,
 }
 
 bitflags! {

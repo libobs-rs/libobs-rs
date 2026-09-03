@@ -76,14 +76,8 @@ define_object_manager!(
 #[libobs_simple_macro::obs_object_impl]
 impl WindowCaptureSource {
     /// Gets a list of windows that can be captured by this source.
-    pub fn get_windows(
-        mode: WindowSearchMode,
-    ) -> Result<Vec<libobs_wrapper::unsafe_send::Sendable<WindowInfo>>, ObsSimpleError> {
-        Ok(get_all_windows(mode)
-            .map_err(ObsSimpleError::WindowHelperError)?
-            .into_iter()
-            .map(libobs_wrapper::unsafe_send::Sendable)
-            .collect())
+    pub fn get_windows(mode: WindowSearchMode) -> Result<Vec<WindowInfo>, ObsSimpleError> {
+        get_all_windows(mode).map_err(ObsSimpleError::WindowHelperError)
     }
 
     /// Sets the window to capture.
@@ -95,8 +89,8 @@ impl WindowCaptureSource {
     /// # Returns
     ///
     /// The updated `WindowCaptureSourceBuilder` instance.
-    pub fn set_window(self, window: &libobs_wrapper::unsafe_send::Sendable<WindowInfo>) -> Self {
-        self.set_window_raw(window.0.obs_id.as_str())
+    pub fn set_window(self, window: &WindowInfo) -> Self {
+        self.set_window_raw(window.obs_id.as_str())
     }
 }
 

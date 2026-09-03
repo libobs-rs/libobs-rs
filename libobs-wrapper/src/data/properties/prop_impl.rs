@@ -22,7 +22,7 @@ impl<K: ObsSourceTrait> ObsPropertyObjectPrivate for K {
     fn get_properties_raw(
         &self,
     ) -> Result<SmartPointerSendable<*mut libobs::obs_properties_t>, ObsError> {
-        let source_ptr = self.as_ptr();
+        let source_ptr = self.__native_handle();
         let runtime = self.runtime().clone();
 
         let raw_ptr = run_with_obs!(runtime, (source_ptr), move || {
@@ -44,7 +44,11 @@ impl<K: ObsSourceTrait> ObsPropertyObjectPrivate for K {
             runtime: self.runtime().clone(),
         });
 
-        Ok(SmartPointerSendable::new(raw_ptr.0, drop_guard))
+        Ok(SmartPointerSendable::new(
+            raw_ptr.0,
+            drop_guard,
+            self.runtime().native_registry(),
+        ))
     }
 
     fn get_properties_by_id_raw<T: Into<ObsString> + Sync + Send>(
@@ -71,7 +75,8 @@ impl<K: ObsSourceTrait> ObsPropertyObjectPrivate for K {
             runtime: runtime.clone(),
         };
 
-        let ptr = SmartPointerSendable::new(raw_ptr.0, Arc::new(drop_guard));
+        let ptr =
+            SmartPointerSendable::new(raw_ptr.0, Arc::new(drop_guard), runtime.native_registry());
         Ok(ptr)
     }
 }
@@ -87,7 +92,7 @@ impl ObsPropertyObjectPrivate for ObsOutputRef {
     fn get_properties_raw(
         &self,
     ) -> Result<SmartPointerSendable<*mut libobs::obs_properties_t>, ObsError> {
-        let output_ptr = self.as_ptr().clone();
+        let output_ptr = self.__native_handle().clone();
         let ptr = run_with_obs!(self.runtime(), (output_ptr), move || {
             let property_ptr = unsafe {
                 // Safety: Safe because of smart pointer
@@ -106,7 +111,11 @@ impl ObsPropertyObjectPrivate for ObsOutputRef {
             runtime: self.runtime().clone(),
         });
 
-        Ok(SmartPointerSendable::new(ptr.0, drop_guard))
+        Ok(SmartPointerSendable::new(
+            ptr.0,
+            drop_guard,
+            self.runtime().native_registry(),
+        ))
     }
 
     fn get_properties_by_id_raw<T: Into<ObsString> + Sync + Send>(
@@ -133,7 +142,7 @@ impl ObsPropertyObjectPrivate for ObsOutputRef {
             runtime: runtime.clone(),
         };
 
-        let ptr = SmartPointerSendable::new(ptr.0, Arc::new(drop_guard));
+        let ptr = SmartPointerSendable::new(ptr.0, Arc::new(drop_guard), runtime.native_registry());
         Ok(ptr)
     }
 }

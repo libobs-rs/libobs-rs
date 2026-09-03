@@ -19,14 +19,24 @@ pub trait SceneItemExtSceneTrait {
     ) -> Result<ObsSceneItemRef<ObsSourceRef>, ObsError>;
 
     /// Gets a source by name from this scene. Returns None if no source with the given name exists in this scene.
-    fn get_source_mut(&self, name: &str) -> Result<Option<Arc<Box<dyn ObsSourceTrait>>>, ObsError>;
+    fn get_source(&self, name: &str) -> Result<Option<Arc<dyn ObsSourceTrait>>, ObsError>;
+
+    #[deprecated = "Use get_source; the returned shared handle was never a mutable reference"]
+    fn get_source_mut(&self, name: &str) -> Result<Option<Arc<dyn ObsSourceTrait>>, ObsError> {
+        self.get_source(name)
+    }
 
     /// Removes the given source from this scene. Removes the corresponding scene item as well. It may be possible that this source is still added to another scene.
     fn remove_every_item_of_source<T: ObsSourceTrait>(&mut self, source: T)
         -> Result<(), ObsError>;
 
-    /// Removes a specific scene item from this scene.
-    fn remove_scene_item<K: SceneItemTrait>(&mut self, scene_item: K) -> Result<(), ObsError>;
+    /// Removes a specific scene item from this scene immediately.
+    fn remove_item<K: SceneItemTrait + ?Sized>(&mut self, scene_item: &K) -> Result<(), ObsError>;
+
+    #[deprecated = "Use remove_item; it removes the native scene item immediately without consuming the handle"]
+    fn remove_scene_item<K: SceneItemTrait>(&mut self, scene_item: K) -> Result<(), ObsError> {
+        self.remove_item(&scene_item)
+    }
 
     /// Removes all sources from this scene.
     fn remove_all_sources(&mut self) -> Result<(), ObsError>;
@@ -34,10 +44,18 @@ pub trait SceneItemExtSceneTrait {
     /// Gets the underlying scene item pointers for the given source in this scene.
     ///
     /// A scene item is basically the representation of a source within this scene. It holds information about the position, scale, rotation, etc.
+    fn items_for_source<T: ObsSourceTrait + Clone>(
+        &self,
+        source: &T,
+    ) -> Result<Vec<Arc<dyn SceneItemTrait>>, ObsError>;
+
+    #[deprecated = "Use items_for_source; scene item handles are managed objects, not raw pointers"]
     fn get_scene_item_ptr<T: ObsSourceTrait + Clone>(
         &self,
         source: &T,
-    ) -> Result<Vec<Arc<Box<dyn SceneItemTrait>>>, ObsError>;
+    ) -> Result<Vec<Arc<dyn SceneItemTrait>>, ObsError> {
+        self.items_for_source(source)
+    }
 }
 
 impl SceneItemExtSceneTrait for ObsSceneRef {
@@ -45,15 +63,17 @@ impl SceneItemExtSceneTrait for ObsSceneRef {
         &mut self,
         source: T,
     ) -> Result<ObsSceneItemRef<T>, ObsError> {
+        self.runtime.ensure_same_runtime(source.runtime())?;
         let scene_item = ObsSceneItemRef::new(self, source.clone(), self.runtime.clone())?;
 
         let scene_clone = scene_item.clone();
         self.attached_scene_items
             .write()
             .map_err(|e| ObsError::LockError(format!("{:?}", e)))?
-            .entry(Arc::new(Box::new(source)))
-            .or_insert_with(Vec::new)
-            .push(Arc::new(Box::new(scene_clone)));
+            .entry(source.__native_handle().native_id())
+            .or_insert_with(|| (Arc::new(source), Vec::new()))
+            .1
+            .push(Arc::new(scene_clone));
 
         Ok(scene_item)
     }
@@ -74,116 +94,97 @@ impl SceneItemExtSceneTrait for ObsSceneRef {
         Ok(scene_item)
     }
 
-    fn get_source_mut(&self, name: &str) -> Result<Option<Arc<Box<dyn ObsSourceTrait>>>, ObsError> {
-        let r = self
+    fn get_source(&self, name: &str) -> Result<Option<Arc<dyn ObsSourceTrait>>, ObsError> {
+        let guard = self
             .attached_scene_items
             .read()
-            .map_err(|e| ObsError::LockError(format!("{:?}", e)))?
-            .keys()
-            .find(|s| s.name() == name)
-            .cloned();
-
-        Ok(r)
+            .map_err(|e| ObsError::LockError(format!("{:?}", e)))?;
+        Ok(guard
+            .values()
+            .find(|(source, _)| source.name() == name)
+            .map(|(source, _)| source.clone()))
     }
 
     fn remove_every_item_of_source<T: ObsSourceTrait>(
         &mut self,
         source: T,
     ) -> Result<(), ObsError> {
-        let source_ptr = source.as_ptr().get_ptr();
+        self.runtime.ensure_same_runtime(source.runtime())?;
+        let source_id = source.__native_handle().native_id();
 
-        let removed = {
-            let mut guard = self
-                .attached_scene_items
-                .write()
-                .map_err(|e| ObsError::LockError(format!("{:?}", e)))?;
-            let keys = guard
-                .keys()
-                .filter(|s| s.as_ptr().get_ptr() == source_ptr)
-                .cloned()
-                .collect::<Vec<_>>();
-            keys.into_iter()
-                .filter_map(|key| guard.remove_entry(&key))
-                .collect::<Vec<_>>()
-        };
+        let mut guard = self
+            .attached_scene_items
+            .write()
+            .map_err(|e| ObsError::LockError(format!("{:?}", e)))?;
+        let items = guard
+            .get(&source_id)
+            .map(|(_, items)| items.clone())
+            .unwrap_or_default();
+        for item in items {
+            item.remove_from_scene()?;
+        }
+        guard.remove(&source_id);
 
-        // Dropping scene-item guards can synchronously call into OBS and emit
-        // item_remove signals. Never hold the map lock across that re-entrant work.
-        drop(removed);
         Ok(())
     }
 
-    fn remove_scene_item<K: SceneItemTrait>(&mut self, scene_item: K) -> Result<(), ObsError> {
-        let scene_item_ptr = scene_item.as_ptr().get_ptr();
-        let (removed_items, removed_entries) = {
-            let mut guard = self
-                .attached_scene_items
-                .write()
-                .map_err(|e| ObsError::LockError(format!("{:?}", e)))?;
-            let mut removed_items = Vec::new();
-            for items in guard.values_mut() {
-                let mut index = 0;
-                while index < items.len() {
-                    if items[index].as_ptr().get_ptr() == scene_item_ptr {
-                        removed_items.push(items.swap_remove(index));
-                    } else {
-                        index += 1;
-                    }
-                }
-            }
-            let empty_keys = guard
-                .iter()
-                .filter(|(_, items)| items.is_empty())
-                .map(|(source, _)| source.clone())
-                .collect::<Vec<_>>();
-            let removed_entries = empty_keys
-                .into_iter()
-                .filter_map(|key| guard.remove_entry(&key))
-                .collect::<Vec<_>>();
-            (removed_items, removed_entries)
-        };
+    fn remove_item<K: SceneItemTrait + ?Sized>(&mut self, scene_item: &K) -> Result<(), ObsError> {
+        self.runtime.ensure_same_runtime(&scene_item.runtime())?;
+        // Group removal needs to inspect/prune this same registry in order to invalidate child
+        // handles. Do not hold the registry lock while dispatching polymorphic removal behavior.
+        scene_item.remove_from_scene()?;
+        let mut guard = self
+            .attached_scene_items
+            .write()
+            .map_err(|e| ObsError::LockError(format!("{:?}", e)))?;
 
-        // See remove_every_item_of_source: OBS-backed values must be destroyed
-        // after releasing the bookkeeping lock.
-        drop(removed_items);
-        drop(removed_entries);
+        guard.retain(|_, (_, items)| {
+            items.retain(|item| {
+                // Keep everything except this one scene item
+                item.object_id() != scene_item.object_id()
+            });
+            // Remove the entry if no items remain
+            !items.is_empty()
+        });
+        drop(guard);
+        self.attached_groups
+            .write()
+            .map_err(|e| ObsError::LockError(format!("{e:?}")))?
+            .retain(|group| group.object_id() != scene_item.object_id());
         Ok(())
     }
 
     fn remove_all_sources(&mut self) -> Result<(), ObsError> {
-        // Move the values out under the lock, then let their OBS drop guards run
-        // only after the lock has been released.
-        let removed = {
-            let mut guard = self
-                .attached_scene_items
-                .write()
-                .map_err(|e| ObsError::LockError(format!("{:?}", e)))?;
-            std::mem::take(&mut *guard)
-        };
-        drop(removed);
+        let mut guard = self
+            .attached_scene_items
+            .write()
+            .map_err(|e| ObsError::LockError(format!("{:?}", e)))?;
+        let items = guard
+            .values()
+            .flat_map(|(_, items)| items.iter().cloned())
+            .collect::<Vec<_>>();
+        for item in items {
+            item.remove_from_scene()?;
+        }
+        guard.clear();
 
         Ok(())
     }
 
-    fn get_scene_item_ptr<T: ObsSourceTrait + Clone>(
+    fn items_for_source<T: ObsSourceTrait + Clone>(
         &self,
         source: &T,
-    ) -> Result<Vec<Arc<Box<dyn SceneItemTrait>>>, ObsError> {
+    ) -> Result<Vec<Arc<dyn SceneItemTrait>>, ObsError> {
+        self.runtime.ensure_same_runtime(source.runtime())?;
         let guard = self
             .attached_scene_items
             .read()
             .map_err(|e| ObsError::LockError(format!("{:?}", e)))?;
 
         let res = guard
-            .iter()
-            .find_map(|(s, scene_item_pointers)| {
-                if s.as_ptr().get_ptr() == source.as_ptr().get_ptr() {
-                    Some(scene_item_pointers.clone())
-                } else {
-                    None
-                }
-            })
-            .unwrap_or_else(Vec::new);
+            .get(&source.__native_handle().native_id())
+            .map(|(_, scene_items)| scene_items.clone())
+            .unwrap_or_default();
 
         Ok(res)
     }
