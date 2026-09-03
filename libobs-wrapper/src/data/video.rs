@@ -170,9 +170,8 @@ impl ObsVideoInfoBuilder {
     ///
     /// This function comes with
     /// sensible default values and chooses
-    /// the backend depending on which
-    /// if the OS supports DX11 (Windows)
-    /// or not (OpenGL on MacOS and Unix).
+    /// the backend for the current platform: DX11 on Windows, Metal on
+    /// Apple Silicon macOS, and OpenGL on Intel macOS and other Unix systems.
     pub fn new() -> Self {
         let display_infos = DisplayInfo::all().unwrap_or_default();
         let (mut width, mut height) = (1920, 1080);
@@ -186,7 +185,11 @@ impl ObsVideoInfoBuilder {
 
         Self {
             adapter: 0,
-            #[cfg(target_family = "unix")]
+            #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+            graphics_module: ObsGraphicsModule::Metal,
+            #[cfg(all(target_os = "macos", not(target_arch = "aarch64")))]
+            graphics_module: ObsGraphicsModule::OpenGL,
+            #[cfg(all(target_family = "unix", not(target_os = "macos")))]
             graphics_module: ObsGraphicsModule::OpenGL,
             #[cfg(target_family = "windows")]
             graphics_module: ObsGraphicsModule::DirectX11,
@@ -209,11 +212,14 @@ impl ObsVideoInfoBuilder {
     /// to create an `ObsVideoInfo`.
     pub fn build(self) -> ObsVideoInfo {
         let graphics_mod_str = match self.graphics_module {
-            #[cfg(not(target_os = "linux"))]
-            ObsGraphicsModule::OpenGL => ObsString::new("libobs-opengl"),
+            #[cfg(target_os = "macos")]
+            ObsGraphicsModule::OpenGL => ObsString::new("libobs-opengl.dylib"),
             #[cfg(target_os = "linux")]
             ObsGraphicsModule::OpenGL => ObsString::new(get_linux_opengl_lib_name()),
+            #[cfg(target_os = "windows")]
+            ObsGraphicsModule::OpenGL => ObsString::new("libobs-opengl"),
             ObsGraphicsModule::DirectX11 => ObsString::new("libobs-d3d11.dll"),
+            ObsGraphicsModule::Metal => ObsString::new("libobs-metal.dylib"),
         };
 
         let ovi = obs_video_info {

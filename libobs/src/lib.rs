@@ -16,6 +16,10 @@
 //! Furthermore, this crate provides a safe wrapper around the unsafe functions, which can be found in the [`libobs-wrapper`](https://crates.io/crates/libobs-wrapper) crate.
 
 #[cfg_attr(coverage_nightly, coverage(off))]
+// Bindgen emits libc declarations whose ABI-equivalent C integer types are not
+// written as Rust's `usize`; newer Rust versions lint those names as potential
+// runtime symbol overrides. These declarations are generated, not exports.
+#[allow(suspicious_runtime_symbol_definitions)]
 mod bindings {
     #[cfg(any(feature = "generate_bindings", target_family = "unix"))]
     include!(concat!(env!("OUT_DIR"), "/bindings.rs"));

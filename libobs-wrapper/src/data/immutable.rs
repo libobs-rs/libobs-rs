@@ -10,7 +10,7 @@ use crate::{
     utils::ObsError,
 };
 
-use super::{ObsData, _ObsDataDropGuard};
+use super::{_ObsDataDropGuard, ObsData};
 
 #[derive(Clone, Debug)]
 /// Immutable wrapper around obs_data_t to be prevent modification and to be used in creation of other objects.

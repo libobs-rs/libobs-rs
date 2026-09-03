@@ -1,443 +1,461 @@
 #![cfg_attr(coverage_nightly, feature(coverage_attribute))]
-// awaits and streams use unsafe internally, so I'm gonna check for unsafe blocks manually here.
 #![allow(unknown_lints, require_safety_comments_on_unsafe)]
 
-use std::{env, path::PathBuf, process};
+use std::{env, fs, path::PathBuf};
 
-use async_stream::stream;
-use download::DownloadStatus;
-use extract::ExtractStatus;
-use futures_core::Stream;
-use futures_util::{StreamExt, pin_mut};
-use libobs::LIBOBS_API_MAJOR_VER;
-use tokio::{fs::File, io::AsyncWriteExt, process::Command};
+use cargo_obs_build::{
+    ObsBuildConfig, build_obs_binaries_verified, resolve_latest_compatible_release,
+};
+use semver::Version;
 
-#[cfg_attr(coverage_nightly, coverage(off))]
-mod download;
+pub mod build;
 mod error;
-#[cfg_attr(coverage_nightly, coverage(off))]
-mod extract;
-#[cfg_attr(coverage_nightly, coverage(off))]
-mod github_types;
 mod options;
 pub mod status_handler;
 mod version;
 
-#[cfg(test)]
-mod download_tests;
 #[cfg(test)]
 mod options_tests;
 #[cfg(test)]
 mod version_tests;
 
 pub use error::ObsBootstrapError;
-
-pub use options::{ObsBootstrapperOptions, UpdateTargetMode};
+pub use options::{DEFAULT_OBS_VERSION, GITHUB_REPO, ObsBootstrapperOptions, UpdateTargetMode};
 
 use crate::status_handler::{ObsBootstrapConsoleHandler, ObsBootstrapStatusHandler};
 
+/// Progress states retained for callers that model bootstrap UI separately.
 pub enum BootstrapStatus {
-    /// Downloading status (first is progress from 0.0 to 1.0 and second is message)
     Downloading(f32, String),
-
-    /// Extracting status (first is progress from 0.0 to 1.0 and second is message)
     Extracting(f32, String),
     Error(ObsBootstrapError),
-    /// The application must be restarted to use the new version of OBS.
-    /// This is because the obs.dll file is in use by the application and can not be replaced while running.
-    /// Therefore, the "updater" is spawned to watch for the application to exit and rename the "obs_new.dll" file to "obs.dll".
-    /// The updater will start the application again with the same arguments as the original application.
+    /// Legacy state from the old PowerShell updater flow. The current
+    /// bootstrapper prepares OBS before it is loaded and never emits this.
     RestartRequired,
 }
 
-/// A struct for bootstrapping OBS Studio.
+/// Explicit OBS runtime provisioning and local-installation inspection.
 ///
-/// This struct provides functionality to download, extract, and set up OBS Studio
-/// for use with libobs-rs. It also handles updates to OBS when necessary.
-///
-/// If you want to use this bootstrapper to also install required OBS binaries at runtime,
-/// do the following:
-/// - Add a `obs.dll` file to your executable directory. This file will be replaced by the obs installer.
-///   Recommended to use is the dll dummy (found [here](https://github.com/sshcrack/libobs-builds/releases), make sure you use the correct OBS version)
-///   and rename it to `obs.dll`.
-/// - Call `ObsBootstrapper::bootstrap()` at the start of your application. Options must be configured. For more documentation look at the [tauri example app](https://github.com/libobs-rs/libobs-rs/tree/main/examples/tauri-app). This will download the latest version of OBS and extract it in the executable directory.
-/// - If BootstrapStatus::RestartRequired is returned, you'll need to restart your application. A updater process has been spawned to watch for the application to exit and rename the `obs_new.dll` file to `obs.dll`.
-/// - Exit the application. The updater process will wait for the application to exit and rename the `obs_new.dll` file to `obs.dll` and restart your application with the same arguments as before.
-///
-/// [Example project](https://github.com/libobs-rs/libobs-rs/tree/main/examples/download-at-runtime)
+/// Calling [`ObsBootstrapper::bootstrap`] is the opt-in operation that may use
+/// the network. Merely depending on this crate or inspecting an installation
+/// never downloads or executes anything.
 pub struct ObsBootstrapper {}
 
-pub(crate) const LIBRARY_OBS_VERSION: &str = libobs::SUPPORTED_OBS_VERSION;
+#[derive(Debug)]
+struct BootstrapPlan {
+    install_dir: PathBuf,
+    cache_dir: PathBuf,
+    repository: String,
+    target_version: Version,
+}
 
-pub const UPDATER_SCRIPT: &str = include_str!("./updater.ps1");
-
-fn get_obs_dll_path() -> Result<PathBuf, ObsBootstrapError> {
+fn default_install_dir() -> Result<PathBuf, ObsBootstrapError> {
     let executable =
         env::current_exe().map_err(|e| ObsBootstrapError::IoError("Getting current exe", e))?;
-    let obs_dll = executable
-        .parent()
-        .ok_or_else(|| {
-            ObsBootstrapError::IoError(
-                "Failed to get parent directory",
-                std::io::Error::from(std::io::ErrorKind::InvalidInput),
-            )
-        })?
-        .join("obs.dll");
-
-    Ok(obs_dll)
+    executable.parent().map(PathBuf::from).ok_or_else(|| {
+        ObsBootstrapError::IoError(
+            "Failed to get executable parent directory",
+            std::io::Error::from(std::io::ErrorKind::InvalidInput),
+        )
+    })
 }
 
-pub(crate) fn bootstrap(
-    options: &ObsBootstrapperOptions,
-) -> Result<Option<impl Stream<Item = BootstrapStatus>>, ObsBootstrapError> {
-    let repo = options.repository.to_string();
-
-    log::trace!("Checking for update...");
-    let installed = version::get_installed_version(&get_obs_dll_path()?)?;
-
-    let update = if options.update {
-        if let Some(installed_version) = &installed {
-            if !version::is_compatible_major(installed_version)? {
-                log::warn!(
-                    "Installed OBS major version ({}) does not match required major ({}); skipping automatic update.",
-                    installed_version,
-                    LIBOBS_API_MAJOR_VER
-                );
-                false
-            } else {
-                true
-            }
-        } else {
-            true
-        }
-    } else {
-        installed.is_none()
-    };
-
-    if !update {
-        log::debug!("No update needed.");
-        return Ok(None);
-    }
-
-    let options = options.clone();
-    Ok(Some(stream! {
-        let resolved_release = download::resolve_latest_compatible_release(&repo, options.update_target_mode).await;
-        if let Err(err) = resolved_release {
-            yield BootstrapStatus::Error(err);
-            return;
-        }
-
-        let resolved_release = resolved_release.unwrap();
-
-        if let Some(installed_version) = installed.as_deref() {
-            let should_update = version::should_update(installed_version, &resolved_release.version);
-            if let Err(err) = should_update {
-                yield BootstrapStatus::Error(err);
-                return;
-            }
-
-            if !should_update.unwrap() {
-                log::debug!(
-                    "No update needed; installed OBS version {} is up-to-date for compatible target {}.",
-                    installed_version,
-                    resolved_release.version
-                );
-                return;
-            }
-        }
-
-        log::debug!("Downloading OBS from {}", repo);
-        let download_stream = download::download_obs(&resolved_release).await;
-        if let Err(err) = download_stream {
-            yield BootstrapStatus::Error(err);
-            return;
-        }
-
-        let download_stream = download_stream.unwrap();
-        pin_mut!(download_stream);
-
-        let mut file = None;
-        while let Some(item) = download_stream.next().await {
-            match item {
-                DownloadStatus::Error(err) => {
-                    yield BootstrapStatus::Error(err);
-                    return;
-                }
-                DownloadStatus::Progress(progress, message) => {
-                    yield BootstrapStatus::Downloading(progress, message);
-                }
-                DownloadStatus::Done(path) => {
-                    file = Some(path)
-                }
-            }
-        }
-
-        let archive_file = file.ok_or(ObsBootstrapError::InvalidState);
-        if let Err(err) = archive_file {
-            yield BootstrapStatus::Error(err);
-            return;
-        }
-
-        log::debug!("Extracting OBS to {:?}", archive_file);
-        let archive_file = archive_file.unwrap();
-        let extract_stream = extract::extract_obs(&archive_file).await;
-        if let Err(err) = extract_stream {
-            yield BootstrapStatus::Error(err);
-            return;
-        }
-
-        let extract_stream = extract_stream.unwrap();
-        pin_mut!(extract_stream);
-
-        while let Some(item) = extract_stream.next().await {
-            match item {
-                ExtractStatus::Error(err) => {
-                    yield BootstrapStatus::Error(err);
-                    return;
-                }
-                ExtractStatus::Progress(progress, message) => {
-                    yield BootstrapStatus::Extracting(progress, message);
-                }
-            }
-        }
-
-        let r = spawn_updater(options).await;
-        if let Err(err) = r {
-            yield BootstrapStatus::Error(err);
-            return;
-        }
-
-        yield BootstrapStatus::RestartRequired;
-    }))
+fn resolve_install_dir(options: &ObsBootstrapperOptions) -> Result<PathBuf, ObsBootstrapError> {
+    options
+        .get_install_dir()
+        .cloned()
+        .map(Ok)
+        .unwrap_or_else(default_install_dir)
 }
 
-pub(crate) async fn spawn_updater(
-    options: ObsBootstrapperOptions,
-) -> Result<(), ObsBootstrapError> {
-    let pid = process::id();
-    let args = env::args().collect::<Vec<_>>();
-    // Skip the first argument which is the executable path
-    let args = args.into_iter().skip(1).collect::<Vec<_>>();
+fn resolve_cache_dir(options: &ObsBootstrapperOptions, install_dir: &std::path::Path) -> PathBuf {
+    options
+        .get_cache_dir()
+        .cloned()
+        .unwrap_or_else(|| install_dir.join(".libobs-bootstrap-cache"))
+}
 
-    let updater_path = env::temp_dir().join("libobs_updater.ps1");
-    let mut updater_file = File::create(&updater_path)
-        .await
-        .map_err(|e| ObsBootstrapError::IoError("Creating updater script", e))?;
-
-    updater_file
-        .write_all(UPDATER_SCRIPT.as_bytes())
-        .await
-        .map_err(|e| ObsBootstrapError::IoError("Writing updater script", e))?;
-
-    let mut command = Command::new("powershell");
-    command
-        .arg("-ExecutionPolicy")
-        .arg("Bypass")
-        .arg("-NoProfile")
-        .arg("-WindowStyle")
-        .arg("Hidden")
-        .arg("-File")
-        .arg(updater_path)
-        .arg("-processPid")
-        .arg(pid.to_string())
-        .arg("-binary")
-        .arg(
-            env::current_exe()
-                .map_err(|e| ObsBootstrapError::IoError("Getting current exe", e))?
-                .to_string_lossy()
+fn get_obs_library_path(install_dir: &std::path::Path) -> Result<PathBuf, ObsBootstrapError> {
+    match env::consts::OS {
+        "windows" => Ok(install_dir.join("obs.dll")),
+        "macos" => Ok(install_dir.join("libobs.framework/Versions/A/libobs")),
+        "linux" => Err(ObsBootstrapError::UnsupportedPlatform(
+            "Linux uses the system/source libobs integration rather than a portable runtime"
                 .to_string(),
-        );
-
-    if options.restart_after_update {
-        command.arg("-restart");
+        )),
+        other => Err(ObsBootstrapError::UnsupportedPlatform(other.to_string())),
     }
+}
 
-    // Encode arguments as hex string (UTF-8, null-separated)
-    if !args.is_empty() {
-        let joined = args.join("\0");
-        let bytes = joined.as_bytes();
-        let hex_str = hex::encode(bytes);
-        command.arg("-argumentHex");
-        command.arg(hex_str);
+fn get_obs_library_path_with_options(
+    options: &ObsBootstrapperOptions,
+) -> Result<PathBuf, ObsBootstrapError> {
+    get_obs_library_path(&resolve_install_dir(options)?)
+}
+
+#[cfg(target_os = "windows")]
+fn ensure_obs_not_loaded() -> Result<(), ObsBootstrapError> {
+    if libloading::os::windows::Library::open_already_loaded("obs.dll").is_ok() {
+        return Err(ObsBootstrapError::RuntimeAlreadyLoaded);
     }
-
-    command
-        .spawn()
-        .map_err(|e| ObsBootstrapError::IoError("Spawning updater process", e))?;
-
     Ok(())
 }
 
+#[cfg(target_os = "macos")]
+fn ensure_obs_not_loaded() -> Result<(), ObsBootstrapError> {
+    use std::ffi::CStr;
+
+    unsafe extern "C" {
+        fn _dyld_image_count() -> u32;
+        fn _dyld_get_image_name(image_index: u32) -> *const std::ffi::c_char;
+    }
+
+    // A directly linked macOS executable has libobs.framework mapped by dyld
+    // before main(). Refuse to replace it in-process; a bootstrap launcher that
+    // does not link libobs will not contain this image and may proceed safely.
+    unsafe {
+        for index in 0.._dyld_image_count() {
+            let image = _dyld_get_image_name(index);
+            if image.is_null() {
+                continue;
+            }
+            let image = CStr::from_ptr(image).to_string_lossy();
+            if image.contains("/libobs.framework/") {
+                return Err(ObsBootstrapError::RuntimeAlreadyLoaded);
+            }
+        }
+    }
+    Ok(())
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+fn ensure_obs_not_loaded() -> Result<(), ObsBootstrapError> {
+    Ok(())
+}
+
+fn resolve_target_version(
+    options: &ObsBootstrapperOptions,
+    cache_dir: &std::path::Path,
+) -> Result<Version, ObsBootstrapError> {
+    let configured = options.get_target_version();
+    let resolved_tag = match options.get_update_target_mode() {
+        UpdateTargetMode::Exact => return Ok(configured.clone()),
+        UpdateTargetMode::LatestCompatibleSameMajor => resolve_latest_compatible_release(
+            options.get_repository(),
+            configured.major as u32,
+            None,
+            cache_dir,
+        ),
+        UpdateTargetMode::LatestCompatibleSameMajorMinor => resolve_latest_compatible_release(
+            options.get_repository(),
+            configured.major as u32,
+            Some(configured.minor as u32),
+            cache_dir,
+        ),
+    }
+    .map_err(|e| ObsBootstrapError::GeneralError(e.to_string()))?
+    .ok_or_else(|| {
+        ObsBootstrapError::VersionError(format!(
+            "No compatible OBS release found for {} using {:?}",
+            configured,
+            options.get_update_target_mode()
+        ))
+    })?;
+
+    let resolved = Version::parse(resolved_tag.trim_start_matches('v')).map_err(|e| {
+        ObsBootstrapError::VersionError(format!("Invalid OBS release tag {resolved_tag:?}: {e}"))
+    })?;
+    if resolved.major != configured.major
+        || matches!(
+            options.get_update_target_mode(),
+            UpdateTargetMode::LatestCompatibleSameMajorMinor
+        ) && resolved.minor != configured.minor
+    {
+        return Err(ObsBootstrapError::VersionError(format!(
+            "Resolved OBS release {resolved} is outside the requested compatibility line"
+        )));
+    }
+    Ok(resolved)
+}
+
+fn installation_satisfies_policy(
+    installed: &str,
+    target: &Version,
+    mode: UpdateTargetMode,
+) -> Result<bool, ObsBootstrapError> {
+    let installed_version = version::parse_version(installed)?;
+    Ok(match mode {
+        UpdateTargetMode::Exact => installed_version == *target,
+        UpdateTargetMode::LatestCompatibleSameMajor => {
+            installed_version.major == target.major && !version::should_update(installed, target)?
+        }
+        UpdateTargetMode::LatestCompatibleSameMajorMinor => {
+            installed_version.major == target.major
+                && installed_version.minor == target.minor
+                && !version::should_update(installed, target)?
+        }
+    })
+}
+
+fn needs_provision(
+    installed: Option<&str>,
+    target: &Version,
+    mode: UpdateTargetMode,
+    update_enabled: bool,
+) -> Result<bool, ObsBootstrapError> {
+    let Some(installed) = installed else {
+        return Ok(true);
+    };
+    if installation_satisfies_policy(installed, target, mode)? {
+        return Ok(false);
+    }
+    if !update_enabled {
+        return Err(ObsBootstrapError::VersionError(format!(
+            "Installed OBS {installed} does not satisfy target {target} under {mode:?}, and updates are disabled"
+        )));
+    }
+    Ok(true)
+}
+
+fn plan_bootstrap(
+    options: &ObsBootstrapperOptions,
+) -> Result<Option<BootstrapPlan>, ObsBootstrapError> {
+    match env::consts::OS {
+        "windows" | "macos" => {}
+        "linux" => {
+            return Err(ObsBootstrapError::UnsupportedPlatform(
+                "Linux should install a compatible system libobs instead of runtime bootstrapping"
+                    .to_string(),
+            ));
+        }
+        other => return Err(ObsBootstrapError::UnsupportedPlatform(other.to_string())),
+    }
+
+    ensure_obs_not_loaded()?;
+    let install_dir = resolve_install_dir(options)?;
+    let cache_dir = resolve_cache_dir(options, &install_dir);
+    let target_version = resolve_target_version(options, &cache_dir)?;
+    let library_path = get_obs_library_path(&install_dir)?;
+
+    let installed = match version::get_installed_version(&library_path) {
+        Ok(version) => version,
+        Err(error) if options.get_update() => {
+            log::warn!(
+                "Existing OBS runtime at {} could not be inspected ({error}); replacing it",
+                library_path.display()
+            );
+            None
+        }
+        Err(error) => return Err(error),
+    };
+
+    if !needs_provision(
+        installed.as_deref(),
+        &target_version,
+        options.get_update_target_mode(),
+        options.get_update(),
+    )? {
+        return Ok(None);
+    }
+
+    Ok(Some(BootstrapPlan {
+        install_dir,
+        cache_dir,
+        repository: options.get_repository().to_string(),
+        target_version,
+    }))
+}
+
+fn execute_bootstrap(plan: BootstrapPlan) -> Result<Version, ObsBootstrapError> {
+    fs::create_dir_all(&plan.install_dir)
+        .map_err(|e| ObsBootstrapError::IoError("Creating OBS install directory", e))?;
+    fs::create_dir_all(&plan.cache_dir)
+        .map_err(|e| ObsBootstrapError::IoError("Creating OBS cache directory", e))?;
+
+    let config = ObsBuildConfig {
+        out_dir: plan.install_dir.clone(),
+        target: None,
+        cache_dir: Some(plan.cache_dir),
+        repo_id: Some(plan.repository),
+        override_zip: None,
+        rebuild: false,
+        browser: false,
+        tag: Some(plan.target_version.to_string()),
+        // The bootstrapper itself owns the target version decision, and does
+        // not depend on the native libobs crate or Cargo metadata at runtime.
+        skip_compatibility_check: true,
+        remove_pdbs: true,
+    };
+    build_obs_binaries_verified(config)
+        .map_err(|e| ObsBootstrapError::GeneralError(e.to_string()))?;
+
+    let library_path = get_obs_library_path(&plan.install_dir)?;
+    let installed = version::get_installed_version(&library_path)?
+        .ok_or_else(|| ObsBootstrapError::InvalidState)?;
+    let installed = version::parse_version(&installed)?;
+    if installed != plan.target_version {
+        return Err(ObsBootstrapError::VersionError(format!(
+            "Prepared OBS runtime is {installed}, expected exactly {}",
+            plan.target_version
+        )));
+    }
+
+    Ok(installed)
+}
+
 pub enum ObsBootstrapperResult {
-    /// No action was needed, OBS is already installed and up to date.
+    /// The already-installed runtime satisfied the configured requirement.
     None,
-    /// The application must be restarted to complete the installation or update of OBS.
+    /// A verified OBS runtime was installed or updated and the process may
+    /// proceed to its first OBS call.
+    Provisioned,
+    /// Legacy variant from the updater-script design. The current implementation
+    /// never emits this because files are prepared before OBS is loaded.
+    #[deprecated(note = "runtime provisioning no longer requires an automatic restart")]
     Restart,
 }
 
-/// A convenience type that exposes high-level helpers to detect, update and
-/// bootstrap an OBS installation.
-///
-/// The bootstrapper coordinates version checks and the streaming bootstrap
-/// process. It does not itself perform low-level network or extraction work;
-/// instead it delegates to internal modules (version checking and the
-/// bootstrap stream) and surfaces a simple API for callers.
 impl ObsBootstrapper {
-    /// Returns true if a valid OBS installation (as determined by locating the
-    /// OBS DLL and querying the installed version) is present on the system.
-    ///
-    /// # Returns
-    ///
-    /// - `Ok(true)` if an installed OBS version could be detected.
-    /// - `Ok(false)` if no installed OBS version was found.
-    ///
-    /// # Errors
-    ///
-    /// Returns an `Err(ObsBootstrapError)` if there was an error locating the OBS DLL or
-    /// reading the installed version information.
+    /// Checks the default executable-adjacent installation location without
+    /// performing network I/O.
     pub fn is_valid_installation() -> Result<bool, ObsBootstrapError> {
-        let installed = version::get_installed_version(&get_obs_dll_path()?)?;
-        if installed.is_none() {
-            log::trace!("No valid OBS installation found");
-            return Ok(false);
-        }
-
-        Ok(true)
+        Self::is_valid_installation_with_options(&ObsBootstrapperOptions::default())
     }
 
-    /// Returns true when an update to OBS should be performed.
-    ///
-    /// The function first checks whether OBS is installed. If no installation
-    /// is found it treats that as an available update (returns `Ok(true)`).
-    /// Otherwise it consults the internal version logic to determine whether
-    /// the installed version should be updated.
-    ///
-    /// # Returns
-    ///
-    /// - `Ok(true)` when an update is recommended or when OBS is not installed.
-    /// - `Ok(false)` when the installed version is up-to-date.
-    ///
-    /// # Errors
-    ///
-    /// Returns an `Err(ObsBootstrapError)` if there was an error locating the OBS DLL or
-    /// determining the currently installed version or update necessity.
+    /// Checks the installation location selected by `options` without network I/O.
+    pub fn is_valid_installation_with_options(
+        options: &ObsBootstrapperOptions,
+    ) -> Result<bool, ObsBootstrapError> {
+        Ok(version::get_installed_version(&get_obs_library_path_with_options(options)?)?.is_some())
+    }
+
+    /// Compares the default local runtime with the configured default target.
+    /// This is local-only and does not query GitHub.
     pub fn is_update_available() -> Result<bool, ObsBootstrapError> {
-        let installed = version::get_installed_version(&get_obs_dll_path()?)?;
-        if installed.is_none() {
-            log::trace!("No OBS installation found, treating as update available");
+        Self::is_update_available_with_options(&ObsBootstrapperOptions::default())
+    }
+
+    /// Compares a local runtime with `options.target_version` without network I/O.
+    pub fn is_update_available_with_options(
+        options: &ObsBootstrapperOptions,
+    ) -> Result<bool, ObsBootstrapError> {
+        let Some(installed) =
+            version::get_installed_version(&get_obs_library_path_with_options(options)?)?
+        else {
             return Ok(true);
-        }
-
-        let installed = installed.unwrap();
-        if !version::is_compatible_major(&installed)? {
-            log::warn!(
-                "Installed OBS major version ({}) does not match required major ({}); not counting as update.",
-                installed,
-                LIBOBS_API_MAJOR_VER
-            );
-            return Ok(false);
-        }
-
-        Ok(true)
+        };
+        Ok(!installation_satisfies_policy(
+            &installed,
+            options.get_target_version(),
+            options.get_update_target_mode(),
+        )?)
     }
 
-    /// Bootstraps OBS using the provided options and a default console status
-    /// handler.
+    /// Explicitly provisions OBS using the configured release policy.
     ///
-    /// This is a convenience wrapper around `bootstrap_with_handler` that
-    /// supplies an `ObsBootstrapConsoleHandler` as the status consumer.
-    ///
-    /// # Returns
-    ///
-    /// - `Ok(ObsBootstrapperResult::None)` if no action was necessary.
-    /// - `Ok(ObsBootstrapperResult::Restart)` if the bootstrap completed and a
-    ///   restart is required.
-    ///
-    /// # Errors
-    ///
-    /// Returns `Err(ObsBootstrapError)` for any failure that prevents the
-    /// bootstrap from completing (download failures, extraction failures,
-    /// general errors).
+    /// This is the operation that may access the network. Downloaded official
+    /// release assets must advertise a SHA-256 checksum/digest and are verified
+    /// before extraction. No helper process is spawned and the application is
+    /// never restarted automatically.
     pub async fn bootstrap(
-        options: &options::ObsBootstrapperOptions,
+        options: &ObsBootstrapperOptions,
     ) -> Result<ObsBootstrapperResult, ObsBootstrapError> {
-        ObsBootstrapper::bootstrap_with_handler(
-            options,
-            Box::new(ObsBootstrapConsoleHandler::default()),
-        )
-        .await
+        Self::bootstrap_with_handler(options, Box::new(ObsBootstrapConsoleHandler::default())).await
     }
 
-    /// Bootstraps OBS using the provided options and a custom status handler.
-    ///
-    /// The handler will receive progress updates as the bootstrap stream emits
-    /// statuses. The method drives the bootstrap stream to completion and maps
-    /// stream statuses into handler calls or final results:
-    ///
-    /// - `BootstrapStatus::Downloading(progress, message)` → calls
-    ///   `handler.handle_downloading(progress, message)`. Handler errors are
-    ///   mapped to `ObsBootstrapError::DownloadError`.
-    /// - `BootstrapStatus::Extracting(progress, message)` → calls
-    ///   `handler.handle_extraction(progress, message)`. Handler errors are
-    ///   mapped to `ObsBootstrapError::ExtractError`.
-    /// - `BootstrapStatus::Error(err)` → returns `Err(ObsBootstrapError::GeneralError(_))`.
-    /// - `BootstrapStatus::RestartRequired` → returns `Ok(ObsBootstrapperResult::Restart)`.
-    ///
-    /// If the underlying `bootstrap(options)` call returns `None` there is
-    /// nothing to do and the function returns `Ok(ObsBootstrapperResult::None)`.
-    ///
-    /// # Parameters
-    ///
-    /// - `options`: configuration that controls download/extraction behavior.
-    /// - `handler`: user-provided boxed trait object that receives progress
-    ///   notifications; it is called on each progress update and can fail.
-    ///
-    /// # Returns
-    ///
-    /// - `Ok(ObsBootstrapperResult::None)` when no work was required or the
-    ///   stream completed without requiring a restart.
-    /// - `Ok(ObsBootstrapperResult::Restart)` when the bootstrap succeeded and
-    ///   a restart is required.
-    ///
-    /// # Errors
-    ///
-    /// Returns `Err(ObsBootstrapError)` when:
-    /// - the bootstrap pipeline could not be started,
-    /// - the handler returns an error while handling a download or extraction
-    ///   update (mapped respectively to `DownloadError` / `ExtractError`),
-    /// - or when the bootstrap stream yields a general error.
+    /// Same as [`Self::bootstrap`], with custom progress notifications.
     pub async fn bootstrap_with_handler<E: Send + Sync + 'static + std::error::Error>(
-        options: &options::ObsBootstrapperOptions,
+        options: &ObsBootstrapperOptions,
         mut handler: Box<dyn ObsBootstrapStatusHandler<Error = E>>,
     ) -> Result<ObsBootstrapperResult, ObsBootstrapError> {
-        let stream = bootstrap(options)?;
+        let options_for_plan = options.clone();
+        let plan = tokio::task::spawn_blocking(move || plan_bootstrap(&options_for_plan))
+            .await
+            .map_err(|e| {
+                ObsBootstrapError::GeneralError(format!("Bootstrap planning task failed: {e}"))
+            })??;
 
-        if let Some(stream) = stream {
-            pin_mut!(stream);
+        let Some(plan) = plan else {
+            return Ok(ObsBootstrapperResult::None);
+        };
 
-            log::trace!("Waiting for bootstrapper to finish");
-            while let Some(item) = stream.next().await {
-                match item {
-                    BootstrapStatus::Downloading(progress, message) => {
-                        handler
-                            .handle_downloading(progress, message)
-                            .map_err(|e| ObsBootstrapError::Abort(Box::new(e)))?;
-                    }
-                    BootstrapStatus::Extracting(progress, message) => {
-                        handler
-                            .handle_extraction(progress, message)
-                            .map_err(|e| ObsBootstrapError::Abort(Box::new(e)))?;
-                    }
-                    BootstrapStatus::Error(err) => {
-                        return Err(err);
-                    }
-                    BootstrapStatus::RestartRequired => {
-                        return Ok(ObsBootstrapperResult::Restart);
-                    }
-                }
-            }
+        handler
+            .handle_downloading(0.0, "Preparing verified OBS release".to_string())
+            .map_err(|e| ObsBootstrapError::Abort(Box::new(e)))?;
+        handler
+            .handle_extraction(0.0, "Staging OBS runtime".to_string())
+            .map_err(|e| ObsBootstrapError::Abort(Box::new(e)))?;
+
+        let installed = tokio::task::spawn_blocking(move || execute_bootstrap(plan))
+            .await
+            .map_err(|e| {
+                ObsBootstrapError::GeneralError(format!("Bootstrap worker failed: {e}"))
+            })??;
+
+        handler
+            .handle_downloading(1.0, format!("Verified OBS {installed}"))
+            .map_err(|e| ObsBootstrapError::Abort(Box::new(e)))?;
+        handler
+            .handle_extraction(1.0, format!("OBS {installed} is ready"))
+            .map_err(|e| ObsBootstrapError::Abort(Box::new(e)))?;
+
+        Ok(ObsBootstrapperResult::Provisioned)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn provisioning_decision_respects_version_policy() {
+        let target = Version::new(32, 1, 0);
+        assert!(!needs_provision(Some("32.1.0"), &target, UpdateTargetMode::Exact, false).unwrap());
+        assert!(needs_provision(None, &target, UpdateTargetMode::Exact, false).unwrap());
+        assert!(needs_provision(Some("32.2.0"), &target, UpdateTargetMode::Exact, true).unwrap());
+        assert!(
+            !needs_provision(
+                Some("32.2.0"),
+                &target,
+                UpdateTargetMode::LatestCompatibleSameMajor,
+                false
+            )
+            .unwrap()
+        );
+        assert!(
+            needs_provision(
+                Some("32.2.0"),
+                &target,
+                UpdateTargetMode::LatestCompatibleSameMajorMinor,
+                true
+            )
+            .unwrap()
+        );
+        assert!(needs_provision(Some("32.0.0"), &target, UpdateTargetMode::Exact, false).is_err());
+        assert!(needs_provision(Some("31.9.9"), &target, UpdateTargetMode::Exact, false).is_err());
+    }
+
+    #[test]
+    fn default_version_stays_in_sync_with_vendored_obs_headers() {
+        let header = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../libobs/headers/obs/obs-config.h");
+        if !header.is_file() {
+            return;
         }
-
-        Ok(ObsBootstrapperResult::None)
+        let text = std::fs::read_to_string(header).unwrap();
+        let number = |name: &str| -> u64 {
+            text.lines()
+                .find_map(|line| {
+                    line.strip_prefix(&format!("#define {name} "))
+                        .and_then(|value| value.trim().parse().ok())
+                })
+                .unwrap()
+        };
+        let expected = Version::new(
+            number("LIBOBS_API_MAJOR_VER"),
+            number("LIBOBS_API_MINOR_VER"),
+            number("LIBOBS_API_PATCH_VER"),
+        );
+        assert_eq!(Version::parse(DEFAULT_OBS_VERSION).unwrap(), expected);
     }
 }

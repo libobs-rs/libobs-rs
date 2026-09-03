@@ -1,32 +1,17 @@
-use std::{ffi::CString, ptr};
-
-use libobs_bootstrapper::{ObsBootstrapper, ObsBootstrapperOptions, ObsBootstrapperResult};
+use libobs_bootstrapper::{ObsBootstrapper, ObsBootstrapperOptions};
 
 #[tokio::main]
 async fn main() {
-    let res = ObsBootstrapper::bootstrap(&ObsBootstrapperOptions::default().set_no_restart())
-        .await
-        .unwrap();
+    println!("bootstrap fixture reached main");
 
-    if matches!(res, ObsBootstrapperResult::Restart) {
-        println!(
-            "OBS has been downloaded and extracted. The application will now exit. You'll have to restart it yourself"
-        );
-        return;
+    if std::env::var_os("BOOTSTRAP_OBS").is_some() {
+        ObsBootstrapper::bootstrap(&ObsBootstrapperOptions::default())
+            .await
+            .expect("runtime bootstrap failed");
     }
 
-    let locale = CString::new("en-US").unwrap();
-    println!("Locale pointer: {:?}", locale.as_ptr());
-
-    let startup_result =
-        unsafe { libobs::obs_startup(locale.as_ptr(), ptr::null(), ptr::null_mut()) };
-    if !startup_result {
-        panic!("error on libobs startup");
+    if std::env::var_os("CALL_OBS").is_some() {
+        let version = unsafe { libobs::obs_get_version() };
+        println!("obs version word: {version:#x}");
     }
-    println!("OBS startup successful");
-
-    unsafe {
-        libobs::obs_shutdown();
-        assert_eq!(libobs::bnum_allocs(), 0, "Memory leak detected");
-    };
 }

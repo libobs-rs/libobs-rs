@@ -1,4 +1,4 @@
-use std::{collections::HashMap, str::FromStr, sync::Arc};
+use std::{collections::HashMap, ffi::CStr, str::FromStr, sync::Arc};
 
 use duplicate::duplicate_item;
 
@@ -7,8 +7,8 @@ use crate::{
     data::{
         output::{ObsOutputRef, ObsOutputTrait},
         properties::{
-            ObsProperty, ObsPropertyObject, ObsPropertyObjectPrivate, _ObsPropertiesDropGuard,
-            property_ptr_to_struct,
+            _ObsPropertiesDropGuard, property_ptr_to_struct, ObsProperty, ObsPropertyObject,
+            ObsPropertyObjectPrivate,
         },
         ObsData,
     },
@@ -101,6 +101,40 @@ impl ObsAudioEncoderBuilder {
 }
 
 impl ObsVideoEncoderBuilder {
+    /// Returns the codec advertised by libobs for this encoder type.
+    ///
+    /// Dynamic encoder plugins such as macOS VideoToolbox can register different
+    /// IDs on different machines, so callers should use this metadata rather than
+    /// inferring the codec from an encoder ID.
+    pub fn get_encoder_codec(&self) -> Result<Option<String>, ObsError> {
+        let encoder_name: ObsString = self.encoder_id.clone().into();
+        run_with_obs!(self.runtime, (encoder_name), move || unsafe {
+            // Safety: encoder_name owns the NUL-terminated ID for the duration of
+            // this call. libobs owns the returned codec string.
+            let codec = libobs::obs_get_encoder_codec(encoder_name.as_ptr().0);
+            if codec.is_null() {
+                None
+            } else {
+                Some(CStr::from_ptr(codec).to_string_lossy().into_owned())
+            }
+        })
+    }
+
+    /// Returns the display name advertised by libobs for this encoder type.
+    pub fn get_encoder_display_name(&self) -> Result<Option<String>, ObsError> {
+        let encoder_name: ObsString = self.encoder_id.clone().into();
+        run_with_obs!(self.runtime, (encoder_name), move || unsafe {
+            // Safety: encoder_name remains alive for the call and libobs owns the
+            // returned display-name string.
+            let name = libobs::obs_encoder_get_display_name(encoder_name.as_ptr().0);
+            if name.is_null() {
+                None
+            } else {
+                Some(CStr::from_ptr(name).to_string_lossy().into_owned())
+            }
+        })
+    }
+
     pub fn set_to_output(
         self,
         output: &mut ObsOutputRef,

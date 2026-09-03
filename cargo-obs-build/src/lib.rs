@@ -1,5 +1,5 @@
 use git::{fetch_latest_patch_release, fetch_release, ReleaseInfo};
-use lock::{acquire_lock, wait_for_lock};
+use lock::acquire_lock;
 use log::{debug, info, warn};
 use metadata::fetch_latest_release_tag;
 use std::{
@@ -13,15 +13,30 @@ use walkdir::WalkDir;
 pub use lib_version::get_lib_obs_version;
 
 use download::download_binaries;
-use target::{ObsTarget, ObsTargetOs};
+use target::{ObsBuildTarget, ObsTargetOs};
 use zip::ZipArchive;
 
 pub use metadata::get_meta_info;
+
+/// Resolves the newest non-prerelease OBS release for `major`, optionally
+/// constrained to a specific `minor` line.
+///
+/// This is primarily useful to consumers such as `libobs-bootstrapper` that
+/// need release selection without depending on the native `libobs` crate.
+pub fn resolve_latest_compatible_release(
+    repo_id: &str,
+    major: u32,
+    minor: Option<u32>,
+    cache_dir: &Path,
+) -> anyhow::Result<Option<String>> {
+    git::fetch_latest_compatible_release(repo_id, major, minor, cache_dir)
+}
 
 mod download;
 mod git;
 mod lib_version;
 mod lock;
+mod macos;
 mod metadata;
 mod target;
 mod util;
@@ -70,7 +85,9 @@ Ignore if this is the first run.",
         }
         println!("cargo:warning=");
         println!("cargo:warning=For detailed setup instructions, see:");
-        println!("cargo:warning=https://github.com/libobs-rs/libobs-rs/blob/main/cargo-obs-build/CI_SETUP.md");
+        println!(
+            "cargo:warning=https://github.com/libobs-rs/libobs-rs/blob/main/cargo-obs-build/CI_SETUP.md"
+        );
         println!("cargo:warning=");
     }
 }
@@ -176,11 +193,40 @@ pub fn install() -> anyhow::Result<()> {
 /// - Locking to prevent concurrent builds
 /// - Copying binaries to the target directory
 pub fn build_obs_binaries(config: ObsBuildConfig) -> anyhow::Result<()> {
+    build_obs_binaries_inner(config, false)
+}
+
+/// Prepares OBS binaries while requiring an advertised SHA-256 checksum/digest
+/// for every downloaded release asset.
+///
+/// Unlike [`build_obs_binaries`], this refuses to use an unverified download.
+/// It is intended for runtime provisioning and other flows where silently
+/// accepting an asset without integrity metadata would be unsafe.
+pub fn build_obs_binaries_verified(config: ObsBuildConfig) -> anyhow::Result<()> {
+    if config.override_zip.is_some() {
+        return Err(anyhow::anyhow!(
+            "verified OBS preparation does not accept an unverified override archive"
+        ));
+    }
+    build_obs_binaries_inner(config, true)
+}
+
+fn build_obs_binaries_inner(config: ObsBuildConfig, require_checksum: bool) -> anyhow::Result<()> {
+    // PR 187 adds explicit target support; keep main's env-var detection as fallback.
+    let explicit = config.target.clone();
+    let target = ObsBuildTarget::detect_with_explicit(explicit.as_deref())?;
+    if target.os == ObsTargetOs::Linux {
+        return Err(anyhow::anyhow!(
+            "Linux uses a system/source OBS installation. Run `cargo obs-build install` on Debian/Ubuntu or install a compatible libobs development package for your distro."
+        ));
+    }
+    target.require_native_macos_host()?;
+
     let ObsBuildConfig {
         mut cache_dir,
         repo_id,
         out_dir,
-        target,
+        target: _explicit_target,
         rebuild,
         browser,
         mut tag,
@@ -188,23 +234,6 @@ pub fn build_obs_binaries(config: ObsBuildConfig) -> anyhow::Result<()> {
         skip_compatibility_check,
         remove_pdbs,
     } = config;
-
-    let target = ObsTarget::detect(target.as_deref())?;
-    match target.os {
-        ObsTargetOs::Linux => {
-            return Err(anyhow::anyhow!(
-                "Target `{}` requires a system/source libobs installation; cargo-obs-build does not download Linux archives",
-                target.triple()
-            ));
-        }
-        ObsTargetOs::MacOs => {
-            return Err(anyhow::anyhow!(
-                "Target `{}` is macOS; Windows OBS archives are not valid for this target and macOS prebuilt support is not implemented yet",
-                target.triple()
-            ));
-        }
-        ObsTargetOs::Windows => {}
-    }
 
     // Get metadata which may update cache_dir and tag
     metadata::get_meta_info(&mut cache_dir, &mut tag)?;
@@ -312,11 +341,14 @@ pub fn build_obs_binaries(config: ObsBuildConfig) -> anyhow::Result<()> {
     let build_out = repo_dir.join("build_out");
     let lock_file = cache_dir.join(format!("{}.lock", tag));
     let success_file = repo_dir.join(".success");
+    let verified_file = repo_dir.join(".verified");
 
-    wait_for_lock(&lock_file)?;
+    // Serialize preparation across processes and re-check the cache markers only
+    // after the lock is held. This avoids two first-run processes both entering
+    // download/extraction after observing an initially empty cache.
+    let lock = acquire_lock(&lock_file)?;
 
-    if !success_file.is_file() || rebuild {
-        let lock = acquire_lock(&lock_file)?;
+    if !success_file.is_file() || rebuild || (require_checksum && !verified_file.is_file()) {
         if repo_exists || rebuild {
             debug!("Cleaning up old build...");
             delete_all_except(&repo_dir, None)?;
@@ -327,16 +359,20 @@ pub fn build_obs_binaries(config: ObsBuildConfig) -> anyhow::Result<()> {
         let release = fetch_release(&repo_id, &Some(tag.clone()), &cache_dir)?;
         build_obs(
             release,
-            &target,
             &build_out,
             browser,
             remove_pdbs,
             override_zip,
+            target,
+            require_checksum,
         )?;
 
         File::create(&success_file)?;
-        drop(lock);
+        if require_checksum {
+            File::create(&verified_file)?;
+        }
     }
+    drop(lock);
 
     info!(
         "Copying files from {} to {}",
@@ -344,6 +380,10 @@ pub fn build_obs_binaries(config: ObsBuildConfig) -> anyhow::Result<()> {
         target_out_dir.display()
     );
     copy_to_dir(&build_out, &target_out_dir, None)?;
+    if target.os == ObsTargetOs::Macos {
+        macos::setup_files(&target_out_dir)?;
+        copy_helper_binaries_to_deps(&target_out_dir)?;
+    }
 
     info!("Done!");
 
@@ -352,33 +392,62 @@ pub fn build_obs_binaries(config: ObsBuildConfig) -> anyhow::Result<()> {
 
 fn build_obs(
     release: ReleaseInfo,
-    target: &ObsTarget,
     build_out: &Path,
     include_browser: bool,
     remove_pdbs: bool,
     override_zip: Option<PathBuf>,
+    target: ObsBuildTarget,
+    require_checksum: bool,
 ) -> anyhow::Result<()> {
     fs::create_dir_all(build_out)?;
 
-    let obs_path = if let Some(e) = override_zip {
-        e
+    let (obs_path, remove_archive_after_extract) = if let Some(path) = override_zip {
+        // An override is caller-owned input (primarily for testing). Never delete it.
+        (path, false)
     } else {
-        download_binaries(build_out, &release, target)?
+        (
+            download_binaries(build_out, &release, target, require_checksum)?,
+            true,
+        )
     };
 
-    let obs_archive = File::open(&obs_path)?;
-    let mut archive = ZipArchive::new(&obs_archive)?;
-
     info!("Extracting OBS Studio binaries...");
-    archive.extract(build_out)?;
-    let bin_path = build_out.join("bin").join("64bit");
-    copy_to_dir(&bin_path, build_out, None)?;
-    fs::remove_dir_all(build_out.join("bin"))?;
+    match target.os {
+        ObsTargetOs::Windows => {
+            let obs_archive = File::open(&obs_path)?;
+            let mut archive = ZipArchive::new(&obs_archive)?;
+            archive.extract(build_out)?;
+            let bin_path = build_out.join("bin").join("64bit");
+            copy_to_dir(&bin_path, build_out, None)?;
+            fs::remove_dir_all(build_out.join("bin"))?;
+        }
+        ObsTargetOs::Macos => macos::extract_dmg(&obs_path, build_out)?,
+        ObsTargetOs::Linux => unreachable!("Linux is rejected before archive preparation"),
+    }
 
     clean_up_files(build_out, remove_pdbs, include_browser)?;
 
-    fs::remove_file(&obs_path)?;
+    if remove_archive_after_extract {
+        fs::remove_file(&obs_path)?;
+    }
 
+    Ok(())
+}
+
+fn copy_helper_binaries_to_deps(target_dir: &Path) -> anyhow::Result<()> {
+    let deps = target_dir.join("deps");
+    if !deps.is_dir() {
+        return Ok(());
+    }
+    let helper = "obs-ffmpeg-mux";
+    let src = target_dir.join(helper);
+    let dst = deps.join(helper);
+    if src.is_file() {
+        fs::copy(&src, &dst)?;
+        if let Ok(metadata) = fs::metadata(&src) {
+            fs::set_permissions(&dst, metadata.permissions())?;
+        }
+    }
     Ok(())
 }
 
@@ -420,7 +489,10 @@ fn clean_up_files(
     }
 
     info!("Cleaning up unnecessary files...");
-    for entry in WalkDir::new(build_out).into_iter().flatten() {
+    let walker = WalkDir::new(build_out)
+        .into_iter()
+        .filter_entry(|entry| !macos::is_inside_signed_bundle(entry.path()));
+    for entry in walker.flatten() {
         let path = entry.path();
         if to_exclude.iter().any(|e| {
             path.file_name().is_some_and(|x| {

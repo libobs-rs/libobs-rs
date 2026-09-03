@@ -150,29 +150,42 @@ pub struct StartupPathsBuilder {
 
 impl StartupPathsBuilder {
     fn new() -> Self {
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(target_os = "windows")]
         return Self {
             libobs_data_path: ObsPath::from_relative("data/libobs"),
             plugin_bin_path: ObsPath::from_relative("obs-plugins/64bit"),
             plugin_data_path: ObsPath::from_relative("data/obs-plugins/%module%"),
         };
 
-        #[cfg(target_os = "linux")]
-        let arch = std::env::consts::ARCH;
-        #[cfg(target_os = "linux")]
-        let lib_path = match arch {
-            "x86_64" => "/usr/lib/x86_64-linux-gnu",
-            "aarch64" => "/usr/lib/aarch64-linux-gnu",
-            "arm" => "/usr/lib/arm-linux-gnueabihf",
-            _ => "/usr/lib",
+        #[cfg(target_os = "macos")]
+        return Self {
+            libobs_data_path: ObsPath::from_relative("data/libobs"),
+            plugin_bin_path: ObsPath::from_relative("obs-plugins/%module%.plugin/Contents/MacOS"),
+            plugin_data_path: ObsPath::from_relative("data/obs-plugins/%module%"),
         };
 
         #[cfg(target_os = "linux")]
-        return Self {
-            libobs_data_path: ObsPath::new("/usr/share/obs/libobs"),
-            plugin_bin_path: ObsPath::new(&(lib_path.to_string() + "/obs-plugins/%module%")),
-            plugin_data_path: ObsPath::new("/usr/share/obs/obs-plugins/%module%"),
-        };
+        {
+            let lib_path = match std::env::consts::ARCH {
+                "x86_64" => "/usr/lib/x86_64-linux-gnu",
+                "aarch64" => "/usr/lib/aarch64-linux-gnu",
+                "arm" => "/usr/lib/arm-linux-gnueabihf",
+                _ => "/usr/lib",
+            };
+
+            Self {
+                libobs_data_path: ObsPath::new("/usr/share/obs/libobs"),
+                plugin_bin_path: ObsPath::new(&(lib_path.to_string() + "/obs-plugins/%module%")),
+                plugin_data_path: ObsPath::new("/usr/share/obs/obs-plugins/%module%"),
+            }
+        }
+
+        #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+        Self {
+            libobs_data_path: ObsPath::from_relative("data/libobs"),
+            plugin_bin_path: ObsPath::from_relative("obs-plugins/%module%"),
+            plugin_data_path: ObsPath::from_relative("data/obs-plugins/%module%"),
+        }
     }
 
     pub fn build(self) -> StartupPaths {

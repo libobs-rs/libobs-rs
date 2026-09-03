@@ -1,81 +1,42 @@
-#![allow(unknown_lints, require_safety_comments_on_unsafe)]
+#![allow(unknown_lints, ensure_obs_call_in_runtime)]
 
-use std::{convert::Infallible, sync::Arc, time::Duration};
-
-use indicatif::{ProgressBar, ProgressStyle};
 use libobs_bootstrapper::{
-    ObsBootstrapper, ObsBootstrapperOptions, ObsBootstrapperResult,
-    status_handler::ObsBootstrapStatusHandler,
+    ObsBootstrapError, ObsBootstrapper, ObsBootstrapperOptions, ObsBootstrapperResult,
 };
-use libobs_wrapper::{context::ObsContext, utils::StartupInfo};
-
-#[derive(Debug, Clone)]
-struct ObsBootstrapProgress(Arc<ProgressBar>);
-
-impl ObsBootstrapProgress {
-    pub fn new() -> Self {
-        let bar = ProgressBar::new(200).with_style(
-            ProgressStyle::with_template(
-                "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
-            )
-            .unwrap(),
-        );
-
-        bar.set_message("Initializing bootstrapper...");
-        bar.enable_steady_tick(Duration::from_millis(50));
-
-        Self(Arc::new(bar))
-    }
-
-    pub fn done(&self) {
-        self.0.finish();
-    }
-}
-impl ObsBootstrapStatusHandler for ObsBootstrapProgress {
-    type Error = Infallible;
-
-    fn handle_downloading(&mut self, prog: f32, msg: String) -> Result<(), Infallible> {
-        self.0.set_message(msg);
-        self.0.set_position((prog * 100.0) as u64);
-
-        Ok(())
-    }
-    fn handle_extraction(&mut self, prog: f32, msg: String) -> Result<(), Infallible> {
-        self.0.set_message(msg);
-        self.0.set_position(100 + (prog * 100.0) as u64);
-
-        Ok(())
-    }
-}
 
 #[tokio::main]
 async fn main() {
-    env_logger::init();
-    println!("Starting OBS bootstrapper...");
-    let handler = ObsBootstrapProgress::new();
-
-    let res = ObsBootstrapper::bootstrap_with_handler(
-        &ObsBootstrapperOptions::default(),
-        Box::new(handler.clone()),
-    )
-    .await
-    .unwrap();
-    if matches!(res, ObsBootstrapperResult::Restart) {
-        println!("OBS has been downloaded and extracted. The application will now restart.");
-        return;
+    let options = ObsBootstrapperOptions::default();
+    // SAFETY: this provisioning-only call does not invoke libobs; on Windows
+    // it prepares the delay-loaded runtime before the first direct OBS call.
+    match ObsBootstrapper::bootstrap(&options).await {
+        Ok(ObsBootstrapperResult::None) => println!("OBS runtime is already ready"),
+        Ok(ObsBootstrapperResult::Provisioned) => println!("OBS runtime was provisioned"),
+        #[allow(deprecated)]
+        Ok(ObsBootstrapperResult::Restart) => {
+            unreachable!("the current bootstrapper never restarts")
+        }
+        Err(ObsBootstrapError::UnsupportedPlatform(message)) => {
+            eprintln!("Runtime bootstrap is not used on this platform: {message}");
+            return;
+        }
+        Err(error) => panic!("OBS bootstrap failed: {error}"),
     }
 
-    let context = ObsContext::new(StartupInfo::default()).unwrap();
-    handler.done();
+    #[cfg(target_os = "windows")]
+    {
+        // This is intentionally the first direct OBS call in the process. The
+        // linker delay-load thunk resolves obs.dll only now, after bootstrap.
+        let version = {
+            // SAFETY: bootstrap completed above, so the delay-loaded OBS
+            // runtime is available before this first direct FFI call.
+            unsafe { libobs::obs_get_version() }
+        };
+        println!("Loaded OBS version word: {version:#x}");
+    }
 
-    println!("Done");
-    // Use the context here
-    // For example creating new obs data
-    context.data().unwrap();
-
-    println!("OBS context initialized successfully.");
-    println!("OBS version: {}", context.get_version().unwrap());
-    println!("Press Enter to exit...");
-    let mut input = String::new();
-    std::io::stdin().read_line(&mut input).unwrap();
+    #[cfg(target_os = "macos")]
+    println!(
+        "On macOS use this bootstrapper from a launcher/helper that does not itself link libobs, then start the real application."
+    );
 }

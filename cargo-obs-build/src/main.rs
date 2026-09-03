@@ -54,7 +54,6 @@ fn main() -> anyhow::Result<()> {
         args::Commands::Install(args) => {
             ubuntu_install::linux_obs_system_install(args)?;
         }
-        #[cfg(not(target_os = "linux"))]
         args::Commands::Build(args) => {
             use cargo_obs_build::{build_obs_binaries, ObsBuildConfig};
             use std::path::PathBuf;

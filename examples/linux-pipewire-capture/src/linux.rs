@@ -38,7 +38,7 @@ pub fn main() -> anyhow::Result<()> {
     if let Ok(restore_token) = fs::read_to_string(&restore_token_path) {
         println!(
             "Using restore token from file({}): {}",
-            &restore_token_path.display(),
+            restore_token_path.display(),
             restore_token
         );
         window_capture_builder = window_capture_builder.set_restore_token(restore_token);

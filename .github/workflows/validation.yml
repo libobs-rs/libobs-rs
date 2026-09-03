@@ -32,17 +32,46 @@ jobs:
         with:
           path: |
             ${{ github.workspace }}/obs-install
+          # libobs bindings are generated for a specific OBS ABI. Never restore
+          # a cache produced from a different OBS release line.
           key: ${{ runner.os }}-obs-studio-${{ hashFiles('libobs/OBS_VERSION', '.github/workflows/validation.yml') }}-v4
           restore-keys: |
             ${{ runner.os }}-obs-studio-
 
       - uses: taiki-e/install-action@nextest
 
-      - uses: awalsh128/cache-apt-pkgs-action@latest
+      - uses: awalsh128/cache-apt-pkgs-action@v1.6.3
         if: matrix.os == 'ubuntu-latest'
         with:
-          packages: cmake extra-cmake-modules ninja-build pkg-config clang clang-format build-essential curl ccache git zsh libavcodec-dev libavdevice-dev libavfilter-dev libavformat-dev libavutil-dev libswresample-dev libswscale-dev libx264-dev libcurl4-openssl-dev libmbedtls-dev libgl1-mesa-dev libjansson-dev libluajit-5.1-dev python3-dev libx11-dev libxcb-randr0-dev libxcb-shm0-dev libxcb-xinerama0-dev libxcb-composite0-dev libxcomposite-dev libxinerama-dev libxcb1-dev libx11-xcb-dev libxcb-xfixes0-dev swig libcmocka-dev libxss-dev libglvnd-dev libgles2-mesa-dev libwayland-dev librist-dev libsrt-openssl-dev libpci-dev libpipewire-0.3-dev libqrcodegencpp-dev uthash-dev libsimde-dev qt6-base-dev qt6-base-private-dev qt6-svg-dev qt6-wayland qt6-image-formats-plugins libasound2-dev libfdk-aac-dev libfontconfig-dev libfreetype6-dev libjack-jackd2-dev libpulse-dev libsndio-dev libspeexdsp-dev libudev-dev libv4l-dev libva-dev libvlc-dev libvpl-dev libdrm-dev nlohmann-json3-dev libwebsocketpp-dev libasio-dev libffmpeg-nvenc-dev xvfb ffmpeg libblas-dev libblas3 liblapack3
+          packages: cmake ninja-build pkg-config clang clang-format build-essential curl ccache git zsh libavcodec-dev libavdevice-dev libavfilter-dev libavformat-dev libavutil-dev libswresample-dev libswscale-dev libx264-dev libcurl4-openssl-dev libmbedtls-dev libgl1-mesa-dev libjansson-dev libluajit-5.1-dev python3-dev libx11-dev libxcb-randr0-dev libxcb-shm0-dev libxcb-xinerama0-dev libxcb-composite0-dev libxcomposite-dev libxinerama-dev libxcb1-dev libx11-xcb-dev libxcb-xfixes0-dev swig libcmocka-dev libxss-dev libglvnd-dev libgles2-mesa-dev libwayland-dev librist-dev libsrt-openssl-dev libpci-dev libpipewire-0.3-dev libqrcodegencpp-dev uthash-dev libsimde-dev qt6-base-dev qt6-base-private-dev qt6-svg-dev qt6-wayland qt6-image-formats-plugins libasound2-dev libfdk-aac-dev libfontconfig-dev libfreetype6-dev libjack-jackd2-dev libpulse-dev libsndio-dev libspeexdsp-dev libudev-dev libv4l-dev libva-dev libvlc-dev libvpl-dev libdrm-dev nlohmann-json3-dev libwebsocketpp-dev libasio-dev libffmpeg-nvenc-dev xvfb ffmpeg libblas-dev libblas3 liblapack3
           version: 1.0
+      - name: Ensure OBS CMake dependencies are installed
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          # cache-apt-pkgs-action restores package files, but packages with
+          # installation metadata/scripts are not always fully registered on a
+          # cache hit. Install the complete OBS dependency set explicitly
+          # instead of discovering missing package registrations one CMake
+          # failure at a time.
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake ninja-build pkg-config clang clang-format build-essential curl ccache git zsh \
+            libavcodec-dev libavdevice-dev libavfilter-dev libavformat-dev libavutil-dev \
+            libswresample-dev libswscale-dev libx264-dev libcurl4-openssl-dev libmbedtls-dev \
+            libgl1-mesa-dev libjansson-dev libluajit-5.1-dev python3-dev libx11-dev \
+            libxcb-randr0-dev libxcb-shm0-dev libxcb-xinerama0-dev libxcb-composite0-dev \
+            libxcomposite-dev libxinerama-dev libxcb1-dev libx11-xcb-dev libxcb-xfixes0-dev \
+            swig libcmocka-dev libxss-dev libglvnd-dev libgles2-mesa-dev libwayland-dev \
+            librist-dev libsrt-openssl-dev libpci-dev libpipewire-0.3-dev libqrcodegencpp-dev \
+            uthash-dev libsimde-dev qt6-base-dev qt6-base-private-dev qt6-svg-dev qt6-wayland \
+            qt6-image-formats-plugins libasound2-dev libfdk-aac-dev libfontconfig-dev \
+            libfreetype6-dev libjack-jackd2-dev libpulse-dev libsndio-dev libspeexdsp-dev \
+            libudev-dev libv4l-dev libva-dev libvlc-dev libvpl-dev libdrm-dev \
+            nlohmann-json3-dev libwebsocketpp-dev libasio-dev libffmpeg-nvenc-dev xvfb ffmpeg \
+            libblas-dev libblas3 liblapack3 extra-cmake-modules
+          test -f /usr/share/ECM/cmake/ECMConfig.cmake
+          test -f /usr/include/simde/simde-common.h
+          pkg-config --atleast-version=6.1 libavcodec libavformat libavutil libswresample libswscale
       - name: Symlink libraries
         if: matrix.os == 'ubuntu-latest'
         run: |
@@ -52,16 +81,16 @@ jobs:
       - name: Build and Install OBS Studio from Source
         if: matrix.os == 'ubuntu-latest' && steps.obs-cache.outputs.cache-hit != 'true'
         run: |
-          # Clone OBS Studio repository
-          git clone --recursive https://github.com/obsproject/obs-studio.git /tmp/obs-studio
-          cd /tmp/obs-studio
-
-          # Build the exact OBS version represented by the vendored headers.
-          git fetch --tags
+          # Keep CI on the exact OBS ABI encoded in the libobs crate version.
+          # Building "latest" makes an unrelated upstream OBS release silently
+          # change both the C ABI and the Linux build dependencies underneath us.
           OBS_VERSION=$(cat "${{ github.workspace }}/libobs/OBS_VERSION")
+          test -n "$OBS_VERSION"
           echo "Building OBS Studio version: $OBS_VERSION"
-          git checkout "$OBS_VERSION"
-          git submodule update --init --recursive
+
+          git clone --recursive --depth 1 --branch "$OBS_VERSION" \
+            https://github.com/obsproject/obs-studio.git /tmp/obs-studio
+          cd /tmp/obs-studio
 
           # Configure build with CMAKE_INSTALL_PREFIX to workspace directory
           cmake --preset ubuntu \
@@ -179,10 +208,59 @@ jobs:
         run: cargo nextest r --profile ci --no-default-features --features "__test_environment"
         env:
           TOP_SECRET_NO_DUMMY_DLL: true
+          LIBOBS_TEST_RUNTIME_DIR: ${{ matrix.os == 'ubuntu-latest' && format('{0}/obs-install', github.workspace) || format('{0}/target/debug/deps', github.workspace) }}
       - name: Run tests (with default features)
         run: cargo nextest r --profile ci --all-features --target-dir target/nextest-all-features
         env:
           TOP_SECRET_NO_DUMMY_DLL: true
+          # Platform-source integration tests use the exact runtime prepared
+          # above instead of assuming an OBS installation on the runner.
+          LIBOBS_TEST_RUNTIME_DIR: ${{ matrix.os == 'ubuntu-latest' && format('{0}/obs-install', github.workspace) || format('{0}/target/nextest-all-features/debug/deps', github.workspace) }}
+      - name: Record and inspect a real Windows window
+        if: matrix.os == 'windows-latest'
+        run: cargo nextest r -p libobs-simple -E 'binary(gpu_sources_test_window_capture)' --target-dir target/nextest-all-features
+        env:
+          TOP_SECRET_NO_DUMMY_DLL: true
+          LIBOBS_TEST_RUNTIME_DIR: ${{ github.workspace }}/target/nextest-all-features/debug/deps
+  build-test-macos:
+    name: Build and Test (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: taiki-e/install-action@nextest
+
+      - name: Install macOS build dependencies
+        run: brew install simde
+
+      - name: Install this checkout's cargo-obs-build
+        run: cargo install --path cargo-obs-build --features cli --locked --force
+
+      - name: Prepare official OBS runtime
+        run: cargo obs-build build --out-dir target/debug/deps
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Check macOS wrapper and sources
+        run: cargo check -p libobs-wrapper -p libobs-simple --no-default-features
+        env:
+          TOP_SECRET_NO_DUMMY_DLL: true
+
+      - name: Test target selection and macOS source contract
+        run: |
+          # Rust test binaries link libobs using @rpath. They are emitted into
+          # hashed target/debug/deps paths and therefore do not inherit an
+          # LC_RPATH from the framework preparation step.
+          test -f target/debug/deps/libobs.framework/Versions/A/libobs
+          export DYLD_FALLBACK_FRAMEWORK_PATH="$PWD/target/debug/deps${DYLD_FALLBACK_FRAMEWORK_PATH:+:$DYLD_FALLBACK_FRAMEWORK_PATH}"
+          cargo test -p cargo-obs-build --lib --no-default-features
+          cargo test -p libobs-bootstrapper --lib --no-default-features
+          cargo test -p libobs-simple --lib --no-default-features
+        env:
+          TOP_SECRET_NO_DUMMY_DLL: true
+          LIBOBS_TEST_RUNTIME_DIR: ${{ github.workspace }}/target/debug/deps
+
   build-test-nix:
     name: Build and Test (Nix)
     runs-on: ubuntu-latest
@@ -207,7 +285,7 @@ jobs:
           # Set display environment variable for subsequent steps
           echo "DISPLAY=:99" >> $GITHUB_ENV
 
-      - uses: awalsh128/cache-apt-pkgs-action@latest
+      - uses: awalsh128/cache-apt-pkgs-action@v1.6.3
         if: matrix.os == 'ubuntu-latest'
         with:
           packages: xvfb

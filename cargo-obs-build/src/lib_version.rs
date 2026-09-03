@@ -6,7 +6,10 @@ use log::{info, warn};
 
 pub fn get_lib_obs_version() -> anyhow::Result<(u32, u32, u32)> {
     info!("Getting canonical libobs version...");
-    let meta = MetadataCommand::new().exec()?;
+    let meta = MetadataCommand::new()
+        .env_remove("RUSTFLAGS")
+        .env_remove("CARGO_ENCODED_RUSTFLAGS")
+        .exec()?;
     let pkgs = meta
         .packages
         .iter()
