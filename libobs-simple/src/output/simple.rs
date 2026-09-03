@@ -242,6 +242,8 @@ pub struct OutputSettings {
     path: ObsPath,
     format: OutputFormat,
     custom_muxer_settings: Option<String>,
+    /// Quality for CRF-based x264 encoding, on a 0–100 scale.
+    crf: Option<u32>,
 }
 
 impl OutputSettings {
@@ -279,6 +281,15 @@ impl OutputSettings {
     /// Sets custom x264 encoder settings.
     pub fn with_custom_settings<S: Into<String>>(mut self, settings: S) -> Self {
         self.custom_encoder_settings = Some(settings.into());
+        self
+    }
+
+    /// Sets a quality target for x264 encoding on a 0–100 scale.
+    ///
+    /// A value of 100 maps to x264 CRF 0 (highest quality), while 0 maps to
+    /// CRF 51 (lowest quality). Hardware encoders retain bitrate-based control.
+    pub fn with_crf(mut self, crf: u32) -> Self {
+        self.crf = Some(crf.min(100));
         self
     }
 
@@ -348,6 +359,7 @@ impl SimpleOutputBuilder {
                 path: path.into(),
                 format: OutputFormat::default(),
                 custom_muxer_settings: None,
+                crf: None,
                 name: name.into(),
             },
             context,
@@ -400,6 +412,15 @@ impl SimpleOutputBuilder {
     /// Sets the video encoder to a generic hardware encoder.
     pub fn hardware_encoder(mut self, codec: HardwareCodec, preset: HardwarePreset) -> Self {
         self.settings.video_encoder = VideoEncoder::Hardware { codec, preset };
+        self
+    }
+
+    /// Sets a quality target for x264 encoding on a 0–100 scale.
+    ///
+    /// A value of 100 maps to x264 CRF 0 (highest quality), while 0 maps to
+    /// CRF 51 (lowest quality). Hardware encoders retain bitrate-based control.
+    pub fn crf(mut self, crf: u32) -> Self {
+        self.settings.crf = Some(crf.min(100));
         self
     }
 
@@ -491,24 +512,56 @@ impl SimpleOutputBuilder {
         }
     }
 
+    fn x264_crf_from_quality(quality: u32) -> i64 {
+        (100u32.saturating_sub(quality.min(100)) * 51 / 100) as i64
+    }
+
+    fn uses_x264(encoder_type: &EncoderTypeInfo) -> bool {
+        encoder_type.id() == "obs_x264"
+    }
+
     fn configure_video_encoder(
         &self,
         encoder_type: &EncoderTypeInfo,
         settings: &mut ObsData,
     ) -> Result<(), ObsError> {
         let schema = encoder_type.settings_schema_for(settings)?;
-        set_if_supported(
-            &schema,
-            settings,
-            "rate_control",
-            PropertyValue::String("CBR".into()),
-        )?;
-        set_if_supported(
-            &schema,
-            settings,
-            "bitrate",
-            PropertyValue::Integer(i64::from(self.settings.video_bitrate)),
-        )?;
+        let use_crf = self.settings.crf.is_some() && Self::uses_x264(encoder_type);
+        if use_crf {
+            set_if_supported(
+                &schema,
+                settings,
+                "rate_control",
+                PropertyValue::String("CRF".into()),
+            )?;
+            if let Some(quality) = self.settings.crf {
+                set_if_supported(
+                    &schema,
+                    settings,
+                    "crf",
+                    PropertyValue::Integer(Self::x264_crf_from_quality(quality)),
+                )?;
+            }
+        } else {
+            set_if_supported(
+                &schema,
+                settings,
+                "rate_control",
+                PropertyValue::String("CBR".into()),
+            )?;
+            set_if_supported(
+                &schema,
+                settings,
+                "bitrate",
+                PropertyValue::Integer(i64::from(self.settings.video_bitrate)),
+            )?;
+            if self.settings.crf.is_some() {
+                log::warn!(
+                    "CRF is only supported by the selected x264 encoder; using CBR at {} Kbps instead",
+                    self.settings.video_bitrate
+                );
+            }
+        }
         if let Some(preset) = self.get_encoder_preset(&self.settings.video_encoder) {
             set_if_supported(
                 &schema,
