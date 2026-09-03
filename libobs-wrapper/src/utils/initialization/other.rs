@@ -60,7 +60,7 @@ impl Drop for PlatformSpecificGuard {
 pub(crate) struct PlatformSpecificGuard;
 
 #[cfg(not(target_os = "linux"))]
-pub(crate) fn platform_specific_setup(
+pub(crate) unsafe fn platform_specific_setup(
     _display: Option<crate::utils::initialization::NixDisplay>,
 ) -> Result<Option<Rc<PlatformSpecificGuard>>, ObsError> {
     Ok(None)
