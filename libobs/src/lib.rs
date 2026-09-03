@@ -8,6 +8,7 @@
     no_unqualified_libobs_uses,
     ensure_obs_call_in_runtime,
     require_safety_comments_on_unsafe,
+    suspicious_runtime_symbol_definitions,
     clippy::all
 )]
 
@@ -16,6 +17,7 @@
 //! Furthermore, this crate provides a safe wrapper around the unsafe functions, which can be found in the [`libobs-wrapper`](https://crates.io/crates/libobs-wrapper) crate.
 
 #[cfg_attr(coverage_nightly, coverage(off))]
+#[allow(suspicious_runtime_symbol_definitions)]
 mod bindings {
     #[cfg(any(feature = "generate_bindings", target_family = "unix"))]
     include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
