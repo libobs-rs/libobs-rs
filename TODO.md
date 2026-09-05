@@ -1,99 +1,85 @@
-# Features Implementable in libobs-rs (Excluding Plugins, macOS, Scripting, Browser, Virtual Camera, Frontend)
+# libobs-rs feature status / remaining work
 
-## Core Output Types
-- **RTMP Streaming Output** - Live streaming to RTMP-compatible services (Twitch, YouTube, Facebook Live)
-- **WHIP/WebRTC Output** - Modern low-latency streaming protocol
-- **HLS Muxer** - HTTP Live Streaming with adaptive bitrate support
-- **MPEG-TS Muxer** - MPEG Transport Stream for streaming protocols
-- **Fragmented MP4/MOV** - Advanced MP4 format with recovery options
-- **File Output Muxing** - Generic FFmpeg-based file muxing
+This file tracks meaningful library gaps rather than listing every libobs symbol that could someday
+be wrapped. Features marked implemented are available through safe `libobs-wrapper` APIs or an
+opinionated `libobs-simple` workflow. Plugin/frontend-only functionality is intentionally out of
+scope unless it is useful to embedders.
 
-## Windows-Specific Input Sources
-- **Enhanced Game Capture** - Improved exclusive fullscreen detection
-- **Duplicator Monitor Capture** - DirectX-based DXGI display duplication
-- **Advanced Window Capture** - Improved window targeting and cursor handling
+## Implemented application foundations
 
-## Audio Features
-- **Fader System** - Multiple fader types (Cubic, IEC, Logarithmic) with dB mapping
-- **Volume Meter/Volmeter** - Peak and RMS level monitoring
-- **Audio Monitor** - Per-source audio monitoring with device selection
-- **Multi-Channel Audio** - Surround sound mixing (5.1, 7.1)
-- **Audio Ducking** - Windows audio ducking support
-- **Balance Types** - Sine law, square law, and linear panning
+- **Reliable output lifecycle** — bounded pause/resume/stop waits, serialized lifecycle operations,
+  one overall stop deadline, explicit timeout/disconnect errors, and force-stop recovery.
+- **Replay saving** — subscribe-before-save, serialized saves, bounded waits, completed-path lookup,
+  and native replay artifact validation.
+- **Runtime capability discovery** — sources, filters, transitions, outputs, encoders, services,
+  protocols, modules, settings metadata, compatibility planning, and descriptor-driven creation.
+- **Dynamic settings** — recursive property metadata, ranges/lists, visibility/enabled state,
+  current/default values, validation, modified callbacks, editable lists, fonts, frame rates,
+  checkable groups, paths and colors.
+- **Instance property actions** — enabled button properties can be invoked on the concrete owning
+  source/filter/output/encoder/service; metadata/settings are refreshed afterward. URL buttons are
+  returned to the application rather than opened implicitly.
+- **Hotkeys** — managed frontend/source/output/encoder/service registrations, bounded callback
+  delivery, binding save/load, safe unregistration, and typed synthetic OBS hotkey injection.
+- **Scene composition** — nested scenes, native groups, native ordering, transforms, crop, bounds,
+  scale filters, blending, visibility/locking, and explicit replacement semantics when ungrouping.
+- **Scene collection persistence** — versioned JSON, persistent source UUIDs, shared-source identity,
+  filters/groups/order/transforms/settings/hotkeys, strict/best-effort restore diagnostics, unknown
+  field preservation, portable secret/path redaction, atomic save, and undo/redo for supported
+  document edits.
+- **Transitions and media** — managed transition begin/wait/force-stop semantics plus capability-aware
+  media play/pause/restart/stop/seek/state/duration controls.
+- **Preview/editor geometry** — program/scene/source targets, Fit/Fill/Stretch mapping, physical vs
+  logical/DPI coordinate conversion, resize support, and managed render target lifetimes.
+- **Audio configuration** — public startup audio info, typed mixer indices/masks and output slots,
+  per-source volume/mute/sync/routing/monitoring, managed faders/meters, global monitoring-device
+  discovery/selection, and multi-track recording routing.
+- **Encoding diagnostics** — strict/permissive effective settings reports, hardware preference vs
+  requirement vs explicit backend selection, conservative software fallback, attempt diagnostics,
+  output health snapshots, dropped-network-frame reporting, and restart-aware bitrate sampling.
+- **Common file/stream outputs** — simple recording, RTMP streaming, replay buffer, FFmpeg muxer and
+  OBS output discovery allow applications to use installed HLS/MPEG-TS/fragmented formats when the
+  corresponding OBS plugin exposes them.
 
-## Advanced Encoder Support
-- **OpenH264 Encoder** - Cisco's H.264 codec integration
-- **SVT-AV1 Encoder** - Intel Scalable Video Technology AV1
-- **AOM-AV1 Encoder** - Alliance for Open Media AV1
-- **FDK-AAC Encoder** - Fraunhofer's AAC implementation
-- **PCM Variants** - 16-bit, 24-bit, 32-bit PCM encoders
-- **ALAC Encoder** - Apple Lossless Audio Codec
-- **FLAC Encoder** - Free Lossless Audio Codec
-- **Encoder Parameter Expansion** - More granular control over existing encoder settings
+## Partially covered / worthwhile follow-up
 
-## Service Integration
-- **Streaming Service Registry** - Dynamic service configuration system
-- **Twitch Integration** - Channel info lookup and auto-configuration
-- **YouTube Integration** - YouTube Live configuration
-- **Amazon IVS** - Amazon Interactive Video Service support
-- **Custom RTMP Services** - Generic RTMP service templates
-- **Service Ingest Discovery** - Automatic ingest URL optimization
-- **DaCast, NimoTV, Showroom** - Additional platform support
+- **Profile management compatible with OBS Studio frontend files** — `SceneCollectionDocument`
+  intentionally persists the libobs-rs managed model, not OBS Studio's complete frontend profile or
+  scene-collection file format.
+- **Missing-file recovery UI/workflow** — persistence detects obvious missing file/path settings and
+  reports them, but automatic search/relink and backup rotation remain application concerns.
+- **Hotkey activation contexts / richer input mapping** — registrations and native binding
+  persistence are present; higher-level conditional contexts, mouse-button UX, and key-name helper
+  catalogs could be added.
+- **Audio panning / surround helpers** — arbitrary native mixer routing and startup speaker layouts
+  exist, but ergonomic balance-law/EQ/ducking helpers are not yet provided.
+- **Output telemetry** — bytes, frames, reconnecting/error state, network drops and sampled bitrate
+  are exposed. Rendering/encoding lag metrics that are not output-plugin counters need separate
+  global/video statistics APIs.
+- **Transition templates / quick transitions** — transition source control exists; frontend-style
+  named template management remains an application-level feature.
+- **Source interaction events** — lower-level libobs interaction APIs (mouse/keyboard/touch sent into
+  interactive sources) still need a safe managed wrapper if embedders require them.
 
-## Profile & Scene Collection Management
-- **Enhanced Profile System** - Creation, duplication, deletion with proper isolation
-- **Profile-Specific Settings** - Per-profile encoder/audio/video configuration
-- **Scene Collection Persistence** - Robust JSON-based storage with versioning
-- **Import/Export** - Scene collection backup and sharing
-- **Coordinate System Migration** - Handle absolute vs relative coordinate conversion
-- **Module Data Storage** - Custom module data within collections
-- **Collection-Specific Transitions** - Per-collection transition templates
-- **Quick Transitions** - Pre-configured transition templates
+## Still missing high-value wrappers/workflows
 
-## Hotkey System
-- **Global Hotkey Registration** - Complete hotkey binding system
-- **Key Combination Support** - Multi-modifier hotkey support
-- **Hotkey Context** - Conditional hotkey activation
-- **Key Code Mapping** - Support for 200+ keyboard keys
-- **Mouse Button Hotkeys** - Support for up to 12 mouse buttons
+- WHIP/WebRTC convenience output and service setup.
+- HLS/adaptive-streaming convenience builders beyond generic output discovery/configuration.
+- Explicit stream-delay configuration helpers.
+- Automatic ingest discovery and service-specific Twitch/YouTube/Amazon IVS helpers beyond generic
+  OBS service/plugin settings.
+- Show/hide transition helpers attached directly to scene items.
+- Deinterlacing convenience APIs.
+- Rich missing-file relink/search workflow and collection backup rotation.
+- Higher-level source interaction/input forwarding APIs.
+- Additional encoder-specific convenience tuning where generic settings metadata is insufficient.
 
-## Source Interaction & Input
-- **Mouse Event Handling** - Position tracking, button states
-- **Keyboard Event Processing** - Key codes and modifiers
-- **Touch/Pointer Support** - Advanced input device support
-- **Modifier Key Tracking** - Ctrl, Shift, Alt, Cmd state tracking
+## Platform-specific follow-up
 
-## Advanced Source Features
-- **Source Grouping** - Hierarchical source organization
-- **Nested Scenes** - Scenes within scenes with transform inheritance
-- **Show/Hide Transitions** - Per-item visibility transition effects
-- **Source Transformation** - Advanced scaling algorithms, blending modes, crop/position
-- **Deinterlacing** - Video deinterlace filter integration
-- **Transform Inheritance** - Group-based transform propagation
-
-## Property System Enhancements
-- **Advanced Property Types** - Nested property groups, dynamic updates
-- **Enum Properties** - Dropdown selections with constraints
-- **Button Properties** - Clickable action properties
-- **Path Properties** - File/directory selection with validation
-- **Color Properties** - Color picker integration
-- **Conditional Properties** - Show/hide based on other property values
-- **Property Callbacks** - Real-time property change notifications
-
-## Recording & Streaming State
-- **Advanced State Management** - Detailed start/stop/pause/resume control
-- **Stream State Queries** - Active streaming status and metadata
-- **Recording State Queries** - Active recording status and file info
-- **Output Delay** - Stream delay/latency control
-- **Bitrate Monitoring** - Real-time bitrate tracking
-- **Dropped Frame Tracking** - Network/CPU performance metrics
-
-## Missing Files & Recovery
-- **Missing File Detection** - Validate source file existence
-- **Missing File Recovery** - Locate and restore missing sources
-- **Backup Mechanism** - Automatic scene/profile backups
-
-## Audio Track Selection
-- **Multi-Track Output** - Multiple audio tracks in output
-- **Track Mixing** - Per-track volume and EQ
-- **Track Mapping** - Flexible audio source to track mapping
+- Continue real-device/runtime validation on Windows capture backends (game/window/display capture),
+  including GPU/hardware-encoder fallback paths on representative NVIDIA/AMD/Intel machines.
+- Continue macOS runtime/capture validation on physical CI/hardware. The repository currently checks
+  the wrapper/simple crates and macOS source contracts against an official OBS framework, but Linux
+  and Windows have broader native integration coverage.
+- Linux PipeWire portal behavior depends on a desktop portal/session and cannot be fully exercised by
+  a plain Xvfb CI environment; X11 capture and software encoding are covered there.

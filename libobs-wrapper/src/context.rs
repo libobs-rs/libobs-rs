@@ -51,8 +51,8 @@ use crate::{
     display::{ObsDisplayCreationData, ObsDisplayRef},
 };
 use crate::{
-    data::{output::ObsOutputRef, video::ObsVideoInfo, ObsData},
-    enums::{ObsLogLevel, ObsResetVideoStatus},
+    data::{audio::ObsAudioInfo, output::ObsOutputRef, video::ObsVideoInfo, ObsData},
+    enums::{ObsLogLevel, ObsResetVideoStatus, ObsSamplesPerSecond},
     logger::LOGGER,
     run_with_obs,
     runtime::ObsRuntime,
@@ -429,6 +429,47 @@ impl ObsContext {
         }
     }
 
+    /// Returns the audio configuration currently active inside libobs.
+    ///
+    /// This queries `obs_get_audio_info2` rather than merely returning the startup builder value,
+    /// so callers can verify the sample rate, speaker layout and buffering policy that libobs
+    /// accepted during startup.
+    pub fn audio_info(&self) -> Result<ObsAudioInfo, ObsError> {
+        let runtime = self.runtime.clone();
+        run_with_obs!(runtime, (), move || unsafe {
+            // Safety: the output struct is local and initialized by libobs on the owning runtime.
+            let mut native: libobs::obs_audio_info2 = std::mem::zeroed();
+            if !libobs::obs_get_audio_info2(&mut native) {
+                return Err(ObsError::InvalidOperation(
+                    "libobs has no active audio configuration".into(),
+                ));
+            }
+
+            let samples = match native.samples_per_sec {
+                44_100 => ObsSamplesPerSecond::F44100,
+                48_000 => ObsSamplesPerSecond::F48000,
+                other => {
+                    return Err(ObsError::EnumConversionError(format!(
+                        "unsupported active OBS sample rate {other}"
+                    )));
+                }
+            };
+            let speakers =
+                num_traits::FromPrimitive::from_u32(native.speakers).ok_or_else(|| {
+                    ObsError::EnumConversionError(format!(
+                        "unknown active OBS speaker layout {}",
+                        native.speakers
+                    ))
+                })?;
+            Ok(ObsAudioInfo::new(
+                samples,
+                speakers,
+                native.max_buffering_ms,
+                native.fixed_buffering,
+            ))
+        })?
+    }
+
     /// Creates a new display and returns its ID.
     ///
     /// You must call `update_color_space` on the display when the window is moved, resized or the display settings change.
@@ -509,7 +550,10 @@ impl ObsContext {
                                 wl_proxy_get_display(surface_handle)
                             };
                             if let Err(e) = display_from_surface {
-                                log::warn!("Could not get display from surface handle on wayland. Make sure your wayland client is at least version 1.23. Error: {:?}", e);
+                                log::warn!(
+                                    "Could not get display from surface handle on wayland. Make sure your wayland client is at least version 1.23. Error: {:?}",
+                                    e
+                                );
                             } else if let Ok(display_from_surface) = display_from_surface {
                                 if display_from_surface != display.as_ptr() {
                                     return Err(ObsError::DisplayCreationError(
@@ -589,6 +633,11 @@ impl ObsContext {
 
     pub fn get_scene(&self, name: &str) -> Result<Option<ObsSceneRef>, ObsError> {
         self.objects.scene(name)
+    }
+
+    /// Returns a snapshot of all scenes currently managed by this context.
+    pub fn scenes(&self) -> Result<Vec<ObsSceneRef>, ObsError> {
+        self.objects.scenes()
     }
 
     pub fn source_builder<T: ObsSourceBuilder, K: Into<ObsString> + Send + Sync>(

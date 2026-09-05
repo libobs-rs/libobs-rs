@@ -2,11 +2,18 @@ use std::{
     collections::{HashMap, HashSet},
     ffi::CStr,
     fmt::Debug,
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, Mutex, MutexGuard, RwLock, TryLockError},
+    thread,
+    time::{Duration, Instant},
 };
 
+use crossbeam_channel::RecvTimeoutError;
+
 use crate::{
-    data::object::ObsObjectTrait,
+    data::{
+        audio::{AudioEncoderSlot, AudioMixIndex},
+        object::ObsObjectTrait,
+    },
     encoders::{audio::ObsAudioEncoder, video::ObsVideoEncoder},
     enums::ObsOutputStopSignal,
     macros::trait_with_optional_send_sync,
@@ -41,8 +48,18 @@ impl ObsOutputComposition {
         self
     }
 
-    pub fn with_audio_encoder(mut self, mixer_idx: usize, encoder: Arc<ObsAudioEncoder>) -> Self {
-        self.audio_encoders.insert(mixer_idx, encoder);
+    /// Compatibility helper: the index here is an output encoder slot, not the encoder's source mix.
+    pub fn with_audio_encoder(mut self, slot: usize, encoder: Arc<ObsAudioEncoder>) -> Self {
+        self.audio_encoders.insert(slot, encoder);
+        self
+    }
+
+    pub fn with_audio_encoder_at_slot(
+        mut self,
+        slot: AudioEncoderSlot,
+        encoder: Arc<ObsAudioEncoder>,
+    ) -> Self {
+        self.audio_encoders.insert(slot.index(), encoder);
         self
     }
 
@@ -56,8 +73,13 @@ impl ObsOutputComposition {
         self
     }
 
-    pub fn without_audio_encoder(mut self, mixer_idx: usize) -> Self {
-        self.audio_encoders.remove(&mixer_idx);
+    pub fn without_audio_encoder(mut self, slot: usize) -> Self {
+        self.audio_encoders.remove(&slot);
+        self
+    }
+
+    pub fn without_audio_encoder_at_slot(mut self, slot: AudioEncoderSlot) -> Self {
+        self.audio_encoders.remove(&slot.index());
         self
     }
 
@@ -90,7 +112,67 @@ trait_with_optional_send_sync! {
         fn audio_encoder_slots(&self) -> &Arc<RwLock<HashMap<usize, Arc<ObsAudioEncoder>>>>;
         fn service_slot(&self) -> &Arc<RwLock<Option<Arc<ObsServiceRef>>>>;
         fn configuration_lock(&self) -> &Arc<Mutex<()>>;
+        fn lifecycle_lock(&self) -> &Arc<Mutex<()>>;
     }
+}
+
+/// Default deadline used by blocking lifecycle operations.
+///
+/// A timeout only stops the Rust caller from waiting; libobs does not provide cancellation for
+/// these requests and native completion may still arrive later.
+pub const DEFAULT_OUTPUT_OPERATION_TIMEOUT: Duration = Duration::from_secs(30);
+
+pub(crate) fn operation_timeout(operation: &str, timeout: Duration) -> ObsError {
+    ObsError::OutputOperationTimeout {
+        operation: operation.to_owned(),
+        timeout_ms: timeout.as_millis().min(u64::MAX as u128) as u64,
+    }
+}
+
+pub(crate) fn remaining(
+    deadline: Instant,
+    operation: &str,
+    timeout: Duration,
+) -> Result<Duration, ObsError> {
+    deadline
+        .checked_duration_since(Instant::now())
+        .filter(|remaining| !remaining.is_zero())
+        .ok_or_else(|| operation_timeout(operation, timeout))
+}
+
+pub(crate) fn lock_until<'a>(
+    lock: &'a Mutex<()>,
+    deadline: Instant,
+    operation: &str,
+    timeout: Duration,
+) -> Result<MutexGuard<'a, ()>, ObsError> {
+    loop {
+        match lock.try_lock() {
+            Ok(guard) => return Ok(guard),
+            Err(TryLockError::Poisoned(err)) => {
+                return Err(ObsError::LockError(err.to_string()));
+            }
+            Err(TryLockError::WouldBlock) => {
+                let wait = remaining(deadline, operation, timeout)?;
+                thread::sleep(wait.min(Duration::from_millis(1)));
+            }
+        }
+    }
+}
+
+pub(crate) fn wait_for_completion<T>(
+    receiver: &crate::signals::SignalReceiver<T>,
+    deadline: Instant,
+    operation: &str,
+    timeout: Duration,
+) -> Result<T, ObsError> {
+    let wait = remaining(deadline, operation, timeout)?;
+    receiver.recv_timeout(wait).map_err(|err| match err {
+        RecvTimeoutError::Timeout => operation_timeout(operation, timeout),
+        RecvTimeoutError::Disconnected => ObsError::OutputCompletionDisconnected {
+            operation: operation.to_owned(),
+        },
+    })
 }
 
 #[allow(private_bounds)]
@@ -120,14 +202,22 @@ pub trait ObsOutputTrait:
     }
 
     /// Returns the audio encoder attached at the requested mixer index, if any.
+    /// Compatibility helper: `slot` is the output attachment slot, not an audio mix.
     fn attached_audio_encoder(
         &self,
-        mixer_idx: usize,
+        slot: usize,
     ) -> Result<Option<Arc<ObsAudioEncoder>>, ObsError> {
         self.audio_encoder_slots()
             .read()
             .map_err(|e| ObsError::LockError(e.to_string()))
-            .map(|encoders| encoders.get(&mixer_idx).cloned())
+            .map(|encoders| encoders.get(&slot).cloned())
+    }
+
+    fn attached_audio_encoder_at_slot(
+        &self,
+        slot: AudioEncoderSlot,
+    ) -> Result<Option<Arc<ObsAudioEncoder>>, ObsError> {
+        self.attached_audio_encoder(slot.index())
     }
 
     /// Returns a snapshot of all managed audio encoder attachments keyed by mixer index.
@@ -361,7 +451,8 @@ pub trait ObsOutputTrait:
         Ok(())
     }
 
-    /// Detaches the audio encoder at `mixer_idx` while the output is inactive.
+    /// Detaches the audio encoder at an output attachment slot while inactive.
+    /// The historical parameter name was "mixer index"; it never selected the encoder's source mix.
     fn clear_audio_encoder(&self, mixer_idx: usize) -> Result<(), ObsError> {
         let _configuration = self
             .configuration_lock()
@@ -390,6 +481,10 @@ pub trait ObsOutputTrait:
         }
         slots.remove(&mixer_idx);
         Ok(())
+    }
+
+    fn clear_audio_encoder_at_slot(&self, slot: AudioEncoderSlot) -> Result<(), ObsError> {
+        self.clear_audio_encoder(slot.index())
     }
 
     /// Detaches the current streaming service while the output is inactive.
@@ -470,41 +565,60 @@ pub trait ObsOutputTrait:
         Ok(())
     }
 
-    /// Creates and attaches a new audio encoder for the given mixer index. Fails if output active.
+    /// Compatibility helper that historically used one integer for both concepts.
+    ///
+    /// It creates an encoder reading native mix `index` and also attaches it at output slot
+    /// `index`. New code should use [`Self::create_and_set_audio_encoder_for_mix_at_slot`].
     fn create_and_set_audio_encoder(
         &self,
         info: AudioEncoderInfo,
-        mixer_idx: usize,
+        index: usize,
     ) -> Result<Arc<ObsAudioEncoder>, ObsError> {
-        validate_audio_mixer(mixer_idx)?;
+        let mix = AudioMixIndex::new(index)?;
+        let slot = AudioEncoderSlot::new(index)?;
+        self.create_and_set_audio_encoder_for_mix_at_slot(info, mix, slot)
+    }
+
+    /// Creates an encoder for `mix` and attaches it independently at output `slot`.
+    fn create_and_set_audio_encoder_for_mix_at_slot(
+        &self,
+        info: AudioEncoderInfo,
+        mix: AudioMixIndex,
+        slot: AudioEncoderSlot,
+    ) -> Result<Arc<ObsAudioEncoder>, ObsError> {
         if self.is_active()? {
             return Err(ObsError::OutputAlreadyActive);
         }
         ensure_output_supports_audio_encoder(self, self.native_output_flags()?)?;
-
-        let audio_enc = ObsAudioEncoder::new_from_info(info, mixer_idx, self.runtime().clone())?;
-        self.set_audio_encoder(audio_enc.clone(), mixer_idx)?;
+        let audio_enc = ObsAudioEncoder::new_from_info_for_mix(info, mix, self.runtime().clone())?;
+        self.set_audio_encoder_at_slot(audio_enc.clone(), slot)?;
         Ok(audio_enc)
     }
 
-    /// Attaches an existing audio encoder to this output at the mixer index.
-    ///
-    /// Fails if the output is active.
+    /// Compatibility helper: `mixer_idx` is actually an output attachment slot.
     fn set_audio_encoder(
         &self,
         encoder: Arc<ObsAudioEncoder>,
         mixer_idx: usize,
     ) -> Result<(), ObsError> {
+        self.set_audio_encoder_at_slot(encoder, AudioEncoderSlot::new(mixer_idx)?)
+    }
+
+    /// Attaches an existing audio encoder at an output slot. The encoder retains its own,
+    /// independently selected [`AudioMixIndex`].
+    fn set_audio_encoder_at_slot(
+        &self,
+        encoder: Arc<ObsAudioEncoder>,
+        slot: AudioEncoderSlot,
+    ) -> Result<(), ObsError> {
         let _configuration = self
             .configuration_lock()
             .lock()
             .map_err(|e| ObsError::LockError(e.to_string()))?;
-        validate_audio_mixer(mixer_idx)?;
         if self.is_active()? {
             return Err(ObsError::OutputAlreadyActive);
         }
         ensure_output_supports_audio_encoder(self, self.native_output_flags()?)?;
-
         self.runtime().ensure_same_runtime(encoder.runtime())?;
 
         let mut slots = self
@@ -514,25 +628,28 @@ pub trait ObsOutputTrait:
         let encoder_ptr = encoder.__native_handle();
         let output_ptr = self.__native_handle();
         let runtime = self.runtime().clone();
-        run_with_obs!(runtime, (output_ptr, encoder_ptr), move || {
-            unsafe {
-                // Safety: This is safe because we are only using smart pointers.
-                libobs::obs_output_set_audio_encoder(
-                    output_ptr.get_ptr(),
-                    encoder_ptr.get_ptr(),
-                    mixer_idx,
-                );
-            }
+        let slot_index = slot.index();
+        run_with_obs!(runtime, (output_ptr, encoder_ptr), move || unsafe {
+            // Safety: managed handles retain both objects and AudioEncoderSlot is range checked.
+            libobs::obs_output_set_audio_encoder(
+                output_ptr.get_ptr(),
+                encoder_ptr.get_ptr(),
+                slot_index,
+            );
         })?;
-
-        slots.insert(mixer_idx, encoder);
-
+        slots.insert(slot_index, encoder);
         Ok(())
     }
 
-    /// Starts the output, wiring encoders to global contexts and invoking obs_output_start.
-    /// Returns an error with last OBS message when start fails.
+    /// Starts the output, wiring encoders to global contexts and invoking `obs_output_start`.
+    ///
+    /// Lifecycle requests are serialized per output. Starting an already-active output keeps the
+    /// historical `OutputAlreadyActive` error so accidental duplicate starts remain visible.
     fn start(&self) -> Result<(), ObsError> {
+        let _lifecycle = self
+            .lifecycle_lock()
+            .lock()
+            .map_err(|e| ObsError::LockError(e.to_string()))?;
         let _configuration = self
             .configuration_lock()
             .lock()
@@ -564,7 +681,7 @@ pub trait ObsOutputTrait:
             move || {
                 if let Some(vid_encoder_ptr) = vid_encoder_ptr {
                     unsafe {
-                        // Safety: vid_encoder_ptr is valid because of SmartPointer
+                        // Safety: vid_encoder_ptr is retained by the managed encoder handle.
                         libobs::obs_encoder_set_video(
                             vid_encoder_ptr.get_ptr(),
                             libobs::obs_get_video(),
@@ -573,7 +690,7 @@ pub trait ObsOutputTrait:
                 }
                 for audio_encoder_ptr in audio_encoder_pointers {
                     unsafe {
-                        // Safety: audio_encoder_ptr is valid because of SmartPointer
+                        // Safety: audio_encoder_ptr is retained by the managed encoder handle.
                         libobs::obs_encoder_set_audio(
                             audio_encoder_ptr.get_ptr(),
                             libobs::obs_get_audio(),
@@ -582,7 +699,7 @@ pub trait ObsOutputTrait:
                 }
 
                 unsafe {
-                    // Safety: output_ptr is valid because of SmartPointer
+                    // Safety: output_ptr is retained by the managed output handle.
                     libobs::obs_output_start(output_ptr.get_ptr())
                 }
             }
@@ -595,7 +712,7 @@ pub trait ObsOutputTrait:
         let runtime = self.runtime().clone();
         let err = run_with_obs!(runtime, (output_ptr), move || {
             let err = unsafe {
-                // Safety: The output pointer must be valid because of SmartPointer
+                // Safety: output_ptr is retained by the managed output handle.
                 libobs::obs_output_get_last_error(output_ptr.get_ptr())
             };
 
@@ -603,122 +720,173 @@ pub trait ObsOutputTrait:
                 return "Unknown error".to_string();
             }
 
-            let err = unsafe { CStr::from_ptr(err) };
-
-            let err = err.to_string_lossy().to_string();
-            err
+            unsafe { CStr::from_ptr(err) }.to_string_lossy().to_string()
         })?;
 
         Err(ObsError::OutputStartFailure(Some(err)))
     }
 
-    fn set_paused(&self, should_pause: bool) -> Result<(), ObsError> {
+    /// Pauses/resumes with an explicit completion deadline.
+    ///
+    /// Repeating the state already in effect is idempotent and returns immediately. Concurrent
+    /// lifecycle requests are serialized so one request cannot consume another request's signal.
+    /// A timeout does **not** cancel the native pause request; query [`Self::is_paused`] before
+    /// retrying.
+    fn set_paused_with_timeout(
+        &self,
+        should_pause: bool,
+        timeout: Duration,
+    ) -> Result<(), ObsError> {
         if self.runtime().is_actor_thread() {
             return Err(ObsError::RuntimeReentrantBlocking);
         }
+        let operation = if should_pause { "pause" } else { "unpause" };
+        let started = Instant::now();
+        let deadline = started.checked_add(timeout).unwrap_or(started);
+        let _lifecycle = lock_until(self.lifecycle_lock(), deadline, operation, timeout)?;
+
         if !self.is_active()? {
             return Err(ObsError::OutputPauseFailure(Some(
                 "Output is not active.".to_string(),
             )));
         }
+        if self.is_paused()? == should_pause {
+            return Ok(());
+        }
 
-        let output_ptr = self.__native_handle();
-        let runtime = self.runtime().clone();
-
-        let rx = if should_pause {
+        // Subscribe before initiating the operation so a synchronous/very-fast callback cannot be
+        // lost between the native call and subscription setup.
+        let receiver = if should_pause {
             self.signals().on_pause()?
         } else {
             self.signals().on_unpause()?
         };
 
-        let res = run_with_obs!(runtime, (output_ptr), move || {
-            unsafe {
-                // Safety: output_ptr is valid because of SmartPointer
-                libobs::obs_output_pause(output_ptr.get_ptr(), should_pause)
-            }
+        let output_ptr = self.__native_handle();
+        let runtime = self.runtime().clone();
+        let res = run_with_obs!(runtime, (output_ptr), move || unsafe {
+            // Safety: output_ptr is retained by the managed output handle.
+            libobs::obs_output_pause(output_ptr.get_ptr(), should_pause)
         })?;
 
-        if res {
-            rx.blocking_recv().map_err(|_| ObsError::NoSenderError)?;
-
-            Ok(())
-        } else {
+        if !res {
             let runtime = self.runtime().clone();
             let err = run_with_obs!(runtime, (output_ptr), move || {
                 let err = unsafe {
-                    // Safety: output_ptr is valid because of SmartPointer
+                    // Safety: output_ptr is retained by the managed output handle.
                     libobs::obs_output_get_last_error(output_ptr.get_ptr())
                 };
-
                 if err.is_null() {
-                    return None;
+                    None
+                } else {
+                    Some(unsafe { CStr::from_ptr(err) }.to_string_lossy().to_string())
                 }
-
-                let err = unsafe { CStr::from_ptr(err) };
-                let err = err.to_string_lossy().to_string();
-
-                Some(err)
             })?;
-
-            Err(ObsError::OutputPauseFailure(err))
+            return Err(ObsError::OutputPauseFailure(err));
         }
+
+        wait_for_completion(&receiver, deadline, operation, timeout)?;
+        Ok(())
     }
 
-    /// Pauses or resumes the output and waits for the pause/unpause signal.
+    /// Pauses the output with [`DEFAULT_OUTPUT_OPERATION_TIMEOUT`].
     fn pause(&self) -> Result<(), ObsError> {
-        self.set_paused(true)
+        self.pause_with_timeout(DEFAULT_OUTPUT_OPERATION_TIMEOUT)
     }
 
+    /// Pauses the output and waits at most `timeout` for native completion.
+    fn pause_with_timeout(&self, timeout: Duration) -> Result<(), ObsError> {
+        self.set_paused_with_timeout(true, timeout)
+    }
+
+    /// Resumes the output with [`DEFAULT_OUTPUT_OPERATION_TIMEOUT`].
     fn unpause(&self) -> Result<(), ObsError> {
-        self.set_paused(false)
+        self.unpause_with_timeout(DEFAULT_OUTPUT_OPERATION_TIMEOUT)
     }
 
-    /// Stops the output and waits for stop and deactivate signals.
+    /// Resumes the output and waits at most `timeout` for native completion.
+    fn unpause_with_timeout(&self, timeout: Duration) -> Result<(), ObsError> {
+        self.set_paused_with_timeout(false, timeout)
+    }
+
+    /// Stops the output with [`DEFAULT_OUTPUT_OPERATION_TIMEOUT`].
+    ///
+    /// Stop is idempotent: if the output is already inactive and not reconnecting, this returns
+    /// `Ok(())`. A timeout only bounds this caller's wait; libobs may complete later. The managed
+    /// output continues retaining its encoder/service graph. Re-query [`Self::is_active`] and
+    /// [`Self::is_reconnecting`] before changing or releasing that graph.
     fn stop(&self) -> Result<(), ObsError> {
+        self.stop_with_timeout(DEFAULT_OUTPUT_OPERATION_TIMEOUT)
+    }
+
+    /// Requests a graceful stop and waits at most one overall `timeout` for both the `stop` and
+    /// `deactivate` completion signals. Time spent waiting behind another lifecycle/configuration
+    /// operation consumes the same deadline.
+    fn stop_with_timeout(&self, timeout: Duration) -> Result<(), ObsError> {
+        self.stop_impl(timeout, false)
+    }
+
+    /// Requests libobs's force-stop recovery path and waits for normal stop/deactivate completion.
+    ///
+    /// `obs_output_force_stop` asks the output to stop immediately without waiting for queued data;
+    /// it is appropriate after a graceful stop deadline when data loss is preferable to waiting.
+    /// It is not cancellation and still uses the same bounded completion semantics here.
+    fn force_stop(&self) -> Result<(), ObsError> {
+        self.force_stop_with_timeout(DEFAULT_OUTPUT_OPERATION_TIMEOUT)
+    }
+
+    /// Force-stop variant with an explicit overall deadline.
+    fn force_stop_with_timeout(&self, timeout: Duration) -> Result<(), ObsError> {
+        self.stop_impl(timeout, true)
+    }
+
+    #[doc(hidden)]
+    fn stop_impl(&self, timeout: Duration, force: bool) -> Result<(), ObsError> {
         if self.runtime().is_actor_thread() {
             return Err(ObsError::RuntimeReentrantBlocking);
         }
-        let _configuration = self
-            .configuration_lock()
-            .lock()
-            .map_err(|e| ObsError::LockError(e.to_string()))?;
+        let operation = if force { "force-stop" } else { "stop" };
+        let started = Instant::now();
+        let deadline = started.checked_add(timeout).unwrap_or(started);
+        let _lifecycle = lock_until(self.lifecycle_lock(), deadline, operation, timeout)?;
+        let _configuration = lock_until(self.configuration_lock(), deadline, operation, timeout)?;
+
         let output_ptr = self.__native_handle();
         let runtime = self.runtime().clone();
-        let output_active = run_with_obs!(runtime, (output_ptr), move || {
-            unsafe {
-                // Safety: output_ptr is valid because of SmartPointer
-                libobs::obs_output_active(output_ptr.get_ptr())
-            }
+        let (active, reconnecting) = run_with_obs!(runtime, (output_ptr), move || unsafe {
+            // Safety: output_ptr is retained by the managed output handle.
+            (
+                libobs::obs_output_active(output_ptr.get_ptr()),
+                libobs::obs_output_reconnecting(output_ptr.get_ptr()),
+            )
         })?;
 
-        if !output_active {
-            return Err(ObsError::OutputStopFailure(Some(
-                "Output is not active.".to_string(),
-            )));
+        if !active && !reconnecting {
+            return Ok(());
         }
 
-        let rx = self.signals().on_stop()?;
-        let rx_deactivate = self.signals().on_deactivate()?;
+        // Both subscriptions are established before the request. This also covers outputs whose
+        // stop/deactivate callbacks are emitted during the initiating actor call.
+        let stop_receiver = self.signals().on_stop()?;
+        let deactivate_receiver = self.signals().on_deactivate()?;
 
         let runtime = self.runtime().clone();
-        run_with_obs!(runtime, (output_ptr), move || {
-            unsafe {
-                // Safety: output_ptr is valid because of SmartPointer
-                libobs::obs_output_stop(output_ptr.get_ptr())
+        run_with_obs!(runtime, (output_ptr), move || unsafe {
+            // Safety: output_ptr is retained by the managed output handle.
+            if force {
+                libobs::obs_output_force_stop(output_ptr.get_ptr());
+            } else {
+                libobs::obs_output_stop(output_ptr.get_ptr());
             }
         })?;
 
-        let signal = rx.blocking_recv().map_err(|_| ObsError::NoSenderError)?;
-
-        log::trace!("Received stop signal: {:?}", signal);
+        let signal = wait_for_completion(&stop_receiver, deadline, operation, timeout)?;
+        log::trace!("Received {operation} signal: {signal:?}");
         if signal != ObsOutputStopSignal::Success {
             return Err(ObsError::OutputStopFailure(Some(signal.to_string())));
         }
 
-        rx_deactivate
-            .blocking_recv()
-            .map_err(|_| ObsError::NoSenderError)?;
-
+        wait_for_completion(&deactivate_receiver, deadline, operation, timeout)?;
         Ok(())
     }
 
@@ -726,14 +894,30 @@ pub trait ObsOutputTrait:
     fn is_active(&self) -> Result<bool, ObsError> {
         let output_ptr = self.__native_handle();
         let runtime = self.runtime().clone();
-        let output_active = run_with_obs!(runtime, (output_ptr), move || {
-            unsafe {
-                // Safety: output_ptr is valid because of SmartPointer
-                libobs::obs_output_active(output_ptr.get_ptr())
-            }
-        })?;
+        run_with_obs!(runtime, (output_ptr), move || unsafe {
+            // Safety: output_ptr is retained by the managed output handle.
+            libobs::obs_output_active(output_ptr.get_ptr())
+        })
+    }
 
-        Ok(output_active)
+    /// Returns whether the output is currently paused.
+    fn is_paused(&self) -> Result<bool, ObsError> {
+        let output_ptr = self.__native_handle();
+        let runtime = self.runtime().clone();
+        run_with_obs!(runtime, (output_ptr), move || unsafe {
+            // Safety: output_ptr is retained by the managed output handle.
+            libobs::obs_output_paused(output_ptr.get_ptr())
+        })
+    }
+
+    /// Returns whether the output is currently reconnecting.
+    fn is_reconnecting(&self) -> Result<bool, ObsError> {
+        let output_ptr = self.__native_handle();
+        let runtime = self.runtime().clone();
+        run_with_obs!(runtime, (output_ptr), move || unsafe {
+            // Safety: output_ptr is retained by the managed output handle.
+            libobs::obs_output_reconnecting(output_ptr.get_ptr())
+        })
     }
 }
 

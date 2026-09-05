@@ -30,6 +30,15 @@ unsafe impl<T> Send for Sendable<T> {}
 #[cfg(feature = "enable_runtime")]
 unsafe impl<T> Sync for Sendable<T> {}
 
+impl<T: Copy> Sendable<T> {
+    /// Returns the transported value while keeping access to the audited transport wrapper
+    /// crate-private. Using a method also prevents closure-capture lowering from bypassing the
+    /// wrapper and capturing a raw pointer field directly.
+    pub(crate) fn get(&self) -> T {
+        self.0
+    }
+}
+
 mod native_pointer_sealed {
     pub trait Sealed {}
     impl<T> Sealed for *mut T {}

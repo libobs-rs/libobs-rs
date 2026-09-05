@@ -40,7 +40,7 @@ Legacy typed property access remains available, but generic discovery should pre
 
 ## Scene and display handles
 
-Scene and scene-item pointer accessors are internal. Use `object_id()` for identity. Display render callbacks now own per-display userdata rather than relying on a process-global position map.
+Scene and scene-item pointer accessors are internal. Use `object_id()` for runtime identity. Display render callbacks now own per-display userdata rather than relying on a process-global position map. Preview displays can target program output, a managed scene, or a managed source; Fit/Fill/Stretch render geometry and DPI-aware logical/physical coordinate conversion are exposed through `PreviewGeometry`.
 
 Raw native window constructors are unsafe:
 
@@ -144,4 +144,25 @@ Use the explicit unsafe constructors `NixDisplay::x11(raw)` and `NixDisplay::way
 
 ## Build tooling
 
-`cargo-obs-build` v3 resolves Cargo `TARGET` and scopes caches by target triple. `ObsBuildConfig` has an optional `target` field; build scripts normally leave it `None` so Cargo's `TARGET` is used automatically. macOS targets are rejected explicitly until macOS prebuilt support exists.
+`cargo-obs-build` v3 resolves Cargo `TARGET` and scopes caches by target triple. `ObsBuildConfig` has an optional `target` field; build scripts normally leave it `None` so Cargo's `TARGET` is used automatically. The current CI uses `cargo obs-build build` to prepare the official OBS framework on macOS and prepares a pinned local OBS source build on Linux.
+
+On Linux, `obs-ffmpeg-mux` remains required for muxed file/replay outputs and is linked next to the executable from `PATH` when needed. `obs-nvenc-test` is only an optional capability probe and no longer prevents software-only startup when a normal OBS CMake install omits it.
+
+
+## Output lifecycle, reports and telemetry
+
+Output pause/resume/stop and replay-save completion now use bounded subscribe-before-initiate waits. The timeout covers serialized lock acquisition as well as native completion and returns `OutputOperationTimeout`; it does not imply native cancellation. `force_stop_with_timeout` is the explicit data-loss-tolerant recovery path. Replay saving waits for OBS's `saved` signal before reading `get_last_replay`.
+
+`libobs-simple` recording configuration now distinguishes hardware preference, hardware requirement and explicit backend selection. Fallback is limited to encoder/backend availability or initialization failures, not destination/path/auth/network failures. Effective configuration reports record selected plugin IDs, applied/ignored settings and encoder attempts. `ObsOutputStatisticsExt` and `OutputBitrateSampler` expose restart-aware health/bitrate observations.
+
+## Typed audio and multi-track recording
+
+Native input mix and output encoder slot are separate concepts in v10. Use `AudioMixIndex` for the mix an encoder reads and `AudioEncoderSlot` for where it is attached to an output. `AudioMixMask`, `LinearVolume`, and `AudioSyncOffset` make source routing/units explicit. `ObsSourceAudioExt` adds mute/volume/sync/mix/monitoring plus managed faders/meters, while `ObsContext` exposes monitoring-device discovery/selection. The simple recording builder's `audio_track(mix, slot)` supports combined plus separate tracks.
+
+## Scene collections, actions, hotkeys, media and transitions
+
+`libobs-simple::scene_collection` is an application-level, versioned persistence format rather than an OBS Studio frontend-project parser. It uses persistent source UUIDs, preserves shared source identity and unknown JSON fields, supports explicit redaction policies and atomic replacement, and offers strict/best-effort restoration plus document history. Do not persist `NativeObjectId`.
+
+OBS button properties are no longer “metadata only”: `ObsPropertyActions::invoke_property_button` invokes them against the concrete owning object and refreshes state. URL buttons are returned as external URLs rather than opened automatically. Managed hotkeys use bounded receivers; native callbacks never call application output APIs directly.
+
+Controllable media operations are exposed through `ObsMediaSourceExt`. Managed transitions now have a non-blocking `begin_to` form plus bounded `wait_for_completion`; this is preferable in GUI event loops that may need to call `force_stop` without blocking the application thread.

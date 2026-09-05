@@ -2,109 +2,118 @@ use std::{
     ffi::{c_char, CStr},
     mem::MaybeUninit,
     pin::Pin,
-    sync::Arc,
 };
 
 use libobs::{calldata_t, proc_handler_t};
 
 use crate::{
     context::ObsContext,
-    impl_obs_drop, run_with_obs,
+    run_with_obs,
     runtime::ObsRuntime,
     unsafe_send::Sendable,
     utils::{calldata_free, ObsError, ObsString},
 };
 
-/// RAII wrapper for libobs `calldata_t` ensuring stable address and proper free.
+/// RAII wrapper for libobs `calldata_t` ensuring stable address and actor-thread cleanup.
+///
+/// The pinned allocation itself is retained until `calldata_free` has run on the OBS actor. This
+/// is important: retaining only a raw pointer in a deferred drop guard would allow the Rust `Box`
+/// containing the `calldata_t` to be freed before the asynchronous native cleanup dereferences it.
 pub(crate) struct CalldataWrapper {
-    // We need to make sure the data is freed in OBS BEFORE it is dropped
-    _drop_guard: Arc<_CalldataWrapperDropGuard>,
-    // Not using a SmartPointerSendable here because its just way too complicated if we want to get the inner mut pointer
-    //TODO ?
-    data: Sendable<Pin<Box<calldata_t>>>, // stable address
+    data: Option<Sendable<Pin<Box<calldata_t>>>>,
     runtime: ObsRuntime,
 }
 
 impl CalldataWrapper {
     /// Returns a mutable pointer to the inner `calldata_t`.
-    /// # Safety
     ///
-    /// This function is unsafe. You must guarantee that you will never move
-    /// the data out of the mutable reference you receive when you call this
-    /// function, so that the invariants on the `Pin` type can be upheld.
+    /// # Safety
+    /// The caller must not move the pointee out of the pinned allocation.
     pub(crate) unsafe fn as_mut_ptr(&mut self) -> Sendable<*mut calldata_t> {
-        // Safe: pinned box guarantees stable location; we only get a mutable reference.
-        let r: &mut calldata_t = Pin::as_mut(&mut self.data.0).get_unchecked_mut();
+        let data = self
+            .data
+            .as_mut()
+            .expect("calldata storage is present until Drop");
+        // Safety: the `Box` is pinned for the complete lifetime of this wrapper and cleanup.
+        let r: &mut calldata_t = unsafe { Pin::as_mut(&mut data.0).get_unchecked_mut() };
         Sendable(r as *mut _)
     }
 
-    /// Extracts a C string pointer for the given key from the calldata.
+    /// Extracts a C string pointer for the given key from the calldata and copies it into Rust.
     pub fn get_string<T: Into<ObsString>>(&mut self, key: T) -> Result<String, ObsError> {
         let key: ObsString = key.into();
         let self_ptr = unsafe {
-            // Safety: We won't modify the calldata, so it's safe to get a mutable pointer here.
+            // Safety: the pointer is borrowed only for this actor call and the pinned allocation
+            // stays inside `self` for at least that long.
             self.as_mut_ptr()
         };
 
-        let _drop_guard = self._drop_guard.clone(); // Ensure runtime is valid during the call
-        let value = run_with_obs!(
-            self.runtime.clone(),
-            (_drop_guard, self_ptr, key),
-            move || {
-                let key_ptr = key.as_ptr().0;
+        let value = run_with_obs!(self.runtime.clone(), (self_ptr, key), move || {
+            let key_ptr = key.as_ptr().0;
 
-                let mut data = MaybeUninit::<*const c_char>::uninit();
-                let ok = unsafe {
-                    // Safety: self_ptr and key_ptr are valid pointers.
-                    libobs::calldata_get_string(self_ptr.0, key_ptr, data.as_mut_ptr())
-                };
-                if !ok {
-                    return Err(ObsError::Unexpected(format!(
-                        "Calldata String {key} not found."
-                    )));
-                }
-
-                let data_ptr = unsafe {
-                    // Safety: data was initialized by calldata_get_string, and we made sure the call was ok.
-                    data.assume_init()
-                };
-                if data_ptr.is_null() {
-                    return Err(ObsError::Unexpected(format!(
-                        "Calldata String {key} is null."
-                    )));
-                }
-
-                let data = unsafe {
-                    // Safety: data_ptr is a valid C string pointer because it is not null.
-                    CStr::from_ptr(data_ptr)
-                };
-                let data = data.to_str().map_err(|_| {
-                    ObsError::Unexpected(format!("Calldata String {key} is not valid UTF-8."))
-                })?;
-                Ok(data.to_string())
+            let mut data = MaybeUninit::<*const c_char>::uninit();
+            let ok = unsafe {
+                // Safety: self_ptr and key_ptr remain valid for the actor call.
+                libobs::calldata_get_string(self_ptr.0, key_ptr, data.as_mut_ptr())
+            };
+            if !ok {
+                return Err(ObsError::Unexpected(format!(
+                    "Calldata String {key} not found."
+                )));
             }
-        )??;
+
+            let data_ptr = unsafe {
+                // Safety: a successful `calldata_get_string` initialized the out pointer.
+                data.assume_init()
+            };
+            if data_ptr.is_null() {
+                return Err(ObsError::Unexpected(format!(
+                    "Calldata String {key} is null."
+                )));
+            }
+
+            let data = unsafe {
+                // Safety: libobs returns a NUL-terminated string borrowed from the calldata.
+                CStr::from_ptr(data_ptr)
+            };
+            let data = data.to_str().map_err(|_| {
+                ObsError::Unexpected(format!("Calldata String {key} is not valid UTF-8."))
+            })?;
+            Ok(data.to_string())
+        })??;
 
         Ok(value)
     }
-
-    //TODO implement calldata get_data type but I think this is hard to safely do this
 }
 
-struct _CalldataWrapperDropGuard {
-    calldata_ptr: Sendable<*mut calldata_t>,
-    runtime: ObsRuntime,
+impl Drop for CalldataWrapper {
+    fn drop(&mut self) {
+        let Some(data) = self.data.take() else {
+            return;
+        };
+        let runtime = self.runtime.clone();
+        runtime.defer_obs_cleanup(move || {
+            // Pass the transport wrapper as a whole. Calling a helper also prevents RFC 2229
+            // precise closure capture from capturing only `data.0` (whose raw pointer fields do
+            // not themselves implement Send).
+            free_owned_calldata(data);
+        });
+    }
 }
 
-impl_obs_drop!(_CalldataWrapperDropGuard, (calldata_ptr), move || unsafe {
-    // Safety: We are in the runtime and drop guards are always constructed frm valid calldata pointers.
-    calldata_free(calldata_ptr.0);
-});
+/// Frees one owned pinned calldata allocation. Must run on the OBS actor.
+fn free_owned_calldata(mut data: Sendable<Pin<Box<calldata_t>>>) {
+    // SAFETY: the pinned allocation is owned by this function and remains valid through cleanup.
+    let ptr = unsafe { Pin::as_mut(&mut data.0).get_unchecked_mut() as *mut calldata_t };
+    // SAFETY: `ptr` identifies the owned live calldata allocation and cleanup runs on the actor.
+    unsafe { calldata_free(ptr) };
+    // `data` drops here, after the internal libobs stack was released.
+}
 
 /// Extension trait on `ObsRuntime` to call a proc handler and return a RAII calldata wrapper.
 pub(crate) trait ObsCalldataExt {
     /// # Safety
-    /// Make sure that the proc_handler pointer is valid.
+    /// `proc_handler` must be valid for the complete call.
     unsafe fn call_proc_handler<T: Into<ObsString>>(
         &self,
         proc_handler: &Sendable<*mut proc_handler_t>,
@@ -124,37 +133,40 @@ impl ObsCalldataExt for ObsRuntime {
 
         let proc_handler = proc_handler.clone();
         let name: ObsString = name.into();
-        let mut calldata = run_with_obs!(self.clone(), (proc_handler, name), move || {
-            // Safety: calldata will be properly freed by the drop guard, and we are using a struct for the `zeroed` call.
+        let calldata = run_with_obs!(self.clone(), (proc_handler, name), move || {
+            // `calldata_init` is an inline C helper equivalent to zero-initializing this POD. Keep
+            // the value pinned because proc callbacks receive its address and may allocate its
+            // internal stack while processing out parameters.
+            // SAFETY: `calldata_t` is the C POD initialized by libobs's inline `calldata_init`,
+            // whose implementation is exactly a zero fill of the complete structure.
             let data: calldata_t = unsafe { std::mem::zeroed() };
-            let mut data = Box::pin(data);
-            // Safety: Data will not get moved out of the pinned box, only the proc handler call will use the pointer and not move it.
-            let raw_ptr = unsafe { Pin::as_mut(&mut data).get_unchecked_mut() };
+            let mut data = Sendable(Box::pin(data));
+            let raw_ptr = unsafe {
+                // Safety: the allocation is pinned before its address is exposed to libobs.
+                Pin::as_mut(&mut data.0).get_unchecked_mut() as *mut calldata_t
+            };
 
-            // Safety: the caller must have made sure that the proc handler is valid, the name pointer and the raw_ptr of the calldata is valid.
-            let ok = unsafe { libobs::proc_handler_call(proc_handler.0, name.as_ptr().0, raw_ptr) };
+            let ok = unsafe {
+                // Safety: the caller validated the handler lifetime; name/data live through call.
+                libobs::proc_handler_call(proc_handler.0, name.as_ptr().0, raw_ptr)
+            };
             if !ok {
-                return Err(ObsError::Unexpected(
-                    "Couldn't call proc handler".to_string(),
-                ));
+                unsafe {
+                    // Safety: even a failed proc lookup/call may have touched calldata. It is still
+                    // owned and currently on the OBS actor, so release any allocated stack now.
+                    calldata_free(raw_ptr);
+                }
+                return Err(ObsError::Unexpected(format!(
+                    "Couldn't call OBS procedure '{name}'"
+                )));
             }
 
-            Ok(Sendable(data))
+            Ok(data)
         })??;
 
-        // Safety: Data will never get moved out of the pinned box, as this pointer will only be used on drop and then freed.
-        let calldata_ptr = unsafe { Pin::as_mut(&mut calldata.0).get_unchecked_mut() };
-
-        // Pin the calldata to a stable heap location and create a drop guard.
-        let guard = Arc::new(_CalldataWrapperDropGuard {
-            calldata_ptr: Sendable(calldata_ptr),
-            runtime: self.clone(),
-        });
-
         Ok(CalldataWrapper {
-            data: calldata,
+            data: Some(calldata),
             runtime: self.clone(),
-            _drop_guard: guard,
         })
     }
 }

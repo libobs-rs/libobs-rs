@@ -196,6 +196,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
+name = "audio-mixing"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "libobs-simple",
+ "libobs-wrapper",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1564,6 +1573,7 @@ dependencies = [
  "num-derive",
  "num-traits",
  "paste",
+ "serde",
  "serde_json",
  "tokio",
  "windows",
@@ -2289,6 +2299,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "output-health"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "libobs-simple",
+ "libobs-wrapper",
+]
+
+[[package]]
 name = "owned_ttf_parser"
 version = "0.25.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2701,6 +2720,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
 dependencies = [
  "winapi-util",
+]
+
+[[package]]
+name = "scene-collection"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "libobs-simple",
+ "libobs-wrapper",
 ]
 
 [[package]]

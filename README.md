@@ -24,7 +24,8 @@ The repository deliberately separates complete OBS coverage from convenience wor
 
 A good rule is: **`libobs-simple` chooses for you; `libobs-wrapper` exposes the choices.** See the [API orientation guide](./docs/api_orientation.md) for a task-to-module map and common workflows.
 
-Currently only tested on Windows and Linux (Ubuntu Wayland / X11). MacOS doesn't work right now, but [we are working on that](https://github.com/libobs-rs/libobs-rs/pull/53). Currently the active contributors don't have a mac unfortunately. 
+Windows and Linux are the primary runtime-tested platforms. Linux CI builds the pinned OBS release from source and exercises native recording, replay, scene, audio, media/transition, hotkey/property-action, and X11 preview paths. macOS CI prepares the official OBS framework and validates wrapper/simple compilation plus bootstrapper and macOS source contracts; real capture/runtime coverage there is narrower than on Windows/Linux.
+
 The API is currently unstable and will definitely have breaking revisions in the future.
 
 > [!NOTE]
@@ -82,6 +83,10 @@ Examples are located in the [examples](./examples) directory. The [API orientati
 - [How it Works](./docs/how_it_works.md)
 - [v10 Migration](./docs/v10_migration.md)
 - [Capability Discovery & Generic Creation Example](./examples/capability-discovery)
+- [Multi-track Audio Mixing Example](./examples/audio-mixing)
+- [Output Health / Bitrate Example](./examples/output-health)
+- [Scene Collection Persistence Example](./examples/scene-collection)
+- [Preview / Target Geometry Example](./examples/obs-preview)
 
 ## Disclaimer
 

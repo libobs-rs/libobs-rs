@@ -8,6 +8,10 @@
 //! [`libobs_wrapper::data::output`] and [`libobs_wrapper::capabilities`] directly.
 
 mod configure;
+pub use configure::{
+    ConfigurationMode, EncoderAttempt, EncoderAttemptOutcome, EncoderAttemptStage,
+    OutputConfigurationReport, SettingConfiguration, SettingDisposition,
+};
 
 pub mod replay;
 pub mod simple;

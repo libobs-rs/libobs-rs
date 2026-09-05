@@ -10,8 +10,10 @@ mod traits;
 
 pub use traits::*;
 
-use crossbeam_channel::{bounded, Receiver, RecvError, Sender, TryRecvError, TrySendError};
-use std::sync::Mutex;
+use crossbeam_channel::{
+    bounded, Receiver, RecvError, RecvTimeoutError, Sender, TryRecvError, TrySendError,
+};
+use std::{sync::Mutex, time::Duration};
 
 const SIGNAL_QUEUE_CAPACITY: usize = 32;
 
@@ -56,6 +58,15 @@ impl<T> SignalReceiver<T> {
     /// Compatibility alias for the old Tokio broadcast receiver call sites.
     pub fn blocking_recv(&self) -> Result<T, RecvError> {
         self.recv()
+    }
+
+    /// Waits for a signal for at most `timeout`.
+    ///
+    /// Native OBS callbacks are not cancelled when this deadline expires. Callers that use a
+    /// signal as completion for a native operation must therefore treat a timeout as an unknown
+    /// completion state and re-query native state before retrying or tearing resources down.
+    pub fn recv_timeout(&self, timeout: Duration) -> Result<T, RecvTimeoutError> {
+        self.receiver.recv_timeout(timeout)
     }
 
     pub fn try_recv(&self) -> Result<T, TryRecvError> {
@@ -283,5 +294,25 @@ mod tests {
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         assert!(subscribers.is_empty());
+    }
+
+    #[test]
+    fn timeout_receiver_observes_completion_published_before_wait() {
+        let hub = SignalHub::new();
+        let receiver = hub.subscribe();
+        hub.publish(42_u8);
+
+        assert_eq!(receiver.recv_timeout(Duration::from_millis(1)).unwrap(), 42);
+    }
+
+    #[test]
+    fn timeout_receiver_reports_missing_completion() {
+        let hub = SignalHub::<u8>::new();
+        let receiver = hub.subscribe();
+
+        assert!(matches!(
+            receiver.recv_timeout(Duration::from_millis(1)),
+            Err(RecvTimeoutError::Timeout)
+        ));
     }
 }

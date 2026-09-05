@@ -702,6 +702,7 @@ pub struct EncoderSelector<'a> {
     include_deprecated: bool,
     include_internal: bool,
     prefer_hardware: bool,
+    require_hardware: bool,
 }
 
 impl<'a> EncoderSelector<'a> {
@@ -714,6 +715,7 @@ impl<'a> EncoderSelector<'a> {
             include_deprecated: false,
             include_internal: false,
             prefer_hardware: false,
+            require_hardware: false,
         }
     }
 
@@ -743,6 +745,13 @@ impl<'a> EncoderSelector<'a> {
         self
     }
 
+    /// Require a descriptor identified as hardware accelerated. Software candidates are excluded.
+    pub fn require_hardware(mut self) -> Self {
+        self.require_hardware = true;
+        self.prefer_hardware = true;
+        self
+    }
+
     pub fn matches(&self) -> Vec<&'a EncoderTypeInfo> {
         let mut candidates = self
             .encoders
@@ -763,6 +772,7 @@ impl<'a> EncoderSelector<'a> {
                     .capability_flags()
                     .contains(self.required_capabilities)
             })
+            .filter(|encoder| !self.require_hardware || encoder.is_likely_hardware_accelerated())
             .collect::<Vec<_>>();
 
         candidates.sort_by(|a, b| {
@@ -1195,13 +1205,33 @@ impl ObsContext {
         )
     }
 
-    /// Creates an audio encoder from a discovered encoder descriptor.
+    /// Creates an audio encoder from a discovered descriptor for a native OBS mix.
+    ///
+    /// The historical `mixer_index` parameter selects the encoder's input mix. Prefer
+    /// [`Self::create_audio_encoder_for_mix`] in new code so it cannot be confused with an output
+    /// encoder attachment slot.
     pub fn create_audio_encoder(
         &self,
         encoder_type: &EncoderTypeInfo,
         name: impl Into<ObsString>,
         settings: Option<ObsData>,
         mixer_index: usize,
+    ) -> Result<std::sync::Arc<ObsAudioEncoder>, ObsError> {
+        self.create_audio_encoder_for_mix(
+            encoder_type,
+            name,
+            settings,
+            crate::data::audio::AudioMixIndex::new(mixer_index)?,
+        )
+    }
+
+    /// Creates an audio encoder that reads from `mix`.
+    pub fn create_audio_encoder_for_mix(
+        &self,
+        encoder_type: &EncoderTypeInfo,
+        name: impl Into<ObsString>,
+        settings: Option<ObsData>,
+        mix: crate::data::audio::AudioMixIndex,
     ) -> Result<std::sync::Arc<ObsAudioEncoder>, ObsError> {
         self.runtime().ensure_same_runtime(&encoder_type.runtime)?;
         if encoder_type.kind != EncoderKind::Audio {
@@ -1212,9 +1242,9 @@ impl ObsContext {
             ));
         }
         ensure_settings_runtime(self.runtime(), settings.as_ref())?;
-        ObsAudioEncoder::new_from_info(
+        ObsAudioEncoder::new_from_info_for_mix(
             ObjectInfo::new(encoder_type.id.as_str(), name, settings, None),
-            mixer_index,
+            mix,
             self.runtime().clone(),
         )
     }
@@ -1666,7 +1696,7 @@ fn capability_kind_mismatch(id: &str, expected: &str, actual: &str) -> ObsError 
 /// # Safety
 /// This helper may only be called from an `ObsRuntime` actor command. All native pointers
 /// supplied to it must remain valid for the duration of the call.
-unsafe fn snapshot_owned_properties(
+pub(crate) unsafe fn snapshot_owned_properties(
     properties: *mut libobs::obs_properties_t,
 ) -> Vec<PropertyMetadata> {
     if properties.is_null() {

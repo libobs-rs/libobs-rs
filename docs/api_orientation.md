@@ -31,8 +31,13 @@ native libobs / OBS plugins
 | Build an OBS-like editor, remote controller, or custom media application | `libobs-wrapper` | It exposes the safe runtime-affine OBS object model and plugin discovery. |
 | Configure arbitrary third-party OBS plugins at runtime | `libobs-wrapper::capabilities` + `libobs-wrapper::settings` | Property metadata and values are discovered instead of hard-coded. |
 | Compose scenes, groups, transforms, filters, and ordering | `libobs-wrapper::scenes` + `libobs-wrapper::sources` | These mirror libobs concepts while owning native lifetimes safely. |
+| Persist/restore an application scene collection | `libobs-simple::scene_collection` | Stable source UUIDs, groups/transforms/settings/hotkeys, redaction and strict/best-effort diagnostics are handled together. |
 | Build a custom encoder/output/service graph | `libobs-wrapper::capabilities` + `libobs-wrapper::data::output` | Compatibility planning and pipeline validation happen before native mutation. |
-| Create preview/display windows | `libobs-wrapper::display` | Native display lifetime and callback details stay inside the wrapper. |
+| Route audio / meter source levels / select monitoring devices | `libobs-wrapper::sources` + `libobs-wrapper::audio_monitoring` | Mix indices, output slots, volume units, faders/meters and monitoring are typed. |
+| Control transitions or media sources | `libobs-wrapper::sources` | Managed transition destinations and capability-aware media operations keep native lifetimes explicit. |
+| Create preview/display windows | `libobs-wrapper::display` | Native display lifetime, target selection and Fit/Fill/Stretch editor geometry stay inside the wrapper. |
+| Invoke an OBS property button | `libobs-wrapper::settings_actions` | Actions are instance-bound; URL buttons are surfaced rather than opened implicitly. |
+| Register/persist hotkeys | `libobs-wrapper::hotkeys` | Callbacks publish bounded owned events instead of re-entering app code inside libobs. |
 | Call a libobs function the wrapper does not expose yet | `libobs-wrapper::sys` / `libobs` | This is the unsafe escape hatch. Prefer adding a safe wrapper for reusable functionality. |
 | Ship or prepare OBS binaries | `libobs-bootstrapper` / `cargo-obs-build` | Runtime and build-time installation are intentionally separate from the object model. |
 
@@ -80,7 +85,7 @@ The generic settings layer exposes:
 - validation before mutation;
 - dynamic refresh through OBS property-modified callbacks.
 
-Button properties remain action metadata rather than `ObsData` values: invoking an OBS property button is instance-specific and is intentionally not disguised as a settings assignment.
+Button properties remain action metadata rather than `ObsData` values. For a concrete source/filter/output/encoder/service, use `ObsPropertyActions::invoke_property_button`. The wrapper invokes the button against the owning instance and refreshes both property metadata and settings afterward. OBS URL buttons return `PropertyActionOutcome::ExternalUrl` so the application—not the library—decides whether to open an external URL.
 
 This is the preferred foundation for generated GUIs, CLI configuration, or remote-control schemas. The older `data::properties` typed wrappers remain available for callers that already use them.
 
@@ -120,10 +125,16 @@ There are two output levels:
 1. `ObsOutputPipelineBuilder` validates a complete graph before output creation. Prefer it for new output graphs.
 2. `ObsOutputComposition` and `ObsOutputTrait` expose lower-level attachment/detachment and lifecycle behavior when your application intentionally manages the graph itself.
 
-### Signals and displays
+Pause/resume/stop/replay-save waits are bounded and subscribe before the native operation, so synchronous completion cannot be lost. Timeout means “this caller stopped waiting,” not “libobs was cancelled”; re-query native state before retrying or tearing down the graph. `ObsOutputStatisticsExt::status_snapshot` exposes active/paused/reconnecting/error state, bytes, output frames and network-drop counters where meaningful. Reuse one `OutputBitrateSampler` per output lifecycle so byte-counter resets are reported instead of producing bogus negative/huge rates.
 
+### Audio, media, transitions, hotkeys and displays
+
+- `sources::ObsSourceAudioExt` exposes typed linear volume, mute, nanosecond sync offsets, native mix routing, source monitoring mode, and managed fader/volume-meter lifetimes. `audio_monitoring` discovers/selects the global monitoring device. `AudioMixIndex` and `AudioEncoderSlot` are deliberately distinct types; a recording encoder can read one mix while occupying another output slot.
+- `sources::ObsMediaSourceExt` checks `OBS_SOURCE_CONTROLLABLE_MEDIA` before play/pause/restart/stop/seek/state/duration operations.
+- `sources::ManagedTransition` retains the current/in-flight destination. `begin_to` is the event-loop-friendly non-blocking form; `wait_for_completion` and `start_to_with_timeout` provide bounded waits, and `force_stop` explicitly snaps to the requested destination. A timeout never claims to cancel libobs work.
+- `hotkeys` registers frontend or object-owned hotkeys and delivers press/release events through bounded `SignalReceiver`s. Binding snapshots use OBS's own serialization shape. Native callbacks do not directly execute application output/replay operations.
 - `signals` and per-object `signals()` accessors expose libobs events while retaining callback lifetimes safely.
-- `display` manages preview/display surfaces.
+- `display` manages native preview surfaces. `PreviewTarget` selects program/scene/source content; `PreviewScaleMode::{Fit,Fill,Stretch}` and `PreviewGeometry` provide the same physical-pixel render mapping used by the draw callback plus DPI-aware logical pointer conversion.
 
 ### Raw escape hatch
 
@@ -202,6 +213,15 @@ Ask `ObsCapabilities::best_output_plan` for the media/protocol requirements, cre
 ### 5. Scene editor: use native-order items and snapshots
 
 Use `ObsSceneRef::items_in_order` for the actual libobs order, `SceneItemTrait::state_snapshot` for a restorable item state, and `ObsSceneRef::create_group` for native OBS groups. Use `ObsSceneGroupRef::items_in_order` to enumerate group children.
+
+
+### 6. Persist an editor scene collection
+
+`libobs-simple::scene_collection::SceneCollectionDocument::capture_context` captures managed scenes plus shared sources once by persistent UUID. Use `save_atomic(..., SceneCollectionExportPolicy::portable_redacted())` for a portable file that redacts likely secrets and absolute machine paths. Restoration can be `RestoreMode::Strict` or `BestEffort`; the latter returns structured diagnostics for skipped/missing plugins and files. `SceneCollectionHistory` provides document-level undo/redo for item state, ordering, grouping and ungrouping while respecting libobs replacement identity. See `examples/scene-collection`.
+
+### 7. Observe a running output
+
+After starting any managed output, call `status_snapshot()` for point-in-time state and feed repeated byte counters through `OutputBitrateSampler`. Zero values whose plugin callback support cannot be proven are represented as `OutputMetric::Indeterminate(0)` rather than falsely advertised as a known zero. See `examples/output-health`.
 
 ## Ownership model in one paragraph
 

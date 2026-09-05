@@ -90,7 +90,9 @@ impl ObsModules {
             let found = !sym.is_null();
 
             if !found && major >= 32 {
-                log::warn!("OBS version >= 32 but obs_add_disabled_module symbol not found, falling back to safe modules");
+                log::warn!(
+                    "OBS version >= 32 but obs_add_disabled_module symbol not found, falling back to safe modules"
+                );
             }
 
             found

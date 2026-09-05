@@ -31,7 +31,7 @@ impl ObsObjectBuilder for LinuxGeneralScreenCaptureBuilder {
             PlatformType::Invalid => {
                 return Err(ObsError::PlatformInitError(
                     "No platform could be found to create the source on.".to_string(),
-                ))
+                ));
             }
         };
 

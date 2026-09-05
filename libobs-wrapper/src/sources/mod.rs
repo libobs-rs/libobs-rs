@@ -7,6 +7,15 @@ pub use builder::*;
 mod traits;
 pub use traits::*;
 
+mod audio;
+pub use audio::*;
+
+mod media;
+pub use media::*;
+
+mod transition;
+pub use transition::*;
+
 mod macros;
 
 mod filter;

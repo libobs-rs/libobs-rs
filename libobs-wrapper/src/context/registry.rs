@@ -119,4 +119,12 @@ impl ObjectRegistry {
             .find(|scene| scene.name() == name)
             .cloned())
     }
+
+    pub(super) fn scenes(&self) -> Result<Vec<ObsSceneRef>, ObsError> {
+        Ok(self
+            .scenes
+            .read()
+            .map_err(|_| ObsError::LockError("Failed to acquire scene registry".into()))?
+            .clone())
+    }
 }

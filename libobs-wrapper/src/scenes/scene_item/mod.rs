@@ -268,6 +268,31 @@ trait_with_optional_send_sync! {
             self.__native_handle().native_id()
         }
 
+        /// Returns the persistent UUID of the source represented by this scene item.
+        ///
+        /// This is safe to serialize and is distinct from the runtime-scoped scene-item
+        /// [`NativeObjectId`](crate::unsafe_send::NativeObjectId).
+        fn source_persistent_uuid(&self) -> Result<String, ObsError> {
+            let item = self.__native_handle().clone();
+            run_with_obs!(self.runtime(), (item), move || unsafe {
+                // Safety: the managed scene item remains alive for the actor call. The source is
+                // borrowed only long enough to copy libobs's persistent UUID string.
+                let source = libobs::obs_sceneitem_get_source(item.get_ptr());
+                if source.is_null() {
+                    return Err(ObsError::NullPointer(Some(
+                        "scene item has no source".into(),
+                    )));
+                }
+                let uuid = libobs::obs_source_get_uuid(source);
+                if uuid.is_null() {
+                    return Err(ObsError::NullPointer(Some(
+                        "scene-item source has no persistent UUID".into(),
+                    )));
+                }
+                Ok(std::ffi::CStr::from_ptr(uuid).to_string_lossy().into_owned())
+            })?
+        }
+
         /// Removes this item from its scene immediately while keeping the typed handle valid
         /// until its final Rust reference is dropped. Repeated calls are harmless.
         fn remove_from_scene(&self) -> Result<(), ObsError> {

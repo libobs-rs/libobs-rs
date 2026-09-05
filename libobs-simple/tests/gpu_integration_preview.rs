@@ -21,7 +21,8 @@ use libobs_simple::sources::windows::{
 };
 use libobs_wrapper::data::video::ObsVideoInfoBuilder;
 use libobs_wrapper::display::{
-    ObsDisplayCreationData, ObsDisplayRef, ObsWindowHandle, WindowPositionTrait,
+    ObsDisplayCreationData, ObsDisplayRef, ObsWindowHandle, PreviewScaleMode, PreviewTarget,
+    WindowPositionTrait,
 };
 use libobs_wrapper::sources::ObsSourceBuilder;
 use libobs_wrapper::{context::ObsContext, utils::StartupInfo};
@@ -166,6 +167,11 @@ impl ObsInner {
 
         #[cfg_attr(not(target_os = "linux"), allow(unused_unsafe))]
         let display = unsafe { context.display(data)? };
+        display.set_target(PreviewTarget::Scene(scene.clone()))?;
+        display.set_scale_mode(PreviewScaleMode::Fit)?;
+        let geometry = display.preview_geometry(window.scale_factor() as f32)?;
+        assert_eq!(geometry.mode, PreviewScaleMode::Fit);
+        assert!(geometry.render_rect.width > 0.0 && geometry.render_rect.height > 0.0);
         Ok(Self {
             context,
             #[cfg_attr(not(target_os = "linux"), allow(unused_unsafe))]

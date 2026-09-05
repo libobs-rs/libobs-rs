@@ -9,7 +9,7 @@ use std::sync::Arc;
 use crate::{
     capabilities::{OutputCapabilities, OutputTypeInfo},
     context::ObsContext,
-    data::{object::ObsObjectTrait, ObsData, ObsDataPointers},
+    data::{audio::AudioEncoderSlot, object::ObsObjectTrait, ObsData, ObsDataPointers},
     encoders::{audio::ObsAudioEncoder, video::ObsVideoEncoder, ObsEncoderTrait},
     services::ObsServiceRef,
     utils::{ObsError, ObsString},
@@ -48,8 +48,18 @@ impl ObsOutputPipelineBuilder {
         self
     }
 
-    pub fn audio_encoder(mut self, mixer_idx: usize, encoder: Arc<ObsAudioEncoder>) -> Self {
-        self.composition = self.composition.with_audio_encoder(mixer_idx, encoder);
+    /// Compatibility helper: `slot` is an output encoder attachment slot.
+    pub fn audio_encoder(mut self, slot: usize, encoder: Arc<ObsAudioEncoder>) -> Self {
+        self.composition = self.composition.with_audio_encoder(slot, encoder);
+        self
+    }
+
+    pub fn audio_encoder_at_slot(
+        mut self,
+        slot: AudioEncoderSlot,
+        encoder: Arc<ObsAudioEncoder>,
+    ) -> Self {
+        self.composition = self.composition.with_audio_encoder_at_slot(slot, encoder);
         self
     }
 

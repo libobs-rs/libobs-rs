@@ -13,6 +13,7 @@ The opinionated convenience layer for `libobs-rs`. Use this crate when you want 
 | Record to a file | `output::simple::ObsContextSimpleExt::simple_output_builder` |
 | Stream to a custom RTMP endpoint | `output::streaming::ObsContextStreamingExt::simple_rtmp_stream` |
 | Replay buffer | `output::replay` |
+| Versioned scene collection save/restore/history | `scene_collection` |
 | Common monitor/window/platform capture sources | `sources` |
 | Need groups, generic plugin settings, custom output graphs, arbitrary services, or exact capability control | Drop down to the re-exported `libobs_simple::wrapper` / `libobs-wrapper` |
 
@@ -45,7 +46,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-By default the builder asks the loaded OBS installation for H.264, **prefers an available hardware encoder, and transparently falls back to software**. You can still explicitly select x264, a hardware codec/preset, or a custom encoder when you need control.
+By default the builder asks the loaded OBS installation for H.264, **prefers an available hardware encoder, and transparently falls back to software only for encoder/backend failures**. Destination/auth/path failures are not retried as encoder fallbacks. `build_with_report()` / managed-start reports expose the concrete backend, applied/ignored settings, and fallback attempts; strict configuration mode turns unsupported requested properties into errors. You can still explicitly select x264, require hardware, or choose a custom encoder when you need control.
 
 ## RTMP streaming
 
@@ -89,3 +90,10 @@ Use the full wrapper when the application needs any of these:
 - access libobs functionality that has no simple opinionated workflow.
 
 You do not need a second context. `libobs-simple` uses the same `libobs_wrapper::context::ObsContext`, and `libobs_simple::wrapper` re-exports the wrapper crate so an application can mix simple and advanced calls naturally.
+
+
+## Scene collections and richer application workflows
+
+`scene_collection::SceneCollectionDocument` persists the managed libobs-rs scene model with stable source UUIDs, shared-source identity, filters, native groups/order, transforms, settings and hotkeys. Portable export redacts likely secrets and absolute machine-local paths by default; restoration can be strict or best-effort with structured diagnostics for missing plugins/files. See [`examples/scene-collection`](../examples/scene-collection).
+
+For independent audio mixes/tracks see [`examples/audio-mixing`](../examples/audio-mixing). Output health snapshots and bitrate sampling live in the re-exported wrapper and are demonstrated by [`examples/output-health`](../examples/output-health).

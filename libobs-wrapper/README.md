@@ -18,8 +18,12 @@ The most useful entry points are:
 | Create sources and filters | `sources` |
 | Compose scenes, groups and transforms | `scenes` |
 | Choose encoders/outputs/services | `capabilities`, `encoders`, `services` |
-| Build/start outputs | `data::output` |
+| Build/start outputs and inspect health | `data::output` |
+| Source audio routing, faders/meters and monitoring | `sources::audio`, `audio_monitoring` |
+| Transitions and controllable media | `sources::transition`, `sources::media` |
 | Preview/render to native windows | `display` |
+| Invoke dynamic property buttons | `settings_actions` |
+| Register/persist hotkeys | `hotkeys` |
 | Subscribe to OBS events | per-object `signals()` / `signals` |
 | Reach raw libobs when necessary | `sys` (unsafe escape hatch) |
 
@@ -48,19 +52,19 @@ The older typed property/builders remain useful for known plugins, but they shou
 - **Validated Output Pipelines**: Validate codecs, protocols, runtime affinity, required components, and mixer indices before output creation, with lower-level desired-state composition still available
 - **Scene Management**: Create typed scene items and native groups; inspect native order; snapshot/restore position, scale, bounds, crop, blend state, visibility, locking, and ordering
 - **Video Recording**: Configure and record video with various encoders
-- **Audio Support**: Configure audio sources and encoders
-- **Display Management**: Create and control OBS preview windows
+- **Audio Support**: Typed source volume/mute/sync/mix routing, managed faders/meters, monitoring-device selection, and independent output audio slots
+- **Managed Media & Transitions**: Capability-aware media controls and bounded/non-blocking transition completion semantics
+- **Output Telemetry**: Active/paused/reconnecting/error snapshots, bytes/frames/network drops, and restart-aware bitrate sampling
+- **Dynamic Actions & Hotkeys**: Instance-bound property buttons plus managed hotkey registration, binding persistence and bounded callback delivery
+- **Display Management**: Program/scene/source preview targets with Fit/Fill/Stretch geometry and DPI-aware editor coordinate conversion
 
 ## Prerequisites
 
-The library needs compatible OBS binaries/libraries for the selected target. Windows can be prepared with `cargo-obs-build`; Linux uses a system/source libobs installation. macOS wrapper support is still incomplete.
+The library needs OBS binaries/libraries matching the crate's pinned ABI. `cargo-obs-build` can prepare official/prebuilt runtime layouts on supported targets; Linux CI also validates a source-built local OBS installation, and a compatible system installation can be used by configuring `StartupPaths`. macOS CI prepares the official OBS framework and validates compilation/source contracts, although its real capture coverage is currently narrower than Windows/Linux.
 
-If you want to target Linux, you'll need to build and install OBS Studio from source. This can be done on Ubuntu using the `cargo-obs-build` tool (using `cargo obs-build install`), or by following the [official OBS build instructions](https://github.com/obsproject/obs-studio/wiki/Build-Instructions-For-Linux). Users of your application can just install OBS Studio via their package manager directly (tested and working for version 30+ on Ubuntu)
+On Linux, file/replay outputs may launch `obs-ffmpeg-mux` relative to the executable. During startup the wrapper locates that required helper on `PATH` and ensures the executable directory has the expected link. `obs-nvenc-test` is only an optional NVENC capability probe: a normal OBS CMake install may omit it, and its absence no longer prevents software/x264 applications from starting.
 
-On Linux:
-When running the application and saving for example an replay buffer, the underlying `libobs` library will look at the current executables directory and tries to execute `obs-ffmpeg-mux` and `obs-nvenc-test`. Because they don't exist by default, the `libobs-wrapper` will create symlinks to the existing `obs-ffmpeg-mux` and `obs-nvenc-test` binaries which are found by searching the `PATH`.
-
-For Windows and Macos, there are multiple ways to set this up:
+There are multiple ways to prepare the runtime:
 
 ### Option 1: Using cargo-obs-build
 
@@ -106,6 +110,9 @@ For more advanced usage examples, check out:
 
 - Monitor capture example with full configuration: [examples/monitor_capture](../examples/monitor-capture)
 - Runtime bootstrapping example: [examples/download-at-runtime](../examples/download-at-runtime)
+- Multi-track audio/fader example: [examples/audio-mixing](../examples/audio-mixing)
+- Output status/bitrate example: [examples/output-health](../examples/output-health)
+- Preview target/geometry example: [examples/obs-preview](../examples/obs-preview)
 
 For even easier handling, consider using the [`libobs-simple`](https://crates.io/crates/libobs-simple) crate which
 builds on top of this wrapper.

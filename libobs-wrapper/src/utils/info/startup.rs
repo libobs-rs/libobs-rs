@@ -43,6 +43,15 @@ impl StartupInfo {
         self
     }
 
+    /// Configures the audio subsystem used during normal [`StartupInfo::start`].
+    ///
+    /// The default is 44.1 kHz stereo with libobs-managed buffering. Use
+    /// [`ObsAudioInfo::new_low_latency`] only when lower latency is worth reduced buffering headroom.
+    pub fn set_audio_info(mut self, audio: ObsAudioInfo) -> Self {
+        self.obs_audio_info = audio;
+        self
+    }
+
     /// Sets the root directory used by OBS modules for persistent configuration.
     ///
     /// libobs passes this value to modules through `obs_module_config_path`.
@@ -57,6 +66,11 @@ impl StartupInfo {
     #[cfg_attr(coverage_nightly, coverage(off))]
     pub fn get_video_info(&self) -> &ObsVideoInfo {
         &self.obs_video_info
+    }
+
+    /// Returns the audio configuration that will be passed to `obs_reset_audio2` at startup.
+    pub fn get_audio_info(&self) -> &ObsAudioInfo {
+        &self.obs_audio_info
     }
 
     #[cfg_attr(coverage_nightly, coverage(off))]
@@ -238,6 +252,21 @@ impl Default for StartupPathsBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::enums::{ObsSamplesPerSecond, ObsSpeakerLayout};
+
+    #[test]
+    fn startup_audio_configuration_is_retained_for_initialization() {
+        let audio = ObsAudioInfo::new(
+            ObsSamplesPerSecond::F48000,
+            ObsSpeakerLayout::Stereo,
+            35,
+            true,
+        );
+        let startup = StartupInfo::new().set_audio_info(audio.clone());
+
+        assert_eq!(startup.get_audio_info(), &audio);
+        assert_eq!(startup.obs_audio_info, audio);
+    }
 
     #[test]
     fn module_config_path_is_explicitly_configurable() {

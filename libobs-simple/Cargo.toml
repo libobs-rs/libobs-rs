@@ -28,6 +28,8 @@ display-info = { workspace = true }
 libobs-window-helper = { workspace = true, optional = true }
 paste = { workspace = true }
 lazy_static.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 windows.workspace = true
@@ -42,7 +44,6 @@ __test_environment = ["libobs-wrapper/__test_environment"]
 [dev-dependencies]
 anyhow = { workspace = true }
 env_logger = { workspace = true }
-serde_json = { workspace = true }
 libobs-wrapper = { workspace = true, features = ["__test_environment"], default-features = false}
 winit = { workspace = true }
 tokio = { workspace = true, features = ["rt", "macros"] }

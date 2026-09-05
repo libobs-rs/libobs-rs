@@ -31,6 +31,17 @@ pub enum ObsError {
     OutputStartFailure(Option<String>),
     OutputStopFailure(Option<String>),
     OutputPauseFailure(Option<String>),
+    /// A bounded output/replay operation did not observe native completion before its deadline.
+    /// The native operation is not cancelled and may still complete after this error is returned.
+    OutputOperationTimeout {
+        operation: String,
+        timeout_ms: u64,
+    },
+    /// The signal subscription used to observe native completion was disconnected, usually because
+    /// the owning output/runtime was shut down while the caller was waiting.
+    OutputCompletionDisconnected {
+        operation: String,
+    },
     OutputNotFound,
     SourceNotFound,
     SourceNotAvailable(String),
@@ -182,58 +193,193 @@ impl Display for ObsError {
 
         match self {
             ObsError::Failure => write!(f, "`obs-startup` function failed on libobs"),
-            ObsError::MutexFailure => write!(f, "Failed to lock mutex describing whether there is a thread using libobs or not. Report to crate maintainer."),
-            ObsError::ThreadFailure => write!(f, "Some or no thread is already using libobs. This is a bug!"),
+            ObsError::MutexFailure => write!(
+                f,
+                "Failed to lock mutex describing whether there is a thread using libobs or not. Report to crate maintainer."
+            ),
+            ObsError::ThreadFailure => write!(
+                f,
+                "Some or no thread is already using libobs. This is a bug!"
+            ),
             ObsError::ResetAudioFailure => write!(f, "Could not initialize/reset OBS audio."),
-            ObsError::ResetVideoFailure(status) => write!(f, "Could not reset obs video. Status: {:?}", status),
-            ObsError::ResetVideoFailureGraphicsModule => write!(f, "Unable to reset video because the program attempted to change the graphics module. This is a bug!"),
-            ObsError::ResetVideoFailureOutputActive => write!(f, "Unable to reset video because some outputs were still active."),
-            ObsError::NullPointer(e) => write!(f, "The function returned a null pointer, often indicating an error with creating the object of the requested pointer. Details: {:?}", e),
+            ObsError::ResetVideoFailure(status) => {
+                write!(f, "Could not reset obs video. Status: {:?}", status)
+            }
+            ObsError::ResetVideoFailureGraphicsModule => write!(
+                f,
+                "Unable to reset video because the program attempted to change the graphics module. This is a bug!"
+            ),
+            ObsError::ResetVideoFailureOutputActive => write!(
+                f,
+                "Unable to reset video because some outputs were still active."
+            ),
+            ObsError::NullPointer(e) => write!(
+                f,
+                "The function returned a null pointer, often indicating an error with creating the object of the requested pointer. Details: {:?}",
+                e
+            ),
             ObsError::OutputAlreadyActive => write!(f, "Output is already active."),
-            ObsError::OutputStartFailure(s) => write!(f, "Output failed to start. Error is {:?}", s),
+            ObsError::OutputStartFailure(s) => {
+                write!(f, "Output failed to start. Error is {:?}", s)
+            }
             ObsError::OutputStopFailure(s) => write!(f, "Output failed to stop. Error is {:?}", s),
             ObsError::OutputNotFound => write!(f, "Output not found."),
-            ObsError::DisplayCreationError(e) => write!(f, "Native error from the Windows API when creating a display: {:?}", e),
-            ObsError::OutputSaveBufferFailure(e) => write!(f, "Couldn't save output buffer: {:?}", e),
+            ObsError::DisplayCreationError(e) => write!(
+                f,
+                "Native error from the Windows API when creating a display: {:?}",
+                e
+            ),
+            ObsError::OutputSaveBufferFailure(e) => {
+                write!(f, "Couldn't save output buffer: {:?}", e)
+            }
             ObsError::SourceNotFound => write!(f, "Source not found."),
-            ObsError::SourceNotAvailable(source_name) => write!(f, "Source {} is not available. See logs or similar to check why.", source_name),
+            ObsError::SourceNotAvailable(source_name) => write!(
+                f,
+                "Source {} is not available. See logs or similar to check why.",
+                source_name
+            ),
             ObsError::InvocationError(e) => write!(f, "The obs thread couldn't be called: {:?}", e),
             ObsError::JsonParseError => write!(f, "Failed to parse JSON data."),
             ObsError::NoSenderError => write!(f, "Couldn't get the sender of the signal."),
             ObsError::NoAvailableEncoders => write!(f, "No available encoders found."),
-            ObsError::OutputPauseFailure(s) => write!(f, "Output failed to pause. Error is {:?}", s),
-            ObsError::LockError(e) => write!(f, "Error locking a mutex or RwLock: {:?}. You should probably restart the application to avoid memory leaks.", e),
+            ObsError::OutputPauseFailure(s) => {
+                write!(f, "Output failed to pause. Error is {:?}", s)
+            }
+            ObsError::OutputOperationTimeout {
+                operation,
+                timeout_ms,
+            } => write!(
+                f,
+                "Timed out after {timeout_ms} ms waiting for OBS operation '{operation}'. The native operation was not cancelled and may still complete; re-query output state before retrying or releasing resources."
+            ),
+            ObsError::OutputCompletionDisconnected { operation } => write!(
+                f,
+                "Lost the completion signal for OBS operation '{operation}', usually because the output/runtime is shutting down. Re-query state if the runtime is still available."
+            ),
+            ObsError::LockError(e) => write!(
+                f,
+                "Error locking a mutex or RwLock: {:?}. You should probably restart the application to avoid memory leaks.",
+                e
+            ),
             ObsError::Unexpected(e) => write!(f, "Unexpected error: {:?}", e),
-            ObsError::EncoderActive => write!(f, "Encoder is still active, stop the attached output before proceeding"),
-            ObsError::StringConversionError => write!(f, "Error converting a string between Rust and OBS"),
-            ObsError::PlatformInitError(e) => write!(f, "Error during platform-specific initialization: {}", e),
+            ObsError::EncoderActive => write!(
+                f,
+                "Encoder is still active, stop the attached output before proceeding"
+            ),
+            ObsError::StringConversionError => {
+                write!(f, "Error converting a string between Rust and OBS")
+            }
+            ObsError::PlatformInitError(e) => {
+                write!(f, "Error during platform-specific initialization: {}", e)
+            }
             ObsError::InvalidOperation(e) => write!(f, "Invalid operation: {}", e),
             ObsError::IoError(e) => write!(f, "I/O error: {}", e),
             ObsError::SignalDataError(e) => write!(f, "Signal data error: {}", e),
             ObsError::EnumConversionError(e) => write!(f, "Enum conversion error: {}", e),
-            ObsError::PropertyTypeMismatch { expected } => write!(f, "OBS property type mismatch; expected {expected}"),
-            ObsError::PropertyNotFound { name } => write!(f, "OBS settings schema has no property named '{name}'."),
-            ObsError::PropertyValueTypeMismatch { name, expected, actual } => write!(f, "OBS property '{name}' expects {expected}, but received {actual}."),
-            ObsError::PropertyValueOutOfRange { name, value, min, max } => write!(f, "OBS property '{name}' value {value} is outside the supported range {min}..={max}."),
-            ObsError::PropertyValueNotAllowed { name, value } => write!(f, "OBS property '{name}' does not accept value {value}."),
-            ObsError::PropertyValueUnsupported { name, property_type } => write!(f, "OBS property '{name}' ({property_type}) is not a scalar setting value."),
+            ObsError::PropertyTypeMismatch { expected } => {
+                write!(f, "OBS property type mismatch; expected {expected}")
+            }
+            ObsError::PropertyNotFound { name } => {
+                write!(f, "OBS settings schema has no property named '{name}'.")
+            }
+            ObsError::PropertyValueTypeMismatch {
+                name,
+                expected,
+                actual,
+            } => write!(
+                f,
+                "OBS property '{name}' expects {expected}, but received {actual}."
+            ),
+            ObsError::PropertyValueOutOfRange {
+                name,
+                value,
+                min,
+                max,
+            } => write!(
+                f,
+                "OBS property '{name}' value {value} is outside the supported range {min}..={max}."
+            ),
+            ObsError::PropertyValueNotAllowed { name, value } => {
+                write!(f, "OBS property '{name}' does not accept value {value}.")
+            }
+            ObsError::PropertyValueUnsupported {
+                name,
+                property_type,
+            } => write!(
+                f,
+                "OBS property '{name}' ({property_type}) is not a scalar setting value."
+            ),
             ObsError::RuntimeChannelError(e) => write!(f, "Runtime channel error: {}", e),
-            ObsError::RuntimeQueueFull { capacity } => write!(f, "OBS runtime queue is full (capacity: {}). Batch work or retry later.", capacity),
-            ObsError::RuntimePanicked => write!(f, "The OBS actor panicked and has been shut down."),
-            ObsError::RuntimeMismatch => write!(f, "The operation mixed objects owned by different OBS runtimes."),
-            ObsError::CapabilityKindMismatch { id, expected, actual } => write!(f, "Discovered OBS type '{id}' has kind '{actual}', but this operation requires '{expected}'."),
-            ObsError::OutputPipelineMissingComponent { output_id, component } => write!(f, "Output pipeline for '{output_id}' requires {component}."),
-            ObsError::OutputPipelineUnexpectedComponent { output_id, component } => write!(f, "Output pipeline for '{output_id}' does not accept {component}."),
-            ObsError::OutputPipelineUnsupportedCodec { output_id, media, codec } => write!(f, "Output '{output_id}' does not support {media} codec '{codec}'."),
-            ObsError::OutputPipelineUnsupportedProtocol { output_id, protocol } => write!(f, "Output '{output_id}' does not support service protocol '{protocol}'."),
-            ObsError::NoCompatibleOutputGraph { summary } => write!(f, "No compatible OBS output graph: {summary}"),
-            ObsError::AudioMixerIndexOutOfBounds { index, max } => write!(f, "Audio mixer index {index} is out of bounds (max {max})."),
-            ObsError::RuntimeReentrantBlocking => write!(f, "A blocking operation cannot wait for an OBS callback from the OBS actor thread."),
-            ObsError::InvalidDll => write!(f, "A dummy DLL was loaded instead of the real libobs DLL. Make sure you bootstrap properly with libobs-bootstrapper"),
-            #[cfg(feature="enable_runtime")]
-            ObsError::RuntimeOutsideThread => write!(f, "Attempted to call a OBS runtime function from outside the OBS thread. This is a bug in the crate!"),
-            #[cfg(not(feature="enable_runtime"))]
-            ObsError::RuntimeOutsideThread => write!(f, "Attempted to call a OBS runtime function from outside the OBS thread. Make sure that you do not use any OBS struct from a different thread than the one where the ObsContext was initialized. THIS BUG WILL CAUSE MEMORY CORRUPTION OR DEADLOCKS!"),
+            ObsError::RuntimeQueueFull { capacity } => write!(
+                f,
+                "OBS runtime queue is full (capacity: {}). Batch work or retry later.",
+                capacity
+            ),
+            ObsError::RuntimePanicked => {
+                write!(f, "The OBS actor panicked and has been shut down.")
+            }
+            ObsError::RuntimeMismatch => write!(
+                f,
+                "The operation mixed objects owned by different OBS runtimes."
+            ),
+            ObsError::CapabilityKindMismatch {
+                id,
+                expected,
+                actual,
+            } => write!(
+                f,
+                "Discovered OBS type '{id}' has kind '{actual}', but this operation requires '{expected}'."
+            ),
+            ObsError::OutputPipelineMissingComponent {
+                output_id,
+                component,
+            } => write!(f, "Output pipeline for '{output_id}' requires {component}."),
+            ObsError::OutputPipelineUnexpectedComponent {
+                output_id,
+                component,
+            } => write!(
+                f,
+                "Output pipeline for '{output_id}' does not accept {component}."
+            ),
+            ObsError::OutputPipelineUnsupportedCodec {
+                output_id,
+                media,
+                codec,
+            } => write!(
+                f,
+                "Output '{output_id}' does not support {media} codec '{codec}'."
+            ),
+            ObsError::OutputPipelineUnsupportedProtocol {
+                output_id,
+                protocol,
+            } => write!(
+                f,
+                "Output '{output_id}' does not support service protocol '{protocol}'."
+            ),
+            ObsError::NoCompatibleOutputGraph { summary } => {
+                write!(f, "No compatible OBS output graph: {summary}")
+            }
+            ObsError::AudioMixerIndexOutOfBounds { index, max } => {
+                write!(f, "Audio mixer index {index} is out of bounds (max {max}).")
+            }
+            ObsError::RuntimeReentrantBlocking => write!(
+                f,
+                "A blocking operation cannot wait for an OBS callback from the OBS actor thread."
+            ),
+            ObsError::InvalidDll => write!(
+                f,
+                "A dummy DLL was loaded instead of the real libobs DLL. Make sure you bootstrap properly with libobs-bootstrapper"
+            ),
+            #[cfg(feature = "enable_runtime")]
+            ObsError::RuntimeOutsideThread => write!(
+                f,
+                "Attempted to call a OBS runtime function from outside the OBS thread. This is a bug in the crate!"
+            ),
+            #[cfg(not(feature = "enable_runtime"))]
+            ObsError::RuntimeOutsideThread => write!(
+                f,
+                "Attempted to call a OBS runtime function from outside the OBS thread. Make sure that you do not use any OBS struct from a different thread than the one where the ObsContext was initialized. THIS BUG WILL CAUSE MEMORY CORRUPTION OR DEADLOCKS!"
+            ),
             ObsError::FilterAlreadyApplied => write!(f, "Filter was applied already."),
         }
     }

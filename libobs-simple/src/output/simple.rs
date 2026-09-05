@@ -29,13 +29,17 @@ use libobs_wrapper::{
         EncoderTypeInfo, ObsCapabilities, OutputCapabilities, OutputCompatibilityRequest,
     },
     context::ObsContext,
-    data::{output::ObsOutputRef, ObsData, ObsDataSetters},
+    data::{
+        audio::{AudioEncoderSlot, AudioMixIndex},
+        output::{ObsOutputRef, ObsOutputTrait},
+        ObsData, ObsDataSetters,
+    },
     encoders::{ObsAudioEncoderType, ObsVideoEncoderType},
     settings::PropertyValue,
     utils::{ObsError, ObsPath, ObsString},
 };
 
-use super::configure::set_if_supported;
+use super::configure::{set_reported, ConfigurationMode, OutputConfigurationReport};
 
 /// Preset for x264 software encoder
 #[derive(Debug, Clone, Copy)]
@@ -102,7 +106,7 @@ pub enum VideoEncoder {
     Auto(HardwareCodec),
     /// x264 software encoder
     X264(X264Preset),
-    /// Hardware encoder (NVENC/AMF/QSV), codec chosen generically at runtime
+    /// Require a hardware encoder (NVENC/AMF/QSV/etc.); no software fallback is allowed.
     Hardware {
         codec: HardwareCodec,
         preset: HardwarePreset,
@@ -133,30 +137,84 @@ fn video_encoder_descriptor(
     capabilities: &ObsCapabilities,
     encoder: &VideoEncoder,
 ) -> Result<EncoderTypeInfo, ObsError> {
+    video_encoder_candidates(capabilities, encoder)
+        .into_iter()
+        .next()
+        .ok_or(ObsError::NoAvailableEncoders)
+}
+
+fn video_encoder_candidates(
+    capabilities: &ObsCapabilities,
+    encoder: &VideoEncoder,
+) -> Vec<EncoderTypeInfo> {
     match encoder {
-        VideoEncoder::Auto(codec) | VideoEncoder::Hardware { codec, .. } => capabilities
+        VideoEncoder::Auto(codec) => capabilities
             .select_video_encoder()
             .codec(codec.codec_name())
             .prefer_hardware()
-            .best_available()
+            .matches()
+            .into_iter()
             .cloned()
-            .ok_or(ObsError::NoAvailableEncoders),
+            .collect(),
+        VideoEncoder::Hardware { codec, .. } => capabilities
+            .select_video_encoder()
+            .codec(codec.codec_name())
+            .require_hardware()
+            .matches()
+            .into_iter()
+            .cloned()
+            .collect(),
         VideoEncoder::X264(_) => capabilities
             .encoders()
             .iter()
-            .find(|candidate| candidate.id() == "obs_x264")
+            .filter(|candidate| candidate.id() == "obs_x264")
             .cloned()
-            .ok_or(ObsError::NoAvailableEncoders),
+            .collect(),
         VideoEncoder::Custom(encoder_type) => {
             let id = ObsString::from(encoder_type.clone()).to_string();
             capabilities
                 .encoders()
                 .iter()
-                .find(|candidate| candidate.id() == id)
+                .filter(|candidate| candidate.id() == id)
                 .cloned()
-                .ok_or(ObsError::NoAvailableEncoders)
+                .collect()
         }
     }
+}
+
+fn creation_failure_allows_fallback(error: &ObsError) -> bool {
+    matches!(
+        error,
+        ObsError::NullPointer(_) | ObsError::NoAvailableEncoders | ObsError::SourceNotAvailable(_)
+    )
+}
+
+fn start_failure_allows_encoder_fallback(error: &ObsError) -> bool {
+    let ObsError::OutputStartFailure(Some(message)) = error else {
+        return false;
+    };
+    let message = message.to_ascii_lowercase();
+    if [
+        "path",
+        "permission",
+        "disk",
+        "space",
+        "connect",
+        "server",
+        "auth",
+        "stream key",
+        "network",
+        "url",
+        "destination",
+    ]
+    .iter()
+    .any(|token| message.contains(token))
+    {
+        return false;
+    }
+    ["encoder", "nvenc", "amf", "qsv", "vaapi", "videotoolbox"]
+        .iter()
+        .any(|token| message.contains(token))
 }
 
 pub(crate) fn select_video_encoder_type(
@@ -230,20 +288,35 @@ pub enum OutputFormat {
     MpegTs,
 }
 
+/// One audio track in a simple recording. The encoder reads `mix` and is attached to `slot`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SimpleAudioTrack {
+    pub mix: AudioMixIndex,
+    pub slot: AudioEncoderSlot,
+}
+
+impl SimpleAudioTrack {
+    pub const fn new(mix: AudioMixIndex, slot: AudioEncoderSlot) -> Self {
+        Self { mix, slot }
+    }
+}
+
 /// Unified output settings
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct OutputSettings {
     name: ObsString,
     video_bitrate: u32,
     audio_bitrate: u32,
     video_encoder: VideoEncoder,
     audio_encoder: AudioEncoder,
+    audio_tracks: Vec<SimpleAudioTrack>,
     custom_encoder_settings: Option<String>,
     path: ObsPath,
     format: OutputFormat,
     custom_muxer_settings: Option<String>,
     /// Quality for CRF-based x264 encoding, on a 0–100 scale.
     crf: Option<u32>,
+    configuration_mode: ConfigurationMode,
 }
 
 impl OutputSettings {
@@ -318,10 +391,106 @@ impl OutputSettings {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SimpleOutputBuilder {
     settings: OutputSettings,
     context: ObsContext,
+}
+
+/// Simple recording output paired with the effective plugin/settings report used to build it.
+#[derive(Debug)]
+pub struct ConfiguredSimpleOutput {
+    output: ObsOutputRef,
+    report: OutputConfigurationReport,
+}
+
+impl ConfiguredSimpleOutput {
+    pub fn output(&self) -> &ObsOutputRef {
+        &self.output
+    }
+
+    pub fn report(&self) -> &OutputConfigurationReport {
+        &self.report
+    }
+
+    pub fn into_output(self) -> ObsOutputRef {
+        self.output
+    }
+}
+
+/// Managed simple recording that can conservatively retry eligible encoder initialization/start
+/// failures using the remaining compatible candidates. Destination/auth/path errors are never
+/// retried as encoder fallbacks.
+#[derive(Debug)]
+pub struct ManagedSimpleOutput {
+    template: SimpleOutputBuilder,
+    configured: ConfiguredSimpleOutput,
+    next_candidate: usize,
+}
+
+impl ManagedSimpleOutput {
+    pub fn output(&self) -> &ObsOutputRef {
+        self.configured.output()
+    }
+
+    pub fn report(&self) -> &OutputConfigurationReport {
+        self.configured.report()
+    }
+
+    pub fn start(&mut self) -> Result<(), ObsError> {
+        loop {
+            let plugin_id = self.configured.report.video_encoder_plugin_id.clone();
+            match self.configured.output.start() {
+                Ok(()) => {
+                    self.configured.report.attempts.push(super::EncoderAttempt {
+                        plugin_id,
+                        stage: super::EncoderAttemptStage::Start,
+                        outcome: super::EncoderAttemptOutcome::Succeeded,
+                    });
+                    return Ok(());
+                }
+                Err(error) => {
+                    let eligible = start_failure_allows_encoder_fallback(&error);
+                    self.configured.report.attempts.push(super::EncoderAttempt {
+                        plugin_id: plugin_id.clone(),
+                        stage: super::EncoderAttemptStage::Start,
+                        outcome: super::EncoderAttemptOutcome::Failed {
+                            error: error.to_string(),
+                            fallback_eligible: eligible,
+                        },
+                    });
+                    if !eligible
+                        || self.configured.output.is_active().unwrap_or(true)
+                        || self.configured.output.is_reconnecting().unwrap_or(true)
+                    {
+                        return Err(error);
+                    }
+
+                    let prior_attempts = self.configured.report.attempts.clone();
+                    let prior_reasons = self.configured.report.fallback_reasons.clone();
+                    let (mut replacement, next_candidate) = self
+                        .template
+                        .clone()
+                        .build_with_report_from_candidate(self.next_candidate)?;
+                    replacement.report.attempts.splice(0..0, prior_attempts);
+                    replacement
+                        .report
+                        .fallback_reasons
+                        .splice(0..0, prior_reasons);
+                    replacement.report.fallback_reasons.push(format!(
+                        "encoder '{}' failed to start; retrying eligible backend '{}'",
+                        plugin_id, replacement.report.video_encoder_plugin_id
+                    ));
+                    self.configured = replacement;
+                    self.next_candidate = next_candidate;
+                }
+            }
+        }
+    }
+
+    pub fn stop(&self) -> Result<(), ObsError> {
+        self.configured.output.stop()
+    }
 }
 
 pub trait ObsContextSimpleExt {
@@ -355,11 +524,16 @@ impl SimpleOutputBuilder {
                 audio_bitrate: 160,
                 video_encoder: VideoEncoder::Auto(HardwareCodec::H264),
                 audio_encoder: AudioEncoder::AAC,
+                audio_tracks: vec![SimpleAudioTrack::new(
+                    AudioMixIndex::new(0).expect("OBS always exposes mix 0"),
+                    AudioEncoderSlot::new(0).expect("OBS always exposes audio slot 0"),
+                )],
                 custom_encoder_settings: None,
                 path: path.into(),
                 format: OutputFormat::default(),
                 custom_muxer_settings: None,
                 crf: None,
+                configuration_mode: ConfigurationMode::Permissive,
                 name: name.into(),
             },
             context,
@@ -403,15 +577,65 @@ impl SimpleOutputBuilder {
         self
     }
 
+    /// Prefer hardware for the requested codec while allowing software fallback.
+    pub fn prefer_hardware_encoder(self, codec: HardwareCodec) -> Self {
+        self.auto_video_encoder(codec)
+    }
+
     /// Sets the video encoder to x264.
     pub fn x264_encoder(mut self, preset: X264Preset) -> Self {
         self.settings.video_encoder = VideoEncoder::X264(preset);
         self
     }
 
-    /// Sets the video encoder to a generic hardware encoder.
+    /// Requires a generic hardware encoder. If no hardware backend is available, build fails.
     pub fn hardware_encoder(mut self, codec: HardwareCodec, preset: HardwarePreset) -> Self {
         self.settings.video_encoder = VideoEncoder::Hardware { codec, preset };
+        self
+    }
+
+    /// Alias spelling out the no-software-fallback policy.
+    pub fn require_hardware_encoder(self, codec: HardwareCodec, preset: HardwarePreset) -> Self {
+        self.hardware_encoder(codec, preset)
+    }
+
+    /// Selects one explicit backend by OBS encoder type. No automatic backend substitution occurs.
+    pub fn explicit_video_encoder(mut self, encoder: ObsVideoEncoderType) -> Self {
+        self.settings.video_encoder = VideoEncoder::Custom(encoder);
+        self
+    }
+
+    /// Requires all requested generic encoder settings to be accepted exactly by the selected
+    /// backend. In permissive mode (the default), unsupported/rejected generic choices retain the
+    /// plugin default and are surfaced in [`OutputConfigurationReport`].
+    pub fn configuration_mode(mut self, mode: ConfigurationMode) -> Self {
+        self.settings.configuration_mode = mode;
+        self
+    }
+
+    pub fn strict_configuration(self) -> Self {
+        self.configuration_mode(ConfigurationMode::Strict)
+    }
+
+    /// Adds an encoded recording track. The source mix and output attachment slot are independent.
+    ///
+    /// The builder starts with mix 0 at slot 0 for compatibility. A common layout keeps that
+    /// combined track and adds dedicated desktop/microphone mixes at slots 1 and 2.
+    pub fn audio_track(mut self, mix: AudioMixIndex, slot: AudioEncoderSlot) -> Self {
+        self.settings
+            .audio_tracks
+            .retain(|track| track.slot != slot);
+        self.settings
+            .audio_tracks
+            .push(SimpleAudioTrack::new(mix, slot));
+        self
+    }
+
+    /// Removes the compatibility default combined track (mix 0 / slot 0).
+    pub fn without_default_audio_track(mut self) -> Self {
+        self.settings
+            .audio_tracks
+            .retain(|track| track.slot.index() != 0);
         self
     }
 
@@ -425,7 +649,32 @@ impl SimpleOutputBuilder {
     }
 
     /// Builds a validated recording graph using the concrete capabilities available at runtime.
+    /// This compatibility entry point discards the structured configuration report.
     pub fn build(self) -> Result<ObsOutputRef, ObsError> {
+        Ok(self.build_with_report()?.into_output())
+    }
+
+    /// Builds the graph and returns the effective plugin/settings configuration report.
+    pub fn build_with_report(self) -> Result<ConfiguredSimpleOutput, ObsError> {
+        self.build_with_report_from_candidate(0)
+            .map(|(configured, _)| configured)
+    }
+
+    /// Builds the managed variant that can retry eligible initialization/start failures.
+    pub fn build_managed(self) -> Result<ManagedSimpleOutput, ObsError> {
+        let template = self.clone();
+        let (configured, next_candidate) = self.build_with_report_from_candidate(0)?;
+        Ok(ManagedSimpleOutput {
+            template,
+            configured,
+            next_candidate,
+        })
+    }
+
+    fn build_with_report_from_candidate(
+        self,
+        candidate_start: usize,
+    ) -> Result<(ConfiguredSimpleOutput, usize), ObsError> {
         let output_id = match self.settings.format {
             OutputFormat::HybridMP4 => "mp4_output",
             OutputFormat::HybridMov => "mov_output",
@@ -433,7 +682,12 @@ impl SimpleOutputBuilder {
         };
 
         let capabilities = self.context.capabilities()?;
-        let video_type = video_encoder_descriptor(&capabilities, &self.settings.video_encoder)?;
+        let video_candidates =
+            video_encoder_candidates(&capabilities, &self.settings.video_encoder);
+        let preferred_video_type = video_candidates
+            .get(candidate_start)
+            .cloned()
+            .ok_or(ObsError::NoAvailableEncoders)?;
         let audio_type = audio_encoder_descriptor(&capabilities, &self.settings.audio_encoder)?;
 
         let mut compatibility = OutputCompatibilityRequest::new()
@@ -441,7 +695,7 @@ impl SimpleOutputBuilder {
             .require_output_capabilities(
                 OutputCapabilities::ENCODED | OutputCapabilities::VIDEO | OutputCapabilities::AUDIO,
             );
-        if let Some(codec) = video_type.codec() {
+        if let Some(codec) = preferred_video_type.codec() {
             compatibility = compatibility.video_codec(codec);
         }
         if let Some(codec) = audio_type.codec() {
@@ -455,52 +709,143 @@ impl SimpleOutputBuilder {
             .output()
             .clone();
 
+        let mut report = OutputConfigurationReport {
+            output_plugin_id: output_type.id().to_owned(),
+            video_encoder_plugin_id: preferred_video_type.id().to_owned(),
+            audio_encoder_plugin_ids: self
+                .settings
+                .audio_tracks
+                .iter()
+                .map(|_| audio_type.id().to_owned())
+                .collect(),
+            ..Default::default()
+        };
+        if matches!(self.settings.video_encoder, VideoEncoder::Auto(_))
+            && !preferred_video_type.is_likely_hardware_accelerated()
+        {
+            report.fallback_reasons.push(format!(
+                "preferred hardware encoder was unavailable; selected software backend '{}'",
+                preferred_video_type.id()
+            ));
+        }
+
         let mut output_settings = output_type.default_settings_mut()?;
         output_settings.set_string("path", self.settings.path.clone().build())?;
         if let Some(ref muxer_settings) = self.settings.custom_muxer_settings {
             output_settings.set_string("muxer_settings", muxer_settings.as_str())?;
         }
 
-        let mut video_settings = video_type.default_settings_mut()?;
-        self.configure_video_encoder(&video_type, &mut video_settings)?;
-        let video_encoder = self.context.create_video_encoder(
-            &video_type,
-            format!("{}_video_encoder", self.settings.name),
-            Some(video_settings),
-        )?;
+        let mut selected_video = None;
+        let mut selected_index = candidate_start;
+        let mut last_creation_error = None;
+        for (index, video_type) in video_candidates.iter().enumerate().skip(candidate_start) {
+            let mut candidate_report = OutputConfigurationReport::default();
+            let mut video_settings = video_type.default_settings_mut()?;
+            self.configure_video_encoder(video_type, &mut video_settings, &mut candidate_report)?;
+            match self.context.create_video_encoder(
+                video_type,
+                format!("{}_video_encoder", self.settings.name),
+                Some(video_settings),
+            ) {
+                Ok(encoder) => {
+                    report.video_encoder_plugin_id = video_type.id().to_owned();
+                    report.settings.extend(candidate_report.settings);
+                    report.attempts.push(super::EncoderAttempt {
+                        plugin_id: video_type.id().to_owned(),
+                        stage: super::EncoderAttemptStage::Creation,
+                        outcome: super::EncoderAttemptOutcome::Succeeded,
+                    });
+                    if index > candidate_start {
+                        report.fallback_reasons.push(format!(
+                            "earlier encoder creation failed; selected '{}'",
+                            video_type.id()
+                        ));
+                    }
+                    selected_video = Some(encoder);
+                    selected_index = index;
+                    break;
+                }
+                Err(error) => {
+                    let eligible = creation_failure_allows_fallback(&error);
+                    report.attempts.push(super::EncoderAttempt {
+                        plugin_id: video_type.id().to_owned(),
+                        stage: super::EncoderAttemptStage::Creation,
+                        outcome: super::EncoderAttemptOutcome::Failed {
+                            error: error.to_string(),
+                            fallback_eligible: eligible,
+                        },
+                    });
+                    if !eligible {
+                        return Err(error);
+                    }
+                    last_creation_error = Some(error);
+                }
+            }
+        }
+        let video_encoder = selected_video
+            .ok_or_else(|| last_creation_error.unwrap_or(ObsError::NoAvailableEncoders))?;
 
-        let mut audio_settings = audio_type.default_settings_mut()?;
-        let audio_schema = audio_type.settings_schema_for(&audio_settings)?;
-        set_if_supported(
-            &audio_schema,
-            &mut audio_settings,
-            "rate_control",
-            PropertyValue::String("CBR".into()),
-        )?;
-        set_if_supported(
-            &audio_schema,
-            &mut audio_settings,
-            "bitrate",
-            PropertyValue::Integer(i64::from(self.settings.audio_bitrate)),
-        )?;
-        let audio_encoder = self.context.create_audio_encoder(
-            &audio_type,
-            format!("{}_audio_encoder", self.settings.name),
-            Some(audio_settings),
-            0,
-        )?;
+        if self.settings.audio_tracks.is_empty() {
+            return Err(ObsError::InvalidOperation(
+                "simple recording requires at least one audio track".into(),
+            ));
+        }
 
-        Ok(self
+        let mut audio_encoders = Vec::with_capacity(self.settings.audio_tracks.len());
+        for track in &self.settings.audio_tracks {
+            let mut audio_settings = audio_type.default_settings_mut()?;
+            let audio_schema = audio_type.settings_schema_for(&audio_settings)?;
+            set_reported(
+                &audio_schema,
+                &mut audio_settings,
+                "audio_encoder",
+                "rate_control",
+                PropertyValue::String("CBR".into()),
+                self.settings.configuration_mode,
+                &mut report,
+            )?;
+            set_reported(
+                &audio_schema,
+                &mut audio_settings,
+                "audio_encoder",
+                "bitrate",
+                PropertyValue::Integer(i64::from(self.settings.audio_bitrate)),
+                self.settings.configuration_mode,
+                &mut report,
+            )?;
+            let encoder = self.context.create_audio_encoder_for_mix(
+                &audio_type,
+                format!(
+                    "{}_audio_mix{}_slot{}",
+                    self.settings.name,
+                    track.mix.index(),
+                    track.slot.index()
+                ),
+                Some(audio_settings),
+                track.mix,
+            )?;
+            audio_encoders.push((*track, encoder));
+        }
+
+        let mut pipeline = self
             .context
             .output_pipeline(
                 &output_type,
                 self.settings.name.clone(),
                 Some(output_settings),
             )
-            .video_encoder(video_encoder)
-            .audio_encoder(0, audio_encoder)
-            .build()?
-            .into_output())
+            .video_encoder(video_encoder);
+        for (track, encoder) in audio_encoders {
+            pipeline = pipeline.audio_encoder_at_slot(track.slot, encoder);
+        }
+
+        Ok((
+            ConfiguredSimpleOutput {
+                output: pipeline.build()?.into_output(),
+                report,
+            },
+            selected_index + 1,
+        ))
     }
 
     fn get_encoder_preset(&self, encoder: &VideoEncoder) -> Option<&str> {
@@ -524,60 +869,128 @@ impl SimpleOutputBuilder {
         &self,
         encoder_type: &EncoderTypeInfo,
         settings: &mut ObsData,
+        report: &mut OutputConfigurationReport,
     ) -> Result<(), ObsError> {
         let schema = encoder_type.settings_schema_for(settings)?;
         let use_crf = self.settings.crf.is_some() && Self::uses_x264(encoder_type);
         if use_crf {
-            set_if_supported(
+            set_reported(
                 &schema,
                 settings,
+                "video_encoder",
                 "rate_control",
                 PropertyValue::String("CRF".into()),
+                self.settings.configuration_mode,
+                report,
             )?;
             if let Some(quality) = self.settings.crf {
-                set_if_supported(
+                set_reported(
                     &schema,
                     settings,
+                    "video_encoder",
                     "crf",
                     PropertyValue::Integer(Self::x264_crf_from_quality(quality)),
+                    self.settings.configuration_mode,
+                    report,
                 )?;
             }
         } else {
-            set_if_supported(
+            set_reported(
                 &schema,
                 settings,
+                "video_encoder",
                 "rate_control",
                 PropertyValue::String("CBR".into()),
+                self.settings.configuration_mode,
+                report,
             )?;
-            set_if_supported(
+            set_reported(
                 &schema,
                 settings,
+                "video_encoder",
                 "bitrate",
                 PropertyValue::Integer(i64::from(self.settings.video_bitrate)),
+                self.settings.configuration_mode,
+                report,
             )?;
             if self.settings.crf.is_some() {
-                log::warn!(
-                    "CRF is only supported by the selected x264 encoder; using CBR at {} Kbps instead",
-                    self.settings.video_bitrate
+                let reason = format!(
+                    "CRF is x264-specific; selected backend '{}' retained its bitrate/default rate control",
+                    encoder_type.id()
                 );
+                report.fallback_reasons.push(reason.clone());
+                log::warn!("{reason}");
+                if self.settings.configuration_mode == ConfigurationMode::Strict {
+                    return Err(ObsError::InvalidOperation(reason));
+                }
             }
         }
         if let Some(preset) = self.get_encoder_preset(&self.settings.video_encoder) {
-            set_if_supported(
+            set_reported(
                 &schema,
                 settings,
+                "video_encoder",
                 "preset",
                 PropertyValue::String(preset.into()),
+                self.settings.configuration_mode,
+                report,
             )?;
         }
         if let Some(ref custom) = self.settings.custom_encoder_settings {
-            set_if_supported(
+            set_reported(
                 &schema,
                 settings,
+                "video_encoder",
                 "x264opts",
                 PropertyValue::String(custom.clone()),
+                self.settings.configuration_mode,
+                report,
             )?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod policy_tests {
+    use super::*;
+
+    #[test]
+    fn start_fallback_is_conservative_about_destination_failures() {
+        for message in [
+            "invalid output path",
+            "permission denied opening file",
+            "failed to connect to server",
+            "authentication failed",
+            "invalid stream key",
+        ] {
+            assert!(!start_failure_allows_encoder_fallback(
+                &ObsError::OutputStartFailure(Some(message.into()))
+            ));
+        }
+    }
+
+    #[test]
+    fn start_fallback_accepts_backend_initialization_failures() {
+        for message in [
+            "NVENC encoder failed to initialize",
+            "QSV encoder unavailable",
+            "AMF encoder initialization failed",
+            "video encoder could not start",
+        ] {
+            assert!(start_failure_allows_encoder_fallback(
+                &ObsError::OutputStartFailure(Some(message.into()))
+            ));
+        }
+    }
+
+    #[test]
+    fn unrelated_errors_do_not_trigger_creation_fallback() {
+        assert!(creation_failure_allows_fallback(&ObsError::NullPointer(
+            None
+        )));
+        assert!(!creation_failure_allows_fallback(
+            &ObsError::InvalidOperation("bad destination".into())
+        ));
     }
 }

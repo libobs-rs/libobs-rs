@@ -72,6 +72,18 @@ fn context_with_prepared_runtime() -> ObsContext {
 #[cfg(target_os = "linux")]
 fn context_with_prepared_runtime() -> ObsContext {
     let runtime_dir = runtime_dir();
+    let multiarch = match std::env::consts::ARCH {
+        "x86_64" => "x86_64-linux-gnu",
+        "aarch64" => "aarch64-linux-gnu",
+        "arm" => "arm-linux-gnueabihf",
+        _ => "",
+    };
+    let multiarch_plugins = runtime_dir.join("lib").join(multiarch).join("obs-plugins");
+    let plugin_root = if multiarch_plugins.is_dir() {
+        multiarch_plugins
+    } else {
+        runtime_dir.join("lib/obs-plugins")
+    };
     let paths = StartupPaths::new(
         ObsPath::new(
             runtime_dir
@@ -79,12 +91,7 @@ fn context_with_prepared_runtime() -> ObsContext {
                 .to_string_lossy()
                 .as_ref(),
         ),
-        ObsPath::new(
-            runtime_dir
-                .join("lib/obs-plugins/%module%")
-                .to_string_lossy()
-                .as_ref(),
-        ),
+        ObsPath::new(plugin_root.join("%module%").to_string_lossy().as_ref()),
         ObsPath::new(
             runtime_dir
                 .join("share/obs/obs-plugins/%module%")
@@ -204,7 +211,7 @@ fn composed_color_scene_records_distinct_non_black_regions() {
         .set_source_position(Vec2::new(640.0, 360.0))
         .expect("foreground source should be positioned in the scene");
 
-    let mut output = context
+    let output = context
         .simple_output_builder(
             "composition-recording",
             ObsPath::new(recording.to_string_lossy().as_ref()),

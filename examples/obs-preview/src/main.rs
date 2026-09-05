@@ -26,7 +26,8 @@ use libobs_simple::sources::windows::{
 };
 use libobs_wrapper::data::video::ObsVideoInfoBuilder;
 use libobs_wrapper::display::{
-    ObsDisplayCreationData, ObsDisplayRef, ObsWindowHandle, ShowHideTrait, WindowPositionTrait,
+    ObsDisplayCreationData, ObsDisplayRef, ObsWindowHandle, PreviewScaleMode, PreviewTarget,
+    ShowHideTrait, WindowPositionTrait,
 };
 use libobs_wrapper::sources::{ObsSourceBuilder, ObsSourceTrait};
 use libobs_wrapper::{context::ObsContext, utils::StartupInfo};
@@ -196,6 +197,10 @@ impl ObsInner {
             // Safety: All references are dropped of the display before the display is dropped.
             context.display(data)?
         };
+        display.set_target(PreviewTarget::Scene(scene.clone()))?;
+        display.set_scale_mode(PreviewScaleMode::Fit)?;
+        let geometry = display.preview_geometry(window.scale_factor() as f32)?;
+        debug_assert_eq!(geometry.mode, PreviewScaleMode::Fit);
         Ok(Self {
             context,
             #[cfg_attr(not(target_os = "linux"), allow(unused_unsafe))]
@@ -248,26 +253,20 @@ impl ApplicationHandler for App {
                 window.request_redraw();
             }
             WindowEvent::Resized(size) => {
-                let window_width = size.width;
-                let window_height = size.height;
-                let target_aspect_ratio = 16.0 / 9.0;
-
-                // Calculate dimensions that fit in the window while maintaining aspect ratio
-                let (display_width, display_height) =
-                    if window_width as f32 / window_height as f32 > target_aspect_ratio {
-                        // Window is wider than target ratio, height is limiting factor
-                        let height = window_height;
-                        let width = (height as f32 * target_aspect_ratio) as u32;
-                        (width, height)
-                    } else {
-                        // Window is taller than target ratio, width is limiting factor
-                        let width = window_width;
-                        let height = (width as f32 / target_aspect_ratio) as u32;
-                        (width, height)
-                    };
-
+                if size.width == 0 || size.height == 0 {
+                    return;
+                }
                 if let Some(obs) = self.obs.write().unwrap().as_ref() {
-                    let _ = obs.display.set_size(display_width, display_height);
+                    // Resize the native display to the complete physical viewport. Fit/fill/stretch
+                    // mapping is handled by PreviewScaleMode instead of hand-coded aspect math.
+                    let _ = obs.display.set_size(size.width, size.height);
+                    if let Ok(geometry) = obs.display.preview_geometry(window.scale_factor() as f32)
+                    {
+                        println!(
+                            "preview render rect after resize: {:?}",
+                            geometry.render_rect
+                        );
+                    }
                 }
             }
             WindowEvent::Moved(_) => {

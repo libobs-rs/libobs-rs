@@ -344,8 +344,19 @@ impl ObsRuntime {
     }
 
     /// Returns true when called from the dedicated OBS actor thread.
+    ///
+    /// With `enable_runtime` disabled there is no dedicated actor: libobs is intentionally
+    /// caller-thread-affine instead, so blocking native-completion waits on that owning thread are
+    /// not actor reentrancy and must not be rejected as such.
     pub fn is_actor_thread(&self) -> bool {
-        std::thread::current().id() == self.thread_id
+        #[cfg(feature = "enable_runtime")]
+        {
+            std::thread::current().id() == self.thread_id
+        }
+        #[cfg(not(feature = "enable_runtime"))]
+        {
+            false
+        }
     }
 
     /// Returns true when both values belong to the same process-global OBS runtime.

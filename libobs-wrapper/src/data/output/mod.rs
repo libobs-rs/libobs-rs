@@ -45,6 +45,9 @@ pub use pipeline::*;
 mod replay_buffer;
 pub use replay_buffer::*;
 
+mod stats;
+pub use stats::*;
+
 #[derive(Debug)]
 struct _ObsOutputDropGuard {
     output: Sendable<*mut obs_output>,
@@ -94,6 +97,10 @@ pub struct ObsOutputRef {
 
     /// Serializes output configuration with start/stop so encoder/service snapshots cannot race.
     configuration_lock: Arc<Mutex<()>>,
+
+    /// Serializes lifecycle requests so concurrent pause/stop/start operations have deterministic
+    /// ordering and do not consume each other's completion signals.
+    lifecycle_lock: Arc<Mutex<()>>,
 
     /// The type identifier of this output
     id: ObsString,
@@ -195,6 +202,7 @@ impl ObsOutputTraitSealed for ObsOutputRef {
             audio_encoders: Arc::new(RwLock::new(HashMap::new())),
             service: Arc::new(RwLock::new(None)),
             configuration_lock: Arc::new(Mutex::new(())),
+            lifecycle_lock: Arc::new(Mutex::new(())),
 
             output: output.clone(),
             id,
@@ -219,6 +227,10 @@ impl ObsOutputTraitSealed for ObsOutputRef {
 
     fn configuration_lock(&self) -> &Arc<Mutex<()>> {
         &self.configuration_lock
+    }
+
+    fn lifecycle_lock(&self) -> &Arc<Mutex<()>> {
+        &self.lifecycle_lock
     }
 }
 

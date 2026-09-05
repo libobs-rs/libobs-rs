@@ -189,6 +189,40 @@ impl ObsSceneRef {
         &self.runtime
     }
 
+    /// Returns libobs's persistent UUID for the scene source.
+    pub fn persistent_uuid(&self) -> Result<String, ObsError> {
+        let scene = self.as_ptr();
+        run_with_obs!(self.runtime, (scene), move || unsafe {
+            // Safety: the managed scene remains alive; obs_scene_get_source returns a borrowed
+            // source owned by the scene and the UUID is copied before the actor call returns.
+            let source = libobs::obs_scene_get_source(scene.get_ptr());
+            if source.is_null() {
+                return Err(ObsError::NullPointer(Some("scene has no source".into())));
+            }
+            let uuid = libobs::obs_source_get_uuid(source);
+            if uuid.is_null() {
+                return Err(ObsError::NullPointer(Some(
+                    "scene source has no persistent UUID".into(),
+                )));
+            }
+            Ok(std::ffi::CStr::from_ptr(uuid)
+                .to_string_lossy()
+                .into_owned())
+        })?
+    }
+
+    /// Returns the distinct managed sources referenced by this scene, including grouped items.
+    /// Shared sources appear only once per scene.
+    pub fn managed_sources(&self) -> Result<Vec<Arc<dyn ObsSourceTrait>>, ObsError> {
+        Ok(self
+            .attached_scene_items
+            .read()
+            .map_err(|error| ObsError::LockError(error.to_string()))?
+            .values()
+            .map(|(source, _)| source.clone())
+            .collect())
+    }
+
     pub fn signals(&self) -> Arc<ObsSceneSignals> {
         self.signals.clone()
     }

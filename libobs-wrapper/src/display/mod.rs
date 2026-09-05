@@ -3,16 +3,19 @@
 
 mod creation_data;
 mod enums;
+mod geometry;
 mod window_manager;
 
 pub use window_manager::{MiscDisplayTrait, ShowHideTrait, WindowPositionTrait};
 
 pub use creation_data::*;
 pub use enums::*;
+pub use geometry::*;
 use libobs::obs_video_info;
 
 use crate::unsafe_send::SmartPointerSendable;
 use crate::utils::{ObsDropGuard, ObsError};
+use crate::{data::object::ObsObjectTrait, scenes::ObsSceneRef, sources::ObsSourceRef};
 use crate::{impl_obs_drop, run_with_obs, runtime::ObsRuntime, unsafe_send::Sendable};
 use std::mem::MaybeUninit;
 use std::{
@@ -43,9 +46,20 @@ pub struct ObsDisplayRef {
     display: SmartPointerSendable<*mut libobs::obs_display_t>,
 }
 
+/// Content rendered by a preview display. The managed variants retain their native source/scene
+/// lifetime while selected, including while the graphics callback is executing.
+#[derive(Debug, Clone)]
+pub enum PreviewTarget {
+    Program,
+    Scene(ObsSceneRef),
+    Source(ObsSourceRef),
+}
+
 #[derive(Debug)]
 pub(super) struct DisplayRenderState {
     pub(super) position: RwLock<(i32, i32)>,
+    pub(super) scale_mode: RwLock<PreviewScaleMode>,
+    pub(super) target: RwLock<PreviewTarget>,
 }
 
 #[allow(unknown_lints)]
@@ -61,6 +75,14 @@ unsafe extern "C" fn render_display(data: *mut c_void, width: u32, height: u32) 
         .position
         .read()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mode = *state
+        .scale_mode
+        .read()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let target = state
+        .target
+        .read()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
 
     let mut ovi = MaybeUninit::<obs_video_info>::uninit();
     let was_ok = libobs::obs_get_video_info(ovi.as_mut_ptr());
@@ -68,27 +90,60 @@ unsafe extern "C" fn render_display(data: *mut c_void, width: u32, height: u32) 
         log::error!("Failed to get video info in display render callback");
         return;
     }
-
     let ovi = unsafe {
-        // Safety: was_ok checked that the video info was properly initialized
+        // Safety: was_ok checked that the video info was properly initialized.
         ovi.assume_init()
+    };
+
+    let (content_width, content_height, source_ptr) = match &*target {
+        PreviewTarget::Program => (ovi.base_width, ovi.base_height, None),
+        PreviewTarget::Source(source) => {
+            let ptr = source.__native_handle();
+            let width = libobs::obs_source_get_width(ptr.get_ptr());
+            let height = libobs::obs_source_get_height(ptr.get_ptr());
+            (width.max(1), height.max(1), Some(ptr.get_ptr()))
+        }
+        PreviewTarget::Scene(scene) => {
+            let source = libobs::obs_scene_get_source(scene.as_ptr().get_ptr());
+            if source.is_null() {
+                return;
+            }
+            let width = libobs::obs_source_get_width(source)
+                .max(ovi.base_width)
+                .max(1);
+            let height = libobs::obs_source_get_height(source)
+                .max(ovi.base_height)
+                .max(1);
+            (width, height, Some(source))
+        }
+    };
+    let Some(geometry) =
+        PreviewGeometry::new(content_width, content_height, width, height, mode, 1.0)
+    else {
+        return;
     };
 
     libobs::gs_viewport_push();
     libobs::gs_projection_push();
-
     libobs::gs_ortho(
-        0.0f32,
-        ovi.base_width as f32,
-        0.0f32,
-        ovi.base_height as f32,
-        -100.0f32,
-        100.0f32,
+        0.0,
+        content_width as f32,
+        0.0,
+        content_height as f32,
+        -100.0,
+        100.0,
     );
-    libobs::gs_set_viewport(pos.0, pos.1, width as i32, height as i32);
-    //draw_backdrop(&s.buffers, ovi.base_width as f32, ovi.base_height as f32);
+    libobs::gs_set_viewport(
+        pos.0 + geometry.render_rect.x.round() as i32,
+        pos.1 + geometry.render_rect.y.round() as i32,
+        geometry.render_rect.width.round().max(1.0) as i32,
+        geometry.render_rect.height.round().max(1.0) as i32,
+    );
 
-    libobs::obs_render_main_texture_src_color_only();
+    match source_ptr {
+        Some(source) => libobs::obs_source_video_render(source),
+        None => libobs::obs_render_main_texture_src_color_only(),
+    }
 
     libobs::gs_projection_pop();
     libobs::gs_viewport_pop();
@@ -226,6 +281,8 @@ impl ObsDisplayRef {
         };
         let render_state = Arc::new(DisplayRenderState {
             position: RwLock::new(initial_pos),
+            scale_mode: RwLock::new(PreviewScaleMode::Fit),
+            target: RwLock::new(PreviewTarget::Program),
         });
 
         let display = SmartPointerSendable::new(
@@ -283,6 +340,132 @@ impl ObsDisplayRef {
                 libobs::obs_display_update_color_space(display_ptr.get_ptr())
             }
         })
+    }
+
+    /// Selects fit/letterbox, fill/crop, or stretch mapping for subsequent renders.
+    pub fn set_scale_mode(&self, mode: PreviewScaleMode) -> Result<(), ObsError> {
+        *self
+            .render_state
+            .scale_mode
+            .write()
+            .map_err(|e| ObsError::LockError(e.to_string()))? = mode;
+        Ok(())
+    }
+
+    pub fn scale_mode(&self) -> Result<PreviewScaleMode, ObsError> {
+        self.render_state
+            .scale_mode
+            .read()
+            .map(|mode| *mode)
+            .map_err(|e| ObsError::LockError(e.to_string()))
+    }
+
+    /// Switches the preview target while retaining the selected source/scene for the graphics
+    /// callback. Runtime affinity is checked before the target becomes visible to rendering.
+    pub fn set_target(&self, target: PreviewTarget) -> Result<(), ObsError> {
+        match &target {
+            PreviewTarget::Program => {}
+            PreviewTarget::Source(source) => self.runtime.ensure_same_runtime(source.runtime())?,
+            PreviewTarget::Scene(scene) => self.runtime.ensure_same_runtime(scene.runtime())?,
+        }
+        *self
+            .render_state
+            .target
+            .write()
+            .map_err(|e| ObsError::LockError(e.to_string()))? = target;
+        Ok(())
+    }
+
+    pub fn target(&self) -> Result<PreviewTarget, ObsError> {
+        self.render_state
+            .target
+            .read()
+            .map(|target| target.clone())
+            .map_err(|e| ObsError::LockError(e.to_string()))
+    }
+
+    /// Resizes the native OBS display in physical pixels.
+    pub fn resize(&self, width: u32, height: u32) -> Result<(), ObsError> {
+        if width == 0 || height == 0 {
+            return Err(ObsError::InvalidOperation(
+                "preview display dimensions must be non-zero".into(),
+            ));
+        }
+        let display = self.as_ptr();
+        let runtime = self.runtime.clone();
+        run_with_obs!(runtime, (display), move || unsafe {
+            // Safety: display is retained for the actor call.
+            libobs::obs_display_resize(display.get_ptr(), width, height);
+        })
+    }
+
+    /// Computes the same geometry used by rendering for editor pointer conversion. Display size is
+    /// physical pixels. Pass the toolkit's physical/logical DPI ratio for logical pointer helpers.
+    pub fn preview_geometry(&self, dpi_scale: f32) -> Result<PreviewGeometry, ObsError> {
+        let target = self.target()?;
+        let mode = self.scale_mode()?;
+        let display = self.as_ptr();
+        let runtime = self.runtime.clone();
+        run_with_obs!(runtime, (display, target), move || {
+            let mut viewport_width = 0_u32;
+            let mut viewport_height = 0_u32;
+            unsafe {
+                // Safety: display is retained and output pointers are valid stack locations.
+                libobs::obs_display_size(
+                    display.get_ptr(),
+                    &mut viewport_width,
+                    &mut viewport_height,
+                );
+            }
+
+            let (content_width, content_height) = match target {
+                PreviewTarget::Program => {
+                    let mut ovi = MaybeUninit::<obs_video_info>::uninit();
+                    // SAFETY: `ovi` is valid writable storage and this runs on the OBS actor.
+                    if !unsafe { libobs::obs_get_video_info(ovi.as_mut_ptr()) } {
+                        return Err(ObsError::InvalidOperation(
+                            "OBS video info is unavailable for preview geometry".into(),
+                        ));
+                    }
+                    // SAFETY: successful `obs_get_video_info` initialized the complete structure.
+                    let ovi = unsafe { ovi.assume_init() };
+                    (ovi.base_width, ovi.base_height)
+                }
+                PreviewTarget::Source(source) => {
+                    let ptr = source.__native_handle();
+                    // SAFETY: the managed source lease is retained for this actor command.
+                    unsafe {
+                        (
+                            libobs::obs_source_get_width(ptr.get_ptr()),
+                            libobs::obs_source_get_height(ptr.get_ptr()),
+                        )
+                    }
+                }
+                PreviewTarget::Scene(scene) => {
+                    // SAFETY: the managed scene lease is retained for this actor command.
+                    let source = unsafe { libobs::obs_scene_get_source(scene.as_ptr().get_ptr()) };
+                    if source.is_null() {
+                        return Err(ObsError::NullPointer(Some("scene preview source".into())));
+                    }
+                    // SAFETY: `source` is the non-null scene source borrowed for this actor call.
+                    unsafe {
+                        (
+                            libobs::obs_source_get_width(source),
+                            libobs::obs_source_get_height(source),
+                        )
+                    }
+                }
+            };
+            PreviewGeometry::new(
+                content_width,
+                content_height,
+                viewport_width,
+                viewport_height,
+                mode,
+                dpi_scale,
+            )
+            .ok_or_else(|| ObsError::InvalidOperation("invalid preview geometry".into()))
+        })?
     }
 
     pub(crate) fn as_ptr(&self) -> SmartPointerSendable<*mut libobs::obs_display_t> {

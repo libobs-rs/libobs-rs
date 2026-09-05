@@ -6,6 +6,7 @@ use std::{
 
 use crate::{
     data::{
+        audio::AudioMixIndex,
         object::{inner_fn_update_settings, ObsObjectTrait, ObsObjectTraitPrivate},
         ImmutableObsData, ObsDataPointers,
     },
@@ -28,13 +29,26 @@ pub struct ObsAudioEncoder {
     pub(crate) hotkey_data: Arc<RwLock<ImmutableObsData>>,
     pub(crate) runtime: ObsRuntime,
     pub(crate) encoder: SmartPointerSendable<*mut libobs::obs_encoder_t>,
+    mix_index: AudioMixIndex,
 }
 
 impl ObsAudioEncoder {
-    /// Info: the handler attribute is no longer needed and kept for compatibility. The `handler` parameter will be removed in a future release.
+    /// Creates an audio encoder for a native OBS mix.
+    ///
+    /// The historical `mixer_idx` argument identifies the **source mix the encoder reads from**;
+    /// it is not an output attachment slot. Prefer [`Self::new_from_info_for_mix`] in new code.
     pub fn new_from_info(
         info: AudioEncoderInfo,
         mixer_idx: usize,
+        runtime: ObsRuntime,
+    ) -> Result<Arc<Self>, ObsError> {
+        Self::new_from_info_for_mix(info, AudioMixIndex::new(mixer_idx)?, runtime)
+    }
+
+    /// Creates an audio encoder that reads from the selected native OBS audio mix.
+    pub fn new_from_info_for_mix(
+        info: AudioEncoderInfo,
+        mix_index: AudioMixIndex,
         runtime: ObsRuntime,
     ) -> Result<Arc<Self>, ObsError> {
         let AudioEncoderInfo {
@@ -67,7 +81,7 @@ impl ObsAudioEncoder {
                         id.as_ptr().0,
                         name.as_ptr().0,
                         settings_ptr_raw,
-                        mixer_idx,
+                        mix_index.index(),
                         hotkey_data_ptr_raw,
                     )
                 };
@@ -110,7 +124,13 @@ impl ObsAudioEncoder {
             settings: Arc::new(RwLock::new(settings)),
             hotkey_data: Arc::new(RwLock::new(hotkey_data)),
             runtime,
+            mix_index,
         }))
+    }
+
+    /// Native OBS audio mix this encoder reads from.
+    pub fn mix_index(&self) -> AudioMixIndex {
+        self.mix_index
     }
 
     /// This is only needed once for global audio context

@@ -13,8 +13,12 @@
 //! | Scenes, groups, native order and transform snapshots | [`crate::scenes`] |
 //! | Audio/video encoders | [`crate::encoders`] |
 //! | Streaming services | [`crate::services`] |
-//! | Validated output graphs and lifecycle | [`crate::data::output`] |
-//! | Preview/display surfaces | [`crate::display`] |
+//! | Validated output graphs, lifecycle and telemetry | [`crate::data::output`] |
+//! | Source audio/meter/monitoring controls | [`crate::sources`] + [`crate::audio_monitoring`] |
+//! | Transitions and controllable media | [`crate::sources`] |
+//! | Preview/display surfaces and editor geometry | [`crate::display`] |
+//! | Instance-bound property actions | [`crate::settings_actions`] |
+//! | Managed hotkeys | [`crate::hotkeys`] |
 //! | OBS event subscriptions | [`crate::signals`] and per-object `signals()` methods |
 //! | Raw FFI escape hatch | [`crate::sys`] |
 //!
@@ -56,6 +60,7 @@
 
 #![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 
+pub mod audio_monitoring;
 pub mod capabilities;
 pub mod context;
 pub mod crash_handler;
@@ -68,6 +73,7 @@ pub mod runtime;
 pub mod scenes;
 pub mod services;
 pub mod settings;
+pub mod settings_actions;
 pub mod signals;
 pub mod sources;
 #[doc(hidden)]
@@ -78,5 +84,6 @@ pub use libobs as sys;
 
 // Add the macros module to the public exports
 pub mod graphics;
+pub mod hotkeys;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod macros;

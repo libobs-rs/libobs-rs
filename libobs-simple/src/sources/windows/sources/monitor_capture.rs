@@ -74,7 +74,9 @@ fn is_thread_dpi_unaware(runtime: &ObsRuntime) -> Result<bool, ObsError> {
 
 fn set_dpi_awareness_if_needed(runtime: &ObsRuntime) -> Result<(), ObsError> {
     if is_thread_dpi_unaware(runtime)? {
-        log::warn!("The current thread is DPI unaware. Setting the DPI awareness context to Per Monitor Aware V2 to allow DXGI capture method to work correctly.");
+        log::warn!(
+            "The current thread is DPI unaware. Setting the DPI awareness context to Per Monitor Aware V2 to allow DXGI capture method to work correctly."
+        );
     } else {
         return Ok(());
     }
@@ -85,7 +87,10 @@ fn set_dpi_awareness_if_needed(runtime: &ObsRuntime) -> Result<(), ObsError> {
     };
 
     if let Err(e) = set_result {
-        log::warn!("Could not set DPI awareness context: {:?}. This is fine if you don't want to use DXGI capture or if you have already specified DPI awareness in the application manifest.", e);
+        log::warn!(
+            "Could not set DPI awareness context: {:?}. This is fine if you don't want to use DXGI capture or if you have already specified DPI awareness in the application manifest.",
+            e
+        );
         Err(ObsError::InvalidOperation("Process is not DPI aware and could not set DPI awareness. DPI awareness is required for DXGI monitor capture however".into()))
     } else {
         Ok(())

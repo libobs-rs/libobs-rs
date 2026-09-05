@@ -12,6 +12,7 @@
 //! | Record to a file | [`output::simple`] |
 //! | Stream H.264/AAC to RTMP | [`output::streaming`] |
 //! | Replay buffer | [`output::replay`] |
+//! | Scene collection persistence/history | [`scene_collection`] |
 //! | Common window/monitor/platform sources | [`sources`] |
 //! | Anything more custom | [`wrapper`] |
 //!
@@ -25,6 +26,7 @@
 
 pub mod error;
 pub mod output;
+pub mod scene_collection;
 pub mod sources;
 
 pub use error::ObsSimpleError;

@@ -98,7 +98,7 @@ pub(crate) unsafe fn platform_specific_setup(
                 None => {
                     return Err(ObsError::PlatformInitError(
                         "Could not detect display server platform".to_string(),
-                    ))
+                    ));
                 }
             }
         }
@@ -203,43 +203,63 @@ fn detect_platform() -> Option<PlatformType> {
 
 #[cfg(target_os = "linux")]
 fn symlink_required_muxers() -> Result<(), ObsError> {
-    let self_exe = std::env::current_exe().map_err(|_| {
-        ObsError::PlatformInitError("Failed to get current executable path".to_string())
+    let self_exe = std::env::current_exe().map_err(|error| {
+        ObsError::PlatformInitError(format!("Failed to get current executable path: {error}"))
     })?;
     let target_dir = self_exe.parent().ok_or_else(|| {
         ObsError::PlatformInitError("Failed to get parent directory of executable".to_string())
     })?;
 
-    let executables = ["obs-nvenc-test", "obs-ffmpeg-mux"];
-    for exe in &executables {
-        let link_name = target_dir.join(exe);
-        let target = which::which(exe).map_err(|_| {
-            ObsError::PlatformInitError(format!(
-                "Failed to find required OBS executable '{}' in PATH",
-                exe
-            ))
-        })?;
+    // obs-ffmpeg-mux is required by file/replay outputs. obs-nvenc-test is only a capability
+    // probe used by the optional obs-nvenc plugin. A normal OBS CMake install on Linux does not
+    // install obs-nvenc-test, so its absence must not prevent CPU/software-only applications from
+    // starting libobs.
+    ensure_obs_helper_link(target_dir, "obs-ffmpeg-mux", true)?;
+    ensure_obs_helper_link(target_dir, "obs-nvenc-test", false)?;
+    Ok(())
+}
 
-        if link_name.exists() {
-            let should_warn = link_name
-                .read_link()
-                .map(|existing_target| existing_target != target)
-                .unwrap_or(true);
-
-            if should_warn {
-                log::warn!(
-                    "[libobs-wrapper]: Symlink for '{}' already exists at '{}', skipping creation. If this is not intentional, please remove the existing file and restart the application.",
-                    exe,
-                    link_name.display()
-                );
-            }
+#[cfg(target_os = "linux")]
+fn ensure_obs_helper_link(
+    target_dir: &std::path::Path,
+    executable: &str,
+    required: bool,
+) -> Result<(), ObsError> {
+    let target = match which::which(executable) {
+        Ok(target) => target,
+        Err(error) if !required => {
+            log::debug!(
+                "[libobs-wrapper]: Optional OBS helper '{executable}' is not available in PATH ({error}); hardware capability probing may be unavailable"
+            );
+            return Ok(());
         }
+        Err(error) => {
+            return Err(ObsError::PlatformInitError(format!(
+                "Failed to find required OBS executable '{executable}' in PATH: {error}"
+            )));
+        }
+    };
 
-        std::process::Command::new("ln")
-            .args(["-s", target.to_str().unwrap(), link_name.to_str().unwrap()])
-            .status()
-            .expect("Failed to create symlink");
+    let link_name = target_dir.join(executable);
+    if std::fs::symlink_metadata(&link_name).is_ok() {
+        let matches_target = std::fs::read_link(&link_name)
+            .map(|existing_target| existing_target == target)
+            .unwrap_or(false);
+        if !matches_target {
+            log::warn!(
+                "[libobs-wrapper]: OBS helper path '{}' already exists and does not point to '{}'; leaving it unchanged",
+                link_name.display(),
+                target.display()
+            );
+        }
+        return Ok(());
     }
 
-    Ok(())
+    std::os::unix::fs::symlink(&target, &link_name).map_err(|error| {
+        ObsError::PlatformInitError(format!(
+            "Failed to link OBS helper '{}' to '{}': {error}",
+            target.display(),
+            link_name.display()
+        ))
+    })
 }
