@@ -544,9 +544,15 @@ impl ObsRuntime {
         // libobs for logging purposes, making it
         // unnecessary to support other languages.
         let locale_str = ObsString::new("en-US");
+        let module_config_path = info
+            .module_config_path
+            .as_ref()
+            .map_or(ptr::null(), |path| path.as_ptr().0);
         let startup_status = unsafe {
-            // Safety: All pointers are valid here.
-            libobs::obs_startup(locale_str.as_ptr().0, ptr::null(), ptr::null_mut())
+            // Safety: Both strings are owned by this startup frame and remain valid
+            // for the duration of obs_startup. A null module config path preserves
+            // libobs's documented "no configuration directory" behavior.
+            libobs::obs_startup(locale_str.as_ptr().0, module_config_path, ptr::null_mut())
         };
         if !startup_status {
             return Err(ObsError::Failure);

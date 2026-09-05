@@ -20,6 +20,7 @@ pub struct StartupInfo {
     pub(crate) startup_paths: StartupPaths,
     pub(crate) obs_video_info: ObsVideoInfo,
     pub(crate) obs_audio_info: ObsAudioInfo,
+    pub(crate) module_config_path: Option<ObsString>,
     // Option because logger is taken when creating
     pub(crate) logger: Option<Box<dyn ObsLogger + Sync + Send>>,
     pub(crate) start_glib_loop: bool,
@@ -39,6 +40,17 @@ impl StartupInfo {
 
     pub fn set_video_info(mut self, ovi: ObsVideoInfo) -> Self {
         self.obs_video_info = ovi;
+        self
+    }
+
+    /// Sets the root directory used by OBS modules for persistent configuration.
+    ///
+    /// libobs passes this value to modules through `obs_module_config_path`.
+    /// Callers embedding libobs should set an application-owned writable directory;
+    /// leaving it unset preserves libobs's `NULL` behavior, which can cause modules
+    /// that construct config paths to resolve relative to the process working directory.
+    pub fn set_module_config_path(mut self, path: ObsPath) -> Self {
+        self.module_config_path = Some(path.build());
         self
     }
 
@@ -88,6 +100,7 @@ impl Default for StartupInfo {
             startup_paths: StartupPaths::default(),
             obs_video_info: ObsVideoInfo::default(),
             obs_audio_info: ObsAudioInfo::default(),
+            module_config_path: None,
             logger: Some(Box::new(ConsoleLogger::new())),
             start_glib_loop: true,
             nix_display: None,
@@ -219,5 +232,21 @@ impl StartupPathsBuilder {
 impl Default for StartupPathsBuilder {
     fn default() -> StartupPathsBuilder {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn module_config_path_is_explicitly_configurable() {
+        let info =
+            StartupInfo::new().set_module_config_path(ObsPath::new("/tmp/clipture-obs-config"));
+        let configured = info
+            .module_config_path
+            .as_ref()
+            .expect("module config path should be retained");
+        assert_eq!(configured.to_string(), "/tmp/clipture-obs-config");
     }
 }
