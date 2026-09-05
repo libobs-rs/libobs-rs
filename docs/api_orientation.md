@@ -139,7 +139,10 @@ If the same raw operation is useful to multiple applications, prefer adding it t
 use libobs_simple::output::simple::ObsContextSimpleExt;
 use libobs_wrapper::utils::{ObsPath, StartupInfo};
 
-let context = StartupInfo::new().start()?;
+let context = StartupInfo::new()
+    // Embedders should keep OBS plugin state in an application-owned writable directory.
+    .set_module_config_path(ObsPath::new("/path/to/app/config/obs-modules"))
+    .start()?;
 let output = context
     .simple_output_builder("recording", ObsPath::new("recording.mp4"))
     .video_bitrate(6_000)

@@ -548,6 +548,16 @@ impl ObsRuntime {
             .module_config_path
             .as_ref()
             .map_or(ptr::null(), |path| path.as_ptr().0);
+        internal_log_global(
+            ObsLogLevel::Info,
+            format!(
+                "[libobs-wrapper]: Module config path: {}",
+                info.module_config_path
+                    .as_ref()
+                    .map(ToString::to_string)
+                    .unwrap_or_else(|| "<unset>".to_string())
+            ),
+        );
         let startup_status = unsafe {
             // Safety: Both strings are owned by this startup frame and remain valid
             // for the duration of obs_startup. A null module config path preserves
