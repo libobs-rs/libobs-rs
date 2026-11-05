@@ -1,3 +1,6 @@
+#[path = "support/prepared_runtime.rs"]
+mod prepared_runtime;
+
 use std::path::{Path, PathBuf};
 
 use libobs_simple::wrapper::{
@@ -11,22 +14,7 @@ fn test_runtime() -> Option<PathBuf> {
 }
 
 fn startup_paths(root: &Path) -> StartupPaths {
-    let plugin_dir = [
-        root.join("lib/x86_64-linux-gnu/obs-plugins"),
-        root.join("lib/obs-plugins"),
-    ]
-    .into_iter()
-    .find(|path| path.is_dir())
-    .expect("prepared OBS runtime should contain an obs-plugins directory");
-    StartupPaths::new(
-        ObsPath::new(root.join("share/obs/libobs").to_string_lossy().as_ref()),
-        ObsPath::new(plugin_dir.join("%module%").to_string_lossy().as_ref()),
-        ObsPath::new(
-            root.join("share/obs/obs-plugins/%module%")
-                .to_string_lossy()
-                .as_ref(),
-        ),
-    )
+    prepared_runtime::startup_paths(root)
 }
 
 #[test]

@@ -1,3 +1,6 @@
+#[path = "support/prepared_runtime.rs"]
+mod prepared_runtime;
+
 use std::{path::PathBuf, process::Command, thread, time::Duration};
 
 use libobs_simple::{
@@ -9,7 +12,7 @@ use libobs_simple::{
             ObsDataSetters,
         },
         sources::ObsSourceAudioExt,
-        utils::{ObsPath, StartupInfo, StartupPaths},
+        utils::{ObsPath, StartupInfo},
     },
 };
 
@@ -19,22 +22,7 @@ fn runtime_dir() -> Option<PathBuf> {
 
 fn start_context() -> Option<libobs_simple::wrapper::context::ObsContext> {
     let root = runtime_dir()?;
-    let multiarch = match std::env::consts::ARCH {
-        "x86_64" => "x86_64-linux-gnu",
-        "aarch64" => "aarch64-linux-gnu",
-        "arm" => "arm-linux-gnueabihf",
-        _ => "",
-    };
-    let plugin_root = root.join("lib").join(multiarch).join("obs-plugins");
-    let paths = StartupPaths::new(
-        ObsPath::new(root.join("share/obs/libobs").to_string_lossy().as_ref()),
-        ObsPath::new(plugin_root.join("%module%").to_string_lossy().as_ref()),
-        ObsPath::new(
-            root.join("share/obs/obs-plugins/%module%")
-                .to_string_lossy()
-                .as_ref(),
-        ),
-    );
+    let paths = prepared_runtime::startup_paths(&root);
     let config = std::env::temp_dir().join(format!(
         "libobs-rs-audio-tracks-config-{}",
         std::process::id()

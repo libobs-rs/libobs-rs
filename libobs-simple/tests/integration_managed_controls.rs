@@ -1,3 +1,6 @@
+#[path = "support/prepared_runtime.rs"]
+mod prepared_runtime;
+
 use std::{
     ffi::{c_char, c_void},
     path::PathBuf,
@@ -9,7 +12,7 @@ use libobs_simple::wrapper::{
     hotkeys::{HotkeyBindingSnapshot, HotkeyModifiers, ObsContextHotkeyExt},
     settings_actions::{ObsPropertyActions, PropertyActionOutcome},
     sys,
-    utils::{ObsPath, StartupInfo, StartupPaths},
+    utils::{ObsPath, StartupInfo},
 };
 
 static PROPERTY_ACTION_CLICKS: AtomicUsize = AtomicUsize::new(0);
@@ -101,21 +104,7 @@ fn runtime_dir() -> Option<PathBuf> {
 
 fn start_context() -> Option<libobs_simple::wrapper::context::ObsContext> {
     let root = runtime_dir()?;
-    let lib_dir = root.join("lib/x86_64-linux-gnu");
-    let paths = StartupPaths::new(
-        ObsPath::new(root.join("share/obs/libobs").to_string_lossy().as_ref()),
-        ObsPath::new(
-            lib_dir
-                .join("obs-plugins/%module%")
-                .to_string_lossy()
-                .as_ref(),
-        ),
-        ObsPath::new(
-            root.join("share/obs/obs-plugins/%module%")
-                .to_string_lossy()
-                .as_ref(),
-        ),
-    );
+    let paths = prepared_runtime::startup_paths(&root);
     let config = std::env::temp_dir().join(format!(
         "libobs-rs-managed-controls-config-{}",
         std::process::id()

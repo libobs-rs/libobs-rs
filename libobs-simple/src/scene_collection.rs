@@ -1084,7 +1084,7 @@ fn inspect_missing_files(
         }
         if let Some(text) = value.as_str() {
             let path = Path::new(text);
-            if path.is_absolute() && !path.exists() {
+            if looks_like_absolute_path(text) && !path.exists() {
                 missing.push(path.to_path_buf());
             }
         }
@@ -1169,9 +1169,7 @@ fn sanitize_value_inner(
                 }
                 if policy.machine_paths == MachinePathHandling::RedactAbsolute
                     && looks_like_path_key(key)
-                    && child
-                        .as_str()
-                        .is_some_and(|text| Path::new(text).is_absolute())
+                    && child.as_str().is_some_and(looks_like_absolute_path)
                 {
                     *child = Value::String(REDACTED_PATH.into());
                     redactions.push(ExportRedaction {
@@ -1231,6 +1229,22 @@ fn looks_like_secret_key(key: &str) -> bool {
         || key == "stream_key"
         || key.ends_with("_stream_key")
         || key.ends_with("_api_key")
+}
+
+/// Whether `text` is an absolute path on *any* supported platform.
+///
+/// Scene collections move between machines, so a Windows export must still
+/// recognize `/home/...` and a Linux/macOS export must recognize `C:\...` or
+/// `\\server\share` paths.
+fn looks_like_absolute_path(text: &str) -> bool {
+    if Path::new(text).is_absolute() || text.starts_with('/') || text.starts_with('\\') {
+        return true;
+    }
+    let bytes = text.as_bytes();
+    bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && matches!(bytes[2], b'\\' | b'/')
 }
 
 fn looks_like_path_key(key: &str) -> bool {
@@ -1388,6 +1402,21 @@ mod tests {
     }
 
     #[test]
+    fn absolute_paths_are_recognized_for_every_platform() {
+        for path in [
+            "/home/user/private.mp4",
+            "C:\\Users\\user\\private.mp4",
+            "c:/Users/user/private.mp4",
+            "\\\\server\\share\\private.mp4",
+        ] {
+            assert!(looks_like_absolute_path(path), "{path} should be absolute");
+        }
+        for path in ["private.mp4", "media/private.mp4", "C:private.mp4", ""] {
+            assert!(!looks_like_absolute_path(path), "{path} should be relative");
+        }
+    }
+
+    #[test]
     fn scene_item_state_round_trips_runtime_snapshot_shape() {
         let persisted = state(3);
         let snapshot = persisted.to_snapshot().unwrap();
@@ -1502,7 +1531,11 @@ mod tests {
         let root = std::env::temp_dir().join(format!(
             "libobs-rs-scene-collection-{}-{}",
             std::process::id(),
-            std::thread::current().name().unwrap_or("test")
+            // Test thread names contain `::`, which is not valid in Windows file names.
+            std::thread::current()
+                .name()
+                .unwrap_or("test")
+                .replace(|c: char| !c.is_ascii_alphanumeric(), "_")
         ));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).unwrap();

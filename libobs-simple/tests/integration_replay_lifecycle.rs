@@ -1,10 +1,13 @@
+#[path = "support/prepared_runtime.rs"]
+mod prepared_runtime;
+
 use std::{path::PathBuf, process::Command, thread, time::Duration};
 
 use libobs_simple::{
     output::{replay::ObsContextReplayExt, simple::X264Preset},
     wrapper::{
         data::{output::ObsOutputTrait, ObsDataSetters},
-        utils::{ObsPath, StartupInfo, StartupPaths},
+        utils::{ObsPath, StartupInfo},
     },
 };
 
@@ -14,21 +17,7 @@ fn runtime_dir() -> Option<PathBuf> {
 
 fn start_context() -> Option<libobs_simple::wrapper::context::ObsContext> {
     let root = runtime_dir()?;
-    let lib_dir = root.join("lib/x86_64-linux-gnu");
-    let paths = StartupPaths::new(
-        ObsPath::new(root.join("share/obs/libobs").to_string_lossy().as_ref()),
-        ObsPath::new(
-            lib_dir
-                .join("obs-plugins/%module%")
-                .to_string_lossy()
-                .as_ref(),
-        ),
-        ObsPath::new(
-            root.join("share/obs/obs-plugins/%module%")
-                .to_string_lossy()
-                .as_ref(),
-        ),
-    );
+    let paths = prepared_runtime::startup_paths(&root);
     let config =
         std::env::temp_dir().join(format!("libobs-rs-replay-config-{}", std::process::id()));
     std::fs::create_dir_all(&config).expect("test module config directory");

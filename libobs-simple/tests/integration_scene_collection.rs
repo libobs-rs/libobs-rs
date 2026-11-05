@@ -1,3 +1,6 @@
+#[path = "support/prepared_runtime.rs"]
+mod prepared_runtime;
+
 use std::path::PathBuf;
 
 use libobs_simple::{
@@ -7,7 +10,7 @@ use libobs_simple::{
         graphics::Vec2,
         scenes::SceneItemTrait,
         sources::ObsSourceTrait,
-        utils::{ObsPath, StartupInfo, StartupPaths},
+        utils::{ObsPath, StartupInfo},
     },
 };
 
@@ -17,21 +20,7 @@ fn test_runtime() -> Option<PathBuf> {
 
 fn start_context() -> Option<libobs_simple::wrapper::context::ObsContext> {
     let root = test_runtime()?;
-    let lib_dir = root.join("lib/x86_64-linux-gnu");
-    let paths = StartupPaths::new(
-        ObsPath::new(root.join("share/obs/libobs").to_string_lossy().as_ref()),
-        ObsPath::new(
-            lib_dir
-                .join("obs-plugins/%module%")
-                .to_string_lossy()
-                .as_ref(),
-        ),
-        ObsPath::new(
-            root.join("share/obs/obs-plugins/%module%")
-                .to_string_lossy()
-                .as_ref(),
-        ),
-    );
+    let paths = prepared_runtime::startup_paths(&root);
     let config = std::env::temp_dir().join(format!(
         "libobs-rs-scene-collection-config-{}",
         std::process::id()
