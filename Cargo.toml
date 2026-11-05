@@ -14,12 +14,12 @@ exclude = ["scripts/test_assets/test_cargo_obs_build", "scripts/test_assets/test
 
 [workspace.dependencies]
 # Workspace members
-libobs = { path = "./libobs", version = "5" }
+libobs = { path = "./libobs", version = "6" }
 libobs-wrapper = { path = "./libobs-wrapper", version = "10", default-features = false }
-libobs-simple-macro = { path = "./libobs-simple-macro", version = "7" }
+libobs-simple-macro = { path = "./libobs-simple-macro", version = "8" }
 libobs-simple = { path = "./libobs-simple", version = "9" }
-libobs-window-helper = { path = "./libobs-window-helper", version = "0.4" }
-libobs-bootstrapper = { path = "./libobs-bootstrapper", version = "0.4" }
+libobs-window-helper = { path = "./libobs-window-helper", version = "0.4.1" }
+libobs-bootstrapper = { path = "./libobs-bootstrapper", version = "0.5" }
 
 # Error handling, logging, utilities
 anyhow = "1.0.102"  # Minimum version with improved error trait support

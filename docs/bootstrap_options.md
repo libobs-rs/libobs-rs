@@ -50,7 +50,7 @@ Add the bootstrapper as a build dependency:
 
 ```toml
 [build-dependencies]
-libobs-bootstrapper = "0.4"
+libobs-bootstrapper = "0.5"
 ```
 
 and in the final application's `build.rs`:

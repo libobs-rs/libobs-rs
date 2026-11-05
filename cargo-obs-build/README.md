@@ -87,7 +87,7 @@ You can configure the tool using workspace or package metadata:
 
 ```toml
 [package.metadata] # Can also be [workspace.metadata]
-libobs-version = "30.2.2"
+libobs-version = "32.1.0"
 libobs-cache-dir = "../obs-build" # Optional, defaults to "obs-build", relative to the Cargo.toml file
 ```
 

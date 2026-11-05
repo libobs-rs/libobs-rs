@@ -37,8 +37,8 @@ fn main() {
         .parent().unwrap();
 
     let config = ObsBuildConfig {
-        out_dir: target_dir,
-        cache_dir: PathBuf::from("obs-build"),
+        out_dir: target_dir.to_path_buf(),
+        cache_dir: Some(PathBuf::from("obs-build")),
         browser: true, // Include browser support
         ..Default::default()
     };
@@ -53,7 +53,7 @@ Add this to your `[build-dependencies]`:
 
 ```toml
 [build-dependencies]
-cargo-obs-build = { version = "1.2.4", default-features = false }
+cargo-obs-build = { version = "3", default-features = false }
 ```
 
 Note: We use `default-features = false` to avoid pulling in CLI-specific dependencies (clap, colored, fern) that aren't needed in a build script.
@@ -77,7 +77,7 @@ You can also configure the library version and cache directory in your `Cargo.to
 
 ```toml
 [workspace.metadata]
-libobs-version = "30.2.2"  # Specific version to use
+libobs-version = "32.1.0"  # Specific version to use
 libobs-cache-dir = "../obs-build"  # this is relative to your Cargo.toml
 ```
 

@@ -1,5 +1,10 @@
 name: Publish Crates
 
+# Release procedure: crate tags (<crate>-v<version>) must already point at the commit when its
+# Validation run completes. Push the release commit and its tags together, e.g.
+#   git push --atomic origin main <crate>-v<version> ...
+# Tags pushed after Validation has finished do not trigger a publish.
+
 on:
   workflow_run:
     workflows: ["Validation"]
@@ -67,6 +72,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          # Publish exactly the validated, tagged commit even if main has moved on.
+          ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
 
       - name: Set up Rust
@@ -95,10 +102,12 @@ jobs:
 
           # Create an associative array to store tags by crate name
           declare -A TAG_MAP
-          printf '%s\n' "$TAGS" | while IFS= read -r TAG; do
+          # Read from a here-string (not a pipe) so the assignments persist in this shell.
+          while IFS= read -r TAG; do
+            [ -n "$TAG" ] || continue
             CRATE_NAME="${TAG%-v*}"
             TAG_MAP[$CRATE_NAME]=$TAG
-          done
+          done <<< "$TAGS"
 
           # Iterate in the desired order
           for CRATE_NAME in "${PUBLISH_ORDER[@]}"; do

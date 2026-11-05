@@ -21,11 +21,11 @@ Microsoft's delay-load mechanism defers `obs.dll` loading until the first import
 
 ```toml
 [dependencies]
-libobs-bootstrapper = "0.4"
-libobs-wrapper = "9"
+libobs-bootstrapper = "0.5"
+libobs-wrapper = "10"
 
 [build-dependencies]
-libobs-bootstrapper = "0.4"
+libobs-bootstrapper = "0.5"
 ```
 
 `build.rs`:

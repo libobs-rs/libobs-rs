@@ -50,7 +50,7 @@ If you are still experiencing issues because of API limits, there is an option t
 You can specify a fixed OBS version in your `Cargo.toml` to reduce API calls:
 ```toml
 [workspace.metadata]
-libobs-version = "30.2.2"  # Specific version to use, only set this if you know what you are doing
+libobs-version = "32.1.0"  # Specific version to use, only set this if you know what you are doing
 libobs-cache-dir = "obs-build"  # Cache directory location
 ```
 

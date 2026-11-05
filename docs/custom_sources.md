@@ -41,16 +41,14 @@ This will generate a `MySourceBuilder` struct with methods like `set_url`, `set_
 
 This macro generates an updater struct, allowing you to modify the settings of an existing source at runtime.
 
+The macro takes three positional arguments: the OBS object id, the wrapper type being updated, and
+the underlying native pointer type of that wrapper.
+
 ```rust
 use libobs_simple_macro::obs_object_updater;
-use libobs_wrapper::data::ObsObjectUpdater;
+use libobs_wrapper::sources::ObsSourceRef;
 
-// Usually you define a struct that holds the state or reference to the source
-pub struct MySource {
-    // ... internal state ...
-}
-
-#[obs_object_updater(name = "my_custom_source_id", updatable_type = MySource)]
+#[obs_object_updater("my_custom_source_id", ObsSourceRef, *mut libobs::obs_source_t)]
 pub struct MySourceUpdater {
     #[obs_property(type_t = "string")]
     pub url: String,
@@ -61,7 +59,8 @@ pub struct MySourceUpdater {
 
 ## The `obs_object_impl` Macro
 
-This macro ties everything together, implementing the builder and updater logic for your source struct.
+This macro ties everything together: the methods written in `impl MySource` are generated on both
+`MySourceBuilder` and `MySourceUpdater` (the `MySource` name is only used as the shared prefix).
 
 ```rust
 use libobs_simple_macro::obs_object_impl;

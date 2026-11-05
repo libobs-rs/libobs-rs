@@ -5,7 +5,7 @@ This is a helper macro for the [libobs-simple crate](https://crates.io/crates/li
 ## Usage
 This is an example for the window_capture source:
 ```rust
-#[obs_source_builder("window_capture")]
+#[obs_object_builder("window_capture")]
 pub struct WindowCaptureSourceBuilder {
     #[obs_property(type_t = "enum")]
     capture_method: ObsWindowCaptureMethod,

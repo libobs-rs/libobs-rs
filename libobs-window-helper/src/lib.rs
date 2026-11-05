@@ -38,12 +38,11 @@ use win_iterator::{first_window, next_window};
 #[cfg(windows)]
 use windows::Win32::{Foundation::HWND, System::Console::GetConsoleWindow};
 
-/// Retrieves information about all windows based on the specified search mode and game check flag.
+/// Retrieves information about all windows based on the specified search mode.
 ///
 /// # Arguments
 ///
 /// * `mode` - The search mode to use for window enumeration.
-/// * `check_game` - A flag indicating wether a `game_capture` or a `window_capture` is used
 ///
 /// # Returns
 ///
