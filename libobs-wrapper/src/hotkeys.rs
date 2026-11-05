@@ -23,14 +23,24 @@ use crate::{
     utils::{ObsError, ObsString},
 };
 
+// C enums are `i32` in the MSVC bindings and `u32` elsewhere, so normalize the
+// interaction flag values to the `u32` used by `obs_key_combination::modifiers`.
+#[allow(clippy::unnecessary_cast)]
+mod modifier_bits {
+    pub(super) const SHIFT: u32 = libobs::obs_interaction_flags_INTERACT_SHIFT_KEY as u32;
+    pub(super) const CONTROL: u32 = libobs::obs_interaction_flags_INTERACT_CONTROL_KEY as u32;
+    pub(super) const ALT: u32 = libobs::obs_interaction_flags_INTERACT_ALT_KEY as u32;
+    pub(super) const COMMAND: u32 = libobs::obs_interaction_flags_INTERACT_COMMAND_KEY as u32;
+}
+
 bitflags::bitflags! {
     /// Modifier bits accepted by libobs hotkey injection.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
     pub struct HotkeyModifiers: u32 {
-        const SHIFT = libobs::obs_interaction_flags_INTERACT_SHIFT_KEY;
-        const CONTROL = libobs::obs_interaction_flags_INTERACT_CONTROL_KEY;
-        const ALT = libobs::obs_interaction_flags_INTERACT_ALT_KEY;
-        const COMMAND = libobs::obs_interaction_flags_INTERACT_COMMAND_KEY;
+        const SHIFT = modifier_bits::SHIFT;
+        const CONTROL = modifier_bits::CONTROL;
+        const ALT = modifier_bits::ALT;
+        const COMMAND = modifier_bits::COMMAND;
     }
 }
 

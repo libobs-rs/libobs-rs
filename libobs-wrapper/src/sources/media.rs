@@ -28,7 +28,9 @@ impl MediaState {
             libobs::obs_media_state_OBS_MEDIA_STATE_STOPPED => Self::Stopped,
             libobs::obs_media_state_OBS_MEDIA_STATE_ENDED => Self::Ended,
             libobs::obs_media_state_OBS_MEDIA_STATE_ERROR => Self::Error,
-            other => Self::Unknown(other),
+            // C enums are `i32` in the MSVC bindings and `u32` elsewhere.
+            #[allow(clippy::unnecessary_cast)]
+            other => Self::Unknown(other as u32),
         }
     }
 }

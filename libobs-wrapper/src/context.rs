@@ -454,8 +454,10 @@ impl ObsContext {
                     )));
                 }
             };
+            // C enums are `i32` in the MSVC bindings and `u32` elsewhere.
+            #[allow(clippy::unnecessary_cast)]
             let speakers =
-                num_traits::FromPrimitive::from_u32(native.speakers).ok_or_else(|| {
+                num_traits::FromPrimitive::from_u32(native.speakers as u32).ok_or_else(|| {
                     ObsError::EnumConversionError(format!(
                         "unknown active OBS speaker layout {}",
                         native.speakers
