@@ -34,10 +34,11 @@ fn main() {
     let target_dir = PathBuf::from(&out_dir)
         .parent().unwrap()
         .parent().unwrap()
-        .parent().unwrap();
+        .parent().unwrap()
+        .to_path_buf();
 
     let config = ObsBuildConfig {
-        out_dir: target_dir.to_path_buf(),
+        out_dir: target_dir,
         cache_dir: Some(PathBuf::from("obs-build")),
         browser: true, // Include browser support
         ..Default::default()

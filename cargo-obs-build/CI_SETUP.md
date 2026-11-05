@@ -23,8 +23,10 @@ Set the `GITHUB_TOKEN` environment variable to authenticate API requests, which 
 ```yaml
 - name: Build project
   env:
-    GITHUB_TOKEN: ${{ github.token }} // This is needed increase rate limit
-  run: cargo obs-build  --out-dir target/debug/deps // For example
+    # Needed to increase the GitHub API rate limit
+    GITHUB_TOKEN: ${{ github.token }}
+  # For example:
+  run: cargo obs-build build --out-dir target/debug/deps
 ```
 
 ## Caching the OBS Build Directory

@@ -80,7 +80,7 @@ Add the following to your `Cargo.toml`:
 [package.metadata]
 # The libobs version to use (can either be a specific version or "latest")
 # If not specified, the version will be selected based on the libobs crate version.
-# libobs-version = "31.0.3"
+# libobs-version = "32.1.0"
 # Optional: The directory to store the OBS build
 # libobs-cache-dir = "../obs-build"
 ```
