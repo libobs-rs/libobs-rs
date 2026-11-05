@@ -320,6 +320,13 @@ fn native_ffmpeg_media_source_exposes_state_pause_restart_and_stop() {
     let _item = scene.add(media.clone()).unwrap();
     media.media_restart().unwrap();
     wait_for_media_state(&media, MediaState::Playing, Duration::from_secs(2));
+    // Under load the source can report Playing before the demuxer has published a duration.
+    let duration_deadline = std::time::Instant::now() + Duration::from_secs(10);
+    while media.media_duration().unwrap().unwrap_or_default() < Duration::from_secs(2)
+        && std::time::Instant::now() < duration_deadline
+    {
+        std::thread::sleep(Duration::from_millis(20));
+    }
     assert!(
         media.media_duration().unwrap().unwrap_or_default() >= Duration::from_secs(2),
         "media duration should be reported after opening"
