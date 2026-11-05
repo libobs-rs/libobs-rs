@@ -17,7 +17,7 @@ pub mod windows;
 pub mod linux;
 
 #[cfg(any(target_os = "macos", test, doc))]
-#[cfg_attr(doc, doc(cfg(target_os = "macos")))]
+#[cfg_attr(all(doc, not(doctest)), doc(cfg(target_os = "macos")))]
 pub mod macos;
 
 mod either;

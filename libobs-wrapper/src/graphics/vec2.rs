@@ -1,3 +1,7 @@
+// The `getters0::Getters` derive expands to `Self { x: x, .. }` with the field spans, which
+// clippy >= 1.99 reports as `redundant_field_names` in this module.
+#![allow(clippy::redundant_field_names)]
+
 use getters0::Getters;
 
 #[derive(Debug, Clone, Copy, PartialEq, Getters)]
