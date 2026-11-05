@@ -228,35 +228,26 @@ macro_rules! impl_signal_manager {
                 fn drop(&mut self) {
                     log::trace!("Dropping signal manager {}...", stringify!($name));
                     let ptr = self.pointer.clone();
-                    let runtime = self.runtime.clone();
                     $(let [<$signal_name:snake _hub>] = self.[<$signal_name:snake _hub>].clone();)*
 
-                    let cleanup_runtime = runtime.clone();
-                    runtime.defer_obs_cleanup(move || {
-                        let result = cleanup_runtime.run_with_obs_result(move || {
-                            let handler = ($handler_getter)(ptr.clone());
-                            $(
-                                let signal = $crate::utils::ObsString::new($signal_name);
-                                unsafe {
-                                    // SAFETY: This closure is explicitly executed through the OBS runtime;
-                                    // the signal string and captured hub Arc remain alive for disconnect.
-                                    libobs::signal_handler_disconnect(
-                                        handler,
-                                        signal.as_c_str().as_ptr(),
-                                        Some([<$signal_name:snake _handler>]),
-                                        std::sync::Arc::as_ptr(&[<$signal_name:snake _hub>])
-                                            as *mut std::ffi::c_void,
-                                    );
-                                }
-                            )*
-                        });
-                        if let Err(err) = result {
-                            log::error!(
-                                "Failed to disconnect {} signals on the OBS actor: {:?}",
-                                stringify!($name),
-                                err
-                            );
-                        }
+                    // Deferred cleanup runs on the OBS owner thread; capturing a runtime clone
+                    // would let the final runtime handle drop on the actor during shutdown.
+                    self.runtime.defer_obs_cleanup(move || {
+                        let handler = ($handler_getter)(ptr.clone());
+                        $(
+                            let signal = $crate::utils::ObsString::new($signal_name);
+                            unsafe {
+                                // SAFETY: Deferred cleanup executes on the OBS owner thread;
+                                // the signal string and captured hub Arc remain alive for disconnect.
+                                libobs::signal_handler_disconnect(
+                                    handler,
+                                    signal.as_c_str().as_ptr(),
+                                    Some([<$signal_name:snake _handler>]),
+                                    std::sync::Arc::as_ptr(&[<$signal_name:snake _hub>])
+                                        as *mut std::ffi::c_void,
+                                );
+                            }
+                        )*
                     });
                 }
             }

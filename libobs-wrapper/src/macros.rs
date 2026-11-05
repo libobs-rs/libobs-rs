@@ -42,23 +42,17 @@ macro_rules! impl_obs_drop {
                 // closure boundary. This defeats precise field capture of raw pointers
                 // without introducing a generic "make anything Send" adapter.
                 let cleanup_payload = ($($var,)*);
-                let runtime = self.runtime.clone();
-                let cleanup_runtime = runtime.clone();
-                runtime.defer_obs_cleanup(move || {
-                    // Keep the payload wrapped until it crosses the actor-call boundary so
-                    // Rust's precise closure capture cannot extract a raw pointer field.
-                    let result = cleanup_runtime.run_with_obs_result(move || {
-                        let ($($var,)*) = cleanup_payload;
-                        let inner_obs_drop = { $operation };
-                        inner_obs_drop()
-                    });
-                    if let Err(err) = result {
-                        log::error!(
-                            "Failed to run native cleanup for {} on the OBS actor: {:?}",
-                            stringify!($struct_name),
-                            err
-                        );
-                    }
+                // Deferred cleanup always runs on the OBS owner thread (queued to the actor, or
+                // inline when already there), so the operation is called directly. Capturing a
+                // runtime clone here would let the final runtime handle drop on the actor itself,
+                // where shutdown cannot be awaited and the process may exit while OBS still runs.
+                self.runtime.defer_obs_cleanup(move || {
+                    // Rebind the whole tuple first so Rust's precise closure capture cannot
+                    // extract a raw pointer field from it.
+                    let cleanup_payload = cleanup_payload;
+                    let ($($var,)*) = cleanup_payload;
+                    let inner_obs_drop = { $operation };
+                    inner_obs_drop()
                 });
             }
         }

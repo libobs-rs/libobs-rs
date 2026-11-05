@@ -165,7 +165,15 @@ fn test_create_source() {
         libobs::obs_remove_data_path(data_path.as_ptr());
         libobs::obs_shutdown();
 
-        let allocs = libobs::bnum_allocs();
+        // Plugin worker threads can release their last allocation just after
+        // obs_shutdown returns, so let the count settle before judging leaks. A real
+        // leak still fails once the deadline passes.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        let mut allocs = libobs::bnum_allocs();
+        while allocs > 1 && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            allocs = libobs::bnum_allocs();
+        }
         assert_eq!(allocs, 1, "Memory leaks detected: {}", allocs);
     }
 }

@@ -163,6 +163,53 @@ pub struct ObsContext {
 
     #[cfg(target_os = "linux")]
     glib_loop: Arc<RwLock<Option<crate::utils::linux::LinuxGlibLoop>>>,
+
+    /// Declared last so it drops after every other field, including `runtime`.
+    #[cfg(all(feature = "enable_runtime", any(test, feature = "__test_environment")))]
+    #[skip_getter]
+    _shutdown_wait: Arc<TestShutdownWait>,
+}
+
+/// Test-only: when the last `ObsContext` clone drops, wait for libobs to finish shutting down.
+///
+/// The final runtime handle can be released on the OBS actor (for example by deferred
+/// cleanup that owns another wrapper object), where shutdown cannot be joined. Without
+/// this wait a test can return and the process exit while OBS threads still run, which
+/// crashes in exit handlers, and a following context in the same process can observe the
+/// previous runtime as still active.
+#[cfg(all(feature = "enable_runtime", any(test, feature = "__test_environment")))]
+#[derive(Debug)]
+struct TestShutdownWait {
+    actor_thread: std::thread::ThreadId,
+}
+
+#[cfg(all(feature = "enable_runtime", any(test, feature = "__test_environment")))]
+impl Drop for TestShutdownWait {
+    fn drop(&mut self) {
+        const TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+        if std::thread::current().id() == self.actor_thread {
+            // The actor cannot wait for its own shutdown.
+            return;
+        }
+        let (lock, changed) = &*OBS_RUNTIME_STATE;
+        let Ok(state) = lock.lock() else {
+            return;
+        };
+        let result = changed.wait_timeout_while(state, TIMEOUT, |state| {
+            matches!(
+                *state,
+                ObsRuntimeState::Active(_) | ObsRuntimeState::ShuttingDown
+            )
+        });
+        if let Ok((_, timeout)) = result {
+            if timeout.timed_out() {
+                log::warn!(
+                    "OBS runtime did not shut down within {TIMEOUT:?} of dropping the last ObsContext; \
+                     other OBS handles are probably still alive"
+                );
+            }
+        }
+    }
 }
 
 impl ObsContext {
@@ -246,6 +293,10 @@ impl ObsContext {
             startup_info: Arc::new(RwLock::new(info)),
             #[cfg(target_os = "linux")]
             glib_loop: Arc::new(RwLock::new(linux_opt)),
+            #[cfg(all(feature = "enable_runtime", any(test, feature = "__test_environment")))]
+            _shutdown_wait: Arc::new(TestShutdownWait {
+                actor_thread: runtime.thread_id(),
+            }),
         })
     }
 

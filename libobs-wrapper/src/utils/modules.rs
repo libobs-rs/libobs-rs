@@ -190,18 +190,11 @@ impl Drop for ObsModules {
             return;
         };
         let data_path = self.paths.libobs_data_path().clone();
-        let cleanup_runtime = runtime.clone();
-        runtime.defer_obs_cleanup(move || {
-            let result = cleanup_runtime.run_with_obs_result(move || unsafe {
-                // SAFETY: This closure is explicitly executed through the OBS runtime.
-                libobs::obs_remove_data_path(data_path.as_ptr().0);
-            });
-            if let Err(err) = result {
-                log::error!(
-                    "Failed to remove the OBS data path during cleanup: {:?}",
-                    err
-                );
-            }
+        // Deferred cleanup runs on the OBS owner thread. Do not move `runtime` into it: the
+        // final runtime handle must not drop on the actor, where shutdown cannot be awaited.
+        runtime.defer_obs_cleanup(move || unsafe {
+            // SAFETY: Deferred cleanup executes on the OBS owner thread.
+            libobs::obs_remove_data_path(data_path.as_ptr().0);
         });
     }
 }
