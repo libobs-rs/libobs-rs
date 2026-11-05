@@ -508,7 +508,10 @@ mod tests {
             .unwrap(),
             AudioMonitoringType::MonitorOnly
         );
-        assert!(AudioMonitoringType::from_native(u32::MAX).is_err());
+        // C enums are `i32` in the MSVC bindings and `u32` elsewhere.
+        #[allow(clippy::unnecessary_cast)]
+        let invalid = u32::MAX as libobs::obs_monitoring_type;
+        assert!(AudioMonitoringType::from_native(invalid).is_err());
     }
 
     #[test]

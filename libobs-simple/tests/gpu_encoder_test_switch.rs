@@ -231,7 +231,7 @@ fn test_encoder_switch() {
         .select_video_encoder()
         .matches()
         .iter()
-        .any(|info| info.id() == nvenc_id.to_string());
+        .any(|info| nvenc_id == info.id());
 
     for i in 0..ROUNDS {
         state.simulate_recording(

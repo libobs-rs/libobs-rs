@@ -17,7 +17,15 @@ use libobs_simple::wrapper::{
 };
 
 static TEST_MEDIA_POSITION_MS: AtomicI64 = AtomicI64::new(0);
-static TEST_MEDIA_STATE: AtomicU32 = AtomicU32::new(sys::obs_media_state_OBS_MEDIA_STATE_STOPPED);
+// C enums are `i32` in the MSVC bindings and `u32` elsewhere; store them as `u32`.
+#[allow(clippy::unnecessary_cast)]
+const fn media_state_bits(state: sys::obs_media_state) -> u32 {
+    state as u32
+}
+
+static TEST_MEDIA_STATE: AtomicU32 = AtomicU32::new(media_state_bits(
+    sys::obs_media_state_OBS_MEDIA_STATE_STOPPED,
+));
 const TEST_MEDIA_SOURCE_ID: &[u8] = b"libobs_rs_test_media_source\0";
 const TEST_MEDIA_SOURCE_NAME: &[u8] = b"libobs-rs controllable media fixture\0";
 
@@ -49,11 +57,11 @@ unsafe extern "C" fn test_media_destroy(data: *mut std::ffi::c_void) {
 // state and does not dereference `data`.
 unsafe extern "C" fn test_media_play_pause(_data: *mut std::ffi::c_void, pause: bool) {
     TEST_MEDIA_STATE.store(
-        if pause {
+        media_state_bits(if pause {
             sys::obs_media_state_OBS_MEDIA_STATE_PAUSED
         } else {
             sys::obs_media_state_OBS_MEDIA_STATE_PLAYING
-        },
+        }),
         Ordering::SeqCst,
     );
 }
@@ -62,7 +70,7 @@ unsafe extern "C" fn test_media_play_pause(_data: *mut std::ffi::c_void, pause: 
 unsafe extern "C" fn test_media_restart(_data: *mut std::ffi::c_void) {
     TEST_MEDIA_POSITION_MS.store(0, Ordering::SeqCst);
     TEST_MEDIA_STATE.store(
-        sys::obs_media_state_OBS_MEDIA_STATE_PLAYING,
+        media_state_bits(sys::obs_media_state_OBS_MEDIA_STATE_PLAYING),
         Ordering::SeqCst,
     );
 }
@@ -70,7 +78,7 @@ unsafe extern "C" fn test_media_restart(_data: *mut std::ffi::c_void) {
 // SAFETY: see `test_media_play_pause`; no callback pointer is dereferenced.
 unsafe extern "C" fn test_media_stop(_data: *mut std::ffi::c_void) {
     TEST_MEDIA_STATE.store(
-        sys::obs_media_state_OBS_MEDIA_STATE_STOPPED,
+        media_state_bits(sys::obs_media_state_OBS_MEDIA_STATE_STOPPED),
         Ordering::SeqCst,
     );
 }
@@ -91,8 +99,9 @@ unsafe extern "C" fn test_media_set_time(_data: *mut std::ffi::c_void, milliseco
 }
 
 // SAFETY: see `test_media_play_pause`; no callback pointer is dereferenced.
+#[allow(clippy::unnecessary_cast)]
 unsafe extern "C" fn test_media_state(_data: *mut std::ffi::c_void) -> sys::obs_media_state {
-    TEST_MEDIA_STATE.load(Ordering::SeqCst)
+    TEST_MEDIA_STATE.load(Ordering::SeqCst) as sys::obs_media_state
 }
 
 fn register_test_media_source() {
@@ -355,7 +364,7 @@ fn native_media_seek_reaches_the_registered_plugin_callback() {
     register_test_media_source();
     TEST_MEDIA_POSITION_MS.store(0, Ordering::SeqCst);
     TEST_MEDIA_STATE.store(
-        sys::obs_media_state_OBS_MEDIA_STATE_STOPPED,
+        media_state_bits(sys::obs_media_state_OBS_MEDIA_STATE_STOPPED),
         Ordering::SeqCst,
     );
     let media_type = context

@@ -169,9 +169,11 @@ mod tests {
     use super::*;
 
     #[test]
+    // C enums are `i32` in the MSVC bindings and `u32` elsewhere.
+    #[allow(clippy::unnecessary_cast)]
     fn unknown_media_states_are_preserved() {
         assert_eq!(
-            MediaState::from_native(u32::MAX),
+            MediaState::from_native(u32::MAX as libobs::obs_media_state),
             MediaState::Unknown(u32::MAX)
         );
     }
