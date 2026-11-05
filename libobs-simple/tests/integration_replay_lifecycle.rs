@@ -1,7 +1,9 @@
+#[path = "support/ffmpeg_tools.rs"]
+mod ffmpeg_tools;
 #[path = "support/prepared_runtime.rs"]
 mod prepared_runtime;
 
-use std::{path::PathBuf, process::Command, thread, time::Duration};
+use std::{path::PathBuf, thread, time::Duration};
 
 use libobs_simple::{
     output::{replay::ObsContextReplayExt, simple::X264Preset},
@@ -85,7 +87,7 @@ fn native_replay_save_returns_the_completed_existing_media_file() {
     );
     replay.stop_with_timeout(Duration::from_secs(15)).unwrap();
 
-    let probe = Command::new("ffprobe")
+    let probe = ffmpeg_tools::ffprobe()
         .args(["-v", "error", "-show_streams", "-of", "json"])
         .arg(saved.as_ref())
         .output()

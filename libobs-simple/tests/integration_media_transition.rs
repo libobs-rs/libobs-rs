@@ -1,9 +1,10 @@
+#[path = "support/ffmpeg_tools.rs"]
+mod ffmpeg_tools;
 #[path = "support/prepared_runtime.rs"]
 mod prepared_runtime;
 
 use std::{
     path::{Path, PathBuf},
-    process::Command,
     sync::{
         atomic::{AtomicI64, AtomicU32, Ordering},
         Arc,
@@ -272,7 +273,7 @@ fn native_ffmpeg_media_source_exposes_state_pause_restart_and_stop() {
         std::env::temp_dir().join(format!("libobs-rs-media-native-{}", std::process::id()));
     std::fs::create_dir_all(&fixture_dir).unwrap();
     let media_path = fixture_dir.join("controllable.mp4");
-    let generated = Command::new("ffmpeg")
+    let generated = ffmpeg_tools::ffmpeg()
         .args([
             "-hide_banner",
             "-loglevel",

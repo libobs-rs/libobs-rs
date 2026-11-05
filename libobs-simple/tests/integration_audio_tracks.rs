@@ -1,7 +1,9 @@
+#[path = "support/ffmpeg_tools.rs"]
+mod ffmpeg_tools;
 #[path = "support/prepared_runtime.rs"]
 mod prepared_runtime;
 
-use std::{path::PathBuf, process::Command, thread, time::Duration};
+use std::{path::PathBuf, thread, time::Duration};
 
 use libobs_simple::{
     output::simple::{ObsContextSimpleExt, OutputFormat, X264Preset},
@@ -38,7 +40,7 @@ fn start_context() -> Option<libobs_simple::wrapper::context::ObsContext> {
 }
 
 fn generate_tone(path: &std::path::Path, frequency: u32) {
-    let status = Command::new("ffmpeg")
+    let status = ffmpeg_tools::ffmpeg()
         .args([
             "-y",
             "-loglevel",
@@ -141,7 +143,7 @@ fn native_recording_contains_combined_and_separate_audio_tracks() {
         .expect("recording should stop");
     assert!(recording.is_file());
 
-    let probe = Command::new("ffprobe")
+    let probe = ffmpeg_tools::ffprobe()
         .args(["-v", "error", "-show_streams", "-of", "json"])
         .arg(&recording)
         .output()
@@ -166,7 +168,7 @@ fn native_recording_contains_combined_and_separate_audio_tracks() {
 
     // Every dedicated track should contain real signal, not merely an empty encoder stream.
     for audio_index in 0..3 {
-        let decoded = Command::new("ffmpeg")
+        let decoded = ffmpeg_tools::ffmpeg()
             .args(["-v", "error", "-i"])
             .arg(&recording)
             .args([
