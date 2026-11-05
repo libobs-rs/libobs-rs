@@ -183,6 +183,9 @@ impl ObsModules {
     }
 }
 
+// Deferred cleanup always executes on the OBS owner thread.
+#[allow(unknown_lints)]
+#[allow(ensure_obs_call_in_runtime)]
 impl Drop for ObsModules {
     fn drop(&mut self) {
         log::trace!("Dropping ObsModules and removing module paths...");

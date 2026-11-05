@@ -464,11 +464,6 @@ impl ObsRuntime {
         Ok(operation())
     }
 
-    #[cfg(all(feature = "enable_runtime", any(test, feature = "__test_environment")))]
-    pub(crate) fn thread_id(&self) -> std::thread::ThreadId {
-        self.thread_id
-    }
-
     pub(crate) fn native_registry(&self) -> Arc<NativeObjectRegistry> {
         self.native_registry.clone()
     }

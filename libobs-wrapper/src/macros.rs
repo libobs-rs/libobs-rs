@@ -34,6 +34,9 @@ macro_rules! impl_obs_drop {
         $crate::impl_obs_drop!($struct_name, (), $operation);
     };
     ($struct_name: ident, ($($var:ident),* $(,)*), $operation:expr) => {
+        // Deferred cleanup always executes on the OBS owner thread.
+        #[allow(unknown_lints)]
+        #[allow(ensure_obs_call_in_runtime)]
         impl Drop for $struct_name {
             fn drop(&mut self) {
                 log::trace!("Dropping {}...", stringify!($struct_name));

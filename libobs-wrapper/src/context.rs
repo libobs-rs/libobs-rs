@@ -81,6 +81,8 @@ lazy_static::lazy_static! {
 pub(crate) fn reserve_runtime_slot() -> Result<(), ObsError> {
     let (lock, changed) = &*OBS_RUNTIME_STATE;
     let mut state = lock.lock().map_err(|_| ObsError::MutexFailure)?;
+    #[cfg(all(feature = "enable_runtime", any(test, feature = "__test_environment")))]
+    let mut drain_deadline: Option<std::time::Instant> = None;
     loop {
         match *state {
             ObsRuntimeState::Idle => {
@@ -89,6 +91,22 @@ pub(crate) fn reserve_runtime_slot() -> Result<(), ObsError> {
             }
             ObsRuntimeState::ShuttingDown => {
                 state = changed.wait(state).map_err(|_| ObsError::MutexFailure)?;
+            }
+            #[cfg(all(feature = "enable_runtime", any(test, feature = "__test_environment")))]
+            ObsRuntimeState::Active(_) if test_shutdown::no_live_contexts() => {
+                // No context is alive, so the previous runtime is only draining deferred
+                // cleanup before shutdown. Wait for it, bounded; see `test_shutdown`.
+                let deadline = *drain_deadline.get_or_insert_with(|| {
+                    std::time::Instant::now() + test_shutdown::DRAIN_TIMEOUT
+                });
+                let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+                if remaining.is_zero() {
+                    return Err(ObsError::ThreadFailure);
+                }
+                state = changed
+                    .wait_timeout(state, remaining)
+                    .map_err(|_| ObsError::MutexFailure)?
+                    .0;
             }
             ObsRuntimeState::Starting | ObsRuntimeState::Active(_) => {
                 return Err(ObsError::ThreadFailure);
@@ -164,51 +182,94 @@ pub struct ObsContext {
     #[cfg(target_os = "linux")]
     glib_loop: Arc<RwLock<Option<crate::utils::linux::LinuxGlibLoop>>>,
 
-    /// Declared last so it drops after every other field, including `runtime`.
+    /// Test-environment bookkeeping of live contexts; see [`test_shutdown`].
     #[cfg(all(feature = "enable_runtime", any(test, feature = "__test_environment")))]
     #[skip_getter]
-    _shutdown_wait: Arc<TestShutdownWait>,
+    _live_context: Arc<test_shutdown::LiveContextToken>,
 }
 
-/// Test-only: when the last `ObsContext` clone drops, wait for libobs to finish shutting down.
+/// Test-environment-only shutdown synchronization.
 ///
-/// The final runtime handle can be released on the OBS actor (for example by deferred
-/// cleanup that owns another wrapper object), where shutdown cannot be joined. Without
-/// this wait a test can return and the process exit while OBS threads still run, which
-/// crashes in exit handlers, and a following context in the same process can observe the
-/// previous runtime as still active.
+/// The final runtime handle may be released on the OBS actor (for example by deferred
+/// cleanup that owns another wrapper object), where shutdown cannot be joined. Then nothing
+/// waits for `obs_shutdown`: a test can return and the process run its exit handlers while
+/// OBS threads are still alive (crashing in OpenSSL, EGL or Mesa teardown), and a context
+/// created right after the previous one was dropped can still find the slot `Active`.
+///
+/// Two waits close this independently of drop order:
+/// - an exit hook blocks process exit until the runtime slot is idle, and
+/// - [`reserve_runtime_slot`] waits for a still-draining runtime when no `ObsContext` is alive.
+///
+/// Both waits apply only while no `ObsContext` exists (otherwise the runtime is legitimately
+/// in use) and are bounded, so a leaked handle still surfaces as an error instead of a hang.
 #[cfg(all(feature = "enable_runtime", any(test, feature = "__test_environment")))]
-#[derive(Debug)]
-struct TestShutdownWait {
-    actor_thread: std::thread::ThreadId,
-}
+pub(crate) mod test_shutdown {
+    use std::{
+        sync::{
+            atomic::{AtomicUsize, Ordering},
+            Once,
+        },
+        time::{Duration, Instant},
+    };
 
-#[cfg(all(feature = "enable_runtime", any(test, feature = "__test_environment")))]
-impl Drop for TestShutdownWait {
-    fn drop(&mut self) {
-        const TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
-        if std::thread::current().id() == self.actor_thread {
-            // The actor cannot wait for its own shutdown.
-            return;
+    use super::{ObsRuntimeState, OBS_RUNTIME_STATE};
+
+    pub(crate) const DRAIN_TIMEOUT: Duration = Duration::from_secs(10);
+
+    static LIVE_CONTEXTS: AtomicUsize = AtomicUsize::new(0);
+    static EXIT_HOOK: Once = Once::new();
+
+    pub(crate) fn no_live_contexts() -> bool {
+        LIVE_CONTEXTS.load(Ordering::Acquire) == 0
+    }
+
+    /// Held (behind an `Arc`) by every `ObsContext` clone family.
+    #[derive(Debug)]
+    pub(crate) struct LiveContextToken(());
+
+    impl LiveContextToken {
+        pub(crate) fn new() -> Self {
+            LIVE_CONTEXTS.fetch_add(1, Ordering::AcqRel);
+            EXIT_HOOK.call_once(|| {
+                // SAFETY: `wait_for_idle_at_exit` is a plain `extern "C" fn()` that never
+                // unwinds. Registering it after libobs has loaded its modules makes it run
+                // before exit handlers those modules' dependencies registered earlier.
+                if unsafe { libc::atexit(wait_for_idle_at_exit) } != 0 {
+                    log::warn!("Could not register the OBS test shutdown exit hook");
+                }
+            });
+            Self(())
         }
-        let (lock, changed) = &*OBS_RUNTIME_STATE;
-        let Ok(state) = lock.lock() else {
-            return;
-        };
-        let result = changed.wait_timeout_while(state, TIMEOUT, |state| {
-            matches!(
-                *state,
-                ObsRuntimeState::Active(_) | ObsRuntimeState::ShuttingDown
-            )
-        });
-        if let Ok((_, timeout)) = result {
-            if timeout.timed_out() {
-                log::warn!(
-                    "OBS runtime did not shut down within {TIMEOUT:?} of dropping the last ObsContext; \
-                     other OBS handles are probably still alive"
-                );
+    }
+
+    impl Drop for LiveContextToken {
+        fn drop(&mut self) {
+            // Update under the state lock so a waiter in `reserve_runtime_slot` cannot miss it.
+            let (lock, changed) = &*OBS_RUNTIME_STATE;
+            let _state = lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            LIVE_CONTEXTS.fetch_sub(1, Ordering::AcqRel);
+            changed.notify_all();
+        }
+    }
+
+    extern "C" fn wait_for_idle_at_exit() {
+        // Never unwind across the C boundary.
+        let _ = std::panic::catch_unwind(|| {
+            if !no_live_contexts() {
+                // A live context keeps OBS running on purpose; nobody will shut it down.
+                return;
             }
-        }
+            let (lock, changed) = &*OBS_RUNTIME_STATE;
+            let state = lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            let deadline = Instant::now() + DRAIN_TIMEOUT;
+            let _ = changed.wait_timeout_while(state, DRAIN_TIMEOUT, |state| {
+                matches!(
+                    *state,
+                    ObsRuntimeState::Active(_) | ObsRuntimeState::ShuttingDown
+                ) && no_live_contexts()
+                    && Instant::now() < deadline
+            });
+        });
     }
 }
 
@@ -294,9 +355,7 @@ impl ObsContext {
             #[cfg(target_os = "linux")]
             glib_loop: Arc::new(RwLock::new(linux_opt)),
             #[cfg(all(feature = "enable_runtime", any(test, feature = "__test_environment")))]
-            _shutdown_wait: Arc::new(TestShutdownWait {
-                actor_thread: runtime.thread_id(),
-            }),
+            _live_context: Arc::new(test_shutdown::LiveContextToken::new()),
         })
     }
 

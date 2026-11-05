@@ -224,6 +224,9 @@ macro_rules! impl_signal_manager {
                 )*
             }
 
+            // Deferred cleanup always executes on the OBS owner thread.
+            #[allow(unknown_lints)]
+            #[allow(ensure_obs_call_in_runtime)]
             impl Drop for $name {
                 fn drop(&mut self) {
                     log::trace!("Dropping signal manager {}...", stringify!($name));
