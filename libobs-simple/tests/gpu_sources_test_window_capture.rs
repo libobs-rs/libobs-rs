@@ -26,9 +26,12 @@ pub fn record() {
     let mut cmd = None;
     if window.is_none() {
         cmd = Some(Command::new("notepad.exe").spawn().unwrap());
-        std::thread::sleep(Duration::from_millis(350));
-
-        window = find_notepad();
+        // Notepad can take several seconds to show its window on a cold CI runner.
+        let deadline = std::time::Instant::now() + Duration::from_secs(15);
+        while window.is_none() && std::time::Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(100));
+            window = find_notepad();
+        }
     }
 
     let window = window.expect("Couldn't find notepad window");

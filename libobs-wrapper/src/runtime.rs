@@ -155,6 +155,29 @@ pub struct ObsRuntime {
     _platform_specific: Option<Rc<PlatformSpecificGuard>>,
 }
 
+/// Test environment only: see `context::test_shutdown`. While no `ObsContext` is alive,
+/// flush deferred cleanup before releasing this handle so that the final runtime handle is
+/// dropped here (and joins shutdown) rather than inside a queued closure on the actor.
+#[cfg(all(feature = "enable_runtime", any(test, feature = "__test_environment")))]
+impl Drop for ObsRuntime {
+    fn drop(&mut self) {
+        const FLUSH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+        if self.is_actor_thread() || !crate::context::test_shutdown::no_live_contexts() {
+            return;
+        }
+        let (flushed_tx, flushed_rx) = bounded::<()>(1);
+        let marker: RuntimeTask = Box::new(move || {
+            let _ = flushed_tx.send(());
+        });
+        if self.cleanup_sender.send(marker).is_ok()
+            && flushed_rx.recv_timeout(FLUSH_TIMEOUT).is_err()
+        {
+            // Disconnected means the actor stopped; only a timeout is worth reporting.
+            log::warn!("Deferred OBS cleanup did not drain within {FLUSH_TIMEOUT:?}");
+        }
+    }
+}
+
 impl Debug for ObsRuntime {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ObsRuntime")

@@ -150,6 +150,12 @@ pub(crate) fn release_runtime_slot() -> Result<(), ObsError> {
 #[derive(Debug, Getters, Clone)]
 #[skip_new]
 pub struct ObsContext {
+    /// Test-environment bookkeeping of live contexts; see [`test_shutdown`]. Declared first so
+    /// it is released before this context's runtime handles drop.
+    #[cfg(all(feature = "enable_runtime", any(test, feature = "__test_environment")))]
+    #[skip_getter]
+    _live_context: Arc<test_shutdown::LiveContextToken>,
+
     /// Keeps C-referenced startup configuration alive for the OBS lifetime.
     startup_info: Arc<RwLock<StartupInfo>>,
 
@@ -163,6 +169,46 @@ pub struct ObsContext {
 
     #[cfg(target_os = "linux")]
     glib_loop: Arc<RwLock<Option<crate::utils::linux::LinuxGlibLoop>>>,
+}
+
+/// Test-environment-only shutdown synchronization.
+///
+/// The final runtime handle may otherwise be released on the OBS actor (by queued deferred
+/// cleanup that owns another wrapper object), where shutdown cannot be joined. Then nothing
+/// waits for `obs_shutdown`: a test can return and the process run its exit handlers while
+/// OBS threads are still alive (crashing in OpenSSL, EGL or Mesa teardown), and a context
+/// created right after can still find the slot `Active`.
+///
+/// To prevent that, dropping a runtime handle off the actor while no `ObsContext` is alive
+/// first flushes the deferred-cleanup queue (see `ObsRuntime`'s test-environment `Drop`).
+/// Queued closures then release their handles before this one, so the final handle drops
+/// on a regular thread, which joins the actor through shutdown.
+#[cfg(all(feature = "enable_runtime", any(test, feature = "__test_environment")))]
+pub(crate) mod test_shutdown {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static LIVE_CONTEXTS: AtomicUsize = AtomicUsize::new(0);
+
+    pub(crate) fn no_live_contexts() -> bool {
+        LIVE_CONTEXTS.load(Ordering::Acquire) == 0
+    }
+
+    /// Held (behind an `Arc`) by every `ObsContext` clone family.
+    #[derive(Debug)]
+    pub(crate) struct LiveContextToken(());
+
+    impl LiveContextToken {
+        pub(crate) fn new() -> Self {
+            LIVE_CONTEXTS.fetch_add(1, Ordering::AcqRel);
+            Self(())
+        }
+    }
+
+    impl Drop for LiveContextToken {
+        fn drop(&mut self) {
+            LIVE_CONTEXTS.fetch_sub(1, Ordering::AcqRel);
+        }
+    }
 }
 
 impl ObsContext {
@@ -246,6 +292,8 @@ impl ObsContext {
             startup_info: Arc::new(RwLock::new(info)),
             #[cfg(target_os = "linux")]
             glib_loop: Arc::new(RwLock::new(linux_opt)),
+            #[cfg(all(feature = "enable_runtime", any(test, feature = "__test_environment")))]
+            _live_context: Arc::new(test_shutdown::LiveContextToken::new()),
         })
     }
 

@@ -144,6 +144,12 @@ fn test_create_source() {
 
         // Load modules
         println!("Loading all modules");
+        // rtmp-services downloads a fresh services.json on a cold cache (always the case in
+        // CI) and its updater then leaks one block inside OBS itself, so whether this test
+        // passed depended on network timing. The plugin is irrelevant to the core allocation
+        // accounting checked here.
+        let rtmp_services = CString::new("rtmp-services").unwrap();
+        libobs::obs_add_disabled_module(rtmp_services.as_ptr());
         libobs::obs_load_all_modules();
         println!("Logging loaded modules");
         libobs::obs_log_loaded_modules();
