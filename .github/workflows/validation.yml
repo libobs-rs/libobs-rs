@@ -7,16 +7,87 @@ on:
     branches: [main, master]
   workflow_dispatch:
 
+# Superseded PR runs are cancelled. Every non-PR run (e.g. pushes to main) gets
+# its own group so it is never cancelled or replaced while pending: publish.yml
+# only fires when a main Validation run completes successfully.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  TOP_SECRET_NO_DUMMY_DLL: true
+
 jobs:
-  build-test:
-    name: Build and Test
+  # Static checks. They only type-check (no linking, no OBS runtime), so they run
+  # in parallel with the test jobs instead of in front of them.
+  lint:
+    name: Lint (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [windows-latest, ubuntu-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - uses: awalsh128/cache-apt-pkgs-action@v1.6.3
+        if: matrix.os == 'ubuntu-latest'
+        with:
+          # System libraries probed by -sys crates (glib, openssl, wayland, X11).
+          packages: pkg-config libglib2.0-dev libssl-dev libwayland-dev libx11-dev libxkbcommon-dev
+          version: 1.0
+
+      - name: Skip the libobs pkg-config probe (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        # `cargo check`/clippy/dylint never link, so the OBS install is not
+        # needed; LIBOBS_PATH makes libobs/build.rs skip pkg-config.
+        run: echo "LIBOBS_PATH=/usr/lib" >> "$GITHUB_ENV"
+
+      - name: Install cargo-hack from crates.io
+        uses: baptiste0928/cargo-install@v3
+        with:
+          crate: cargo-hack
+      - name: Install cargo-dylint from crates.io
+        uses: baptiste0928/cargo-install@v3
+        with:
+          crate: cargo-dylint
+      - name: Install dylint-link from crates.io
+        uses: baptiste0928/cargo-install@v3
+        with:
+          crate: dylint-link
+
+      - name: Check Rust formatting
+        if: matrix.os == 'ubuntu-latest'
+        run: cargo fmt -- --check
+
+      - name: Check Rust with Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Check Rust with Dylint
+        run: cargo dylint --all --workspace
+
+      - name: Check code compilation
+        run: cargo hack check --feature-powerset --skip generate_bindings,include_win_bindings,__test_environment
+
+  build-test:
+    name: Build and Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    env:
+      # Both nextest runs share one target dir (and therefore one OBS runtime
+      # copy on Windows); different feature sets still reuse every dependency.
+      LIBOBS_TEST_RUNTIME_DIR: ${{ matrix.os == 'ubuntu-latest' && format('{0}/obs-install', github.workspace) || format('{0}/target/debug/deps', github.workspace) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
       - name: Cache cargo-obs-build Installation
         uses: actions/cache@v4
         if: matrix.os != 'ubuntu-latest'
@@ -32,11 +103,10 @@ jobs:
         with:
           path: |
             ${{ github.workspace }}/obs-install
-          # libobs bindings are generated for a specific OBS ABI. Never restore
-          # a cache produced from a different OBS release line.
-          key: ${{ runner.os }}-obs-studio-${{ hashFiles('libobs/OBS_VERSION', '.github/workflows/validation.yml') }}-v4
-          restore-keys: |
-            ${{ runner.os }}-obs-studio-
+          # libobs bindings are generated for a specific OBS ABI. The key only
+          # depends on the pinned OBS version (bump the suffix when the OBS build
+          # recipe below changes), so unrelated workflow edits keep the cache.
+          key: ${{ runner.os }}-obs-studio-${{ hashFiles('libobs/OBS_VERSION') }}-v5
 
       - uses: taiki-e/install-action@nextest
 
@@ -45,14 +115,27 @@ jobs:
         with:
           packages: cmake ninja-build pkg-config clang clang-format build-essential curl ccache git zsh libavcodec-dev libavdevice-dev libavfilter-dev libavformat-dev libavutil-dev libswresample-dev libswscale-dev libx264-dev libcurl4-openssl-dev libmbedtls-dev libgl1-mesa-dev libjansson-dev libluajit-5.1-dev python3-dev libx11-dev libxcb-randr0-dev libxcb-shm0-dev libxcb-xinerama0-dev libxcb-composite0-dev libxcomposite-dev libxinerama-dev libxcb1-dev libx11-xcb-dev libxcb-xfixes0-dev swig libcmocka-dev libxss-dev libglvnd-dev libgles2-mesa-dev libwayland-dev librist-dev libsrt-openssl-dev libpci-dev libpipewire-0.3-dev libqrcodegencpp-dev uthash-dev libsimde-dev qt6-base-dev qt6-base-private-dev qt6-svg-dev qt6-wayland qt6-image-formats-plugins libasound2-dev libfdk-aac-dev libfontconfig-dev libfreetype6-dev libjack-jackd2-dev libpulse-dev libsndio-dev libspeexdsp-dev libudev-dev libv4l-dev libva-dev libvlc-dev libvpl-dev libdrm-dev nlohmann-json3-dev libwebsocketpp-dev libasio-dev libffmpeg-nvenc-dev xvfb ffmpeg libblas-dev libblas3 liblapack3
           version: 1.0
-      - name: Ensure OBS CMake dependencies are installed
+      - name: Ensure OBS dependencies are installed
         if: matrix.os == 'ubuntu-latest'
         run: |
           # cache-apt-pkgs-action restores package files, but packages with
           # installation metadata/scripts are not always fully registered on a
-          # cache hit. Install the complete OBS dependency set explicitly
-          # instead of discovering missing package registrations one CMake
-          # failure at a time.
+          # cache hit. When OBS itself is cached, only verify that its runtime
+          # dependencies resolve; the full (slow, mirror-dependent) apt install
+          # is only needed to build OBS or to repair a broken restore.
+          sudo ldconfig
+          runtime_ok() {
+            test -d "$GITHUB_WORKSPACE/obs-install" || return 1
+            command -v Xvfb >/dev/null && command -v ffmpeg >/dev/null && command -v ffprobe >/dev/null || return 1
+            obs_libs="$GITHUB_WORKSPACE/obs-install/lib:$GITHUB_WORKSPACE/obs-install/lib/x86_64-linux-gnu"
+            missing=$(LD_LIBRARY_PATH="$obs_libs" find "$GITHUB_WORKSPACE/obs-install" -type f \( -name '*.so' -o -name '*.so.*' -o -path '*/bin/*' \) \
+              -exec ldd {} + 2>/dev/null | grep 'not found' | sort -u || true)
+            if [ -n "$missing" ]; then echo "Unresolved OBS runtime libraries:"; echo "$missing"; return 1; fi
+          }
+          if [ "${{ steps.obs-cache.outputs.cache-hit }}" = "true" ] && runtime_ok; then
+            echo "OBS cache hit and runtime dependencies resolve; skipping apt install"
+            exit 0
+          fi
           sudo apt-get update
           sudo apt-get install -y \
             cmake ninja-build pkg-config clang clang-format build-essential curl ccache git zsh \
@@ -109,19 +192,6 @@ jobs:
         with:
           crate: cargo-obs-build
 
-      - name: Install cargo-hack from crates.io
-        uses: baptiste0928/cargo-install@v3
-        with:
-          crate: cargo-hack
-      - name: Install cargo-dylint from crates.io
-        uses: baptiste0928/cargo-install@v3
-        with:
-          crate: cargo-dylint
-
-      - name: Install dylint-link from crates.io
-        uses: baptiste0928/cargo-install@v3
-        with:
-          crate: dylint-link
       - name: Install OBS build dependencies (Windows)
         if: matrix.os != 'ubuntu-latest'
         run: cargo obs-build build --out-dir target/debug/deps
@@ -133,12 +203,6 @@ jobs:
         # Recording-verification tests shell out to ffmpeg/ffprobe. Installing them
         # up front avoids parallel test processes racing to download a copy.
         run: choco install ffmpeg -y --no-progress
-
-      - name: Install OBS build dependencies (Windows - nextest)
-        if: matrix.os != 'ubuntu-latest'
-        run: cargo obs-build build --out-dir target/nextest-all-features/debug/deps
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
 
       - name: Set up virtual display for Linux
         if: matrix.os == 'ubuntu-latest'
@@ -190,50 +254,22 @@ jobs:
           fi
           echo "======================================"
 
-      # Check if formatting is correct
-      - name: Check Rust formatting
-        run: cargo fmt -- --check
-        env:
-          TOP_SECRET_NO_DUMMY_DLL: true
-
-      - name: Check Rust with Clippy
-        run: cargo clippy -- -D warnings
-        env:
-          TOP_SECRET_NO_DUMMY_DLL: true
-
-      - name: Check Rust with Dylint
-        run: cargo dylint --all --workspace
-        env:
-          TOP_SECRET_NO_DUMMY_DLL: true
-      # Run cargo check to ensure code will compile
-      - name: Check code compilation
-        run: cargo hack check --feature-powerset --skip generate_bindings,include_win_bindings,__test_environment
-        env:
-          TOP_SECRET_NO_DUMMY_DLL: true
       - name: Run tests (no default features)
         run: cargo nextest r --profile ci --no-default-features --features "__test_environment"
-        env:
-          TOP_SECRET_NO_DUMMY_DLL: true
-          LIBOBS_TEST_RUNTIME_DIR: ${{ matrix.os == 'ubuntu-latest' && format('{0}/obs-install', github.workspace) || format('{0}/target/debug/deps', github.workspace) }}
       - name: Run tests (with default features)
-        run: cargo nextest r --profile ci --all-features --target-dir target/nextest-all-features
-        env:
-          TOP_SECRET_NO_DUMMY_DLL: true
-          # Platform-source integration tests use the exact runtime prepared
-          # above instead of assuming an OBS installation on the runner.
-          LIBOBS_TEST_RUNTIME_DIR: ${{ matrix.os == 'ubuntu-latest' && format('{0}/obs-install', github.workspace) || format('{0}/target/nextest-all-features/debug/deps', github.workspace) }}
+        run: cargo nextest r --profile ci --all-features
       - name: Record and inspect a real Windows window
         if: matrix.os == 'windows-latest'
-        run: cargo nextest r -p libobs-simple -E 'binary(gpu_sources_test_window_capture)' --target-dir target/nextest-all-features
-        env:
-          TOP_SECRET_NO_DUMMY_DLL: true
-          LIBOBS_TEST_RUNTIME_DIR: ${{ github.workspace }}/target/nextest-all-features/debug/deps
+        run: cargo nextest r -p libobs-simple -E 'binary(gpu_sources_test_window_capture)' --all-features
+
   build-test-macos:
     name: Build and Test (macOS)
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
 
       - uses: taiki-e/install-action@nextest
 
@@ -278,6 +314,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
 
       - uses: taiki-e/install-action@nextest
 
