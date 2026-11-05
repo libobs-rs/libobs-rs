@@ -1,4 +1,7 @@
-use std::{process::Command, time::Duration};
+use std::{
+    process::Command,
+    time::{Duration, Instant},
+};
 
 use libobs_wrapper::{
     context::ObsContext,
@@ -9,19 +12,22 @@ use libobs_wrapper::{
 const CHILD_ENV: &str = "LIBOBS_RS_RESTART_CHILD_CYCLE";
 
 fn initialize_after_deferred_cleanup() -> ObsContext {
-    for _ in 0..500 {
+    // With no context alive, the test-environment runtime already waits (bounded) for a
+    // previous runtime to drain its deferred cleanup. Keep a short retry loop for any
+    // remaining window, but bound it by total time: each attempt may itself block.
+    let deadline = Instant::now() + Duration::from_secs(15);
+    loop {
         match ObsContext::new(StartupInfo::default()) {
             Ok(context) => return context,
-            Err(ObsError::ThreadFailure) => {
-                // Final native releases are fire-and-forget actor cleanup. A just-dropped
-                // context can still be draining for a few milliseconds even when no public
-                // handle remains. Bound the retry so a stuck/leaking runtime is still a failure.
+            Err(ObsError::ThreadFailure) if Instant::now() < deadline => {
                 std::thread::sleep(Duration::from_millis(2));
+            }
+            Err(ObsError::ThreadFailure) => {
+                panic!("previous OBS runtime did not finish deferred cleanup within 15 seconds")
             }
             Err(error) => panic!("initialize OBS lifecycle cycle: {error:?}"),
         }
     }
-    panic!("previous OBS runtime did not finish deferred cleanup within one second");
 }
 
 fn exercise_runtime_cycle(cycle: u64) {

@@ -197,7 +197,8 @@ pub struct ObsContext {
 /// created right after the previous one was dropped can still find the slot `Active`.
 ///
 /// Two waits close this independently of drop order:
-/// - an exit hook blocks process exit until the runtime slot is idle, and
+/// - an exit hook blocks process exit until the runtime slot is idle (not on Windows, see
+///   [`LiveContextToken::new`]), and
 /// - [`reserve_runtime_slot`] waits for a still-draining runtime when no `ObsContext` is alive.
 ///
 /// Both waits apply only while no `ObsContext` exists (otherwise the runtime is legitimately
@@ -205,18 +206,20 @@ pub struct ObsContext {
 #[cfg(all(feature = "enable_runtime", any(test, feature = "__test_environment")))]
 pub(crate) mod test_shutdown {
     use std::{
-        sync::{
-            atomic::{AtomicUsize, Ordering},
-            Once,
-        },
-        time::{Duration, Instant},
+        sync::atomic::{AtomicUsize, Ordering},
+        time::Duration,
     };
+    #[cfg(not(windows))]
+    use std::{sync::Once, time::Instant};
 
-    use super::{ObsRuntimeState, OBS_RUNTIME_STATE};
+    #[cfg(not(windows))]
+    use super::ObsRuntimeState;
+    use super::OBS_RUNTIME_STATE;
 
     pub(crate) const DRAIN_TIMEOUT: Duration = Duration::from_secs(10);
 
     static LIVE_CONTEXTS: AtomicUsize = AtomicUsize::new(0);
+    #[cfg(not(windows))]
     static EXIT_HOOK: Once = Once::new();
 
     pub(crate) fn no_live_contexts() -> bool {
@@ -230,6 +233,10 @@ pub(crate) mod test_shutdown {
     impl LiveContextToken {
         pub(crate) fn new() -> Self {
             LIVE_CONTEXTS.fetch_add(1, Ordering::AcqRel);
+            // Not on Windows: the UCRT holds its exit lock while running `atexit` callbacks,
+            // and the actor's obs_shutdown unloads graphics DLLs whose CRT teardown needs that
+            // same lock, so waiting there would stall shutdown instead of awaiting it.
+            #[cfg(not(windows))]
             EXIT_HOOK.call_once(|| {
                 // SAFETY: `wait_for_idle_at_exit` is a plain `extern "C" fn()` that never
                 // unwinds. Registering it after libobs has loaded its modules makes it run
@@ -252,6 +259,7 @@ pub(crate) mod test_shutdown {
         }
     }
 
+    #[cfg(not(windows))]
     extern "C" fn wait_for_idle_at_exit() {
         // Never unwind across the C boundary.
         let _ = std::panic::catch_unwind(|| {
