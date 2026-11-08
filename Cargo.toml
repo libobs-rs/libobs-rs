@@ -46,7 +46,7 @@ sha2 = "0.10"
 # Platform/FFI/windowing
 display-info = "0.5"
 libloading = "0.9"
-num-derive = "0.4.2"  # Minimum version without non-local-definitions lint issues
+num-derive = "0.5.1"  # Minimum version without non-local-definitions lint issues
 num-traits = "0.2"
 winit = "0.30"
 windows = "0.62"
