@@ -213,7 +213,21 @@ jobs:
         if: matrix.os == 'windows-latest'
         # Recording-verification tests shell out to ffmpeg/ffprobe. Installing them
         # up front avoids parallel test processes racing to download a copy.
-        run: choco install ffmpeg -y --no-progress
+        shell: pwsh
+        run: |
+          $ProgressPreference = "SilentlyContinue"
+          $archive = Join-Path $env:RUNNER_TEMP "ffmpeg.zip"
+          $installDir = Join-Path $env:RUNNER_TEMP "ffmpeg"
+          Invoke-WebRequest "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" -OutFile $archive -MaximumRetryCount 3 -RetryIntervalSec 5
+          Expand-Archive -LiteralPath $archive -DestinationPath $installDir -Force
+          $ffmpeg = Get-ChildItem -LiteralPath $installDir -Filter ffmpeg.exe -Recurse -File | Select-Object -First 1
+          if (!$ffmpeg) { throw "FFmpeg executable was not present in the archive" }
+          $ffprobe = Join-Path $ffmpeg.DirectoryName "ffprobe.exe"
+          & $ffmpeg.FullName -version
+          if ($LASTEXITCODE -ne 0) { throw "FFmpeg verification failed" }
+          & $ffprobe -version
+          if ($LASTEXITCODE -ne 0) { throw "FFprobe verification failed" }
+          $ffmpeg.DirectoryName >> $env:GITHUB_PATH
 
       - name: Set up virtual display for Linux
         if: matrix.os == 'ubuntu-latest'
