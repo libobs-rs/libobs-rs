@@ -1,6 +1,4 @@
 use std::{
-    ffi::OsString,
-    os::windows::ffi::OsStrExt,
     os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle},
     path::{Path, PathBuf},
     str::FromStr,
@@ -13,7 +11,6 @@ use windows::{
     Wdk::System::Threading::{NtQueryInformationProcess, ProcessCommandLineInformation},
     Win32::{
         Foundation::{HANDLE, HWND, MAX_PATH, UNICODE_STRING},
-        Globalization::GetSystemDefaultLangID,
         Graphics::Gdi::{
             MonitorFromWindow, HMONITOR, MONITOR_DEFAULTTONEAREST, MONITOR_DEFAULTTONULL,
         },
@@ -27,10 +24,6 @@ use windows::{
         UI::WindowsAndMessaging::{GetClassNameW, GetWindowTextLengthW, GetWindowTextW},
     },
 };
-
-const SZ_STRING_FILE_INFO: &str = "StringFileInfo";
-const SZ_PRODUCT_NAME: &str = "ProductName";
-const SZ_HEX_CODE_PAGE_ID_UNICODE: &str = "04B0";
 
 /// Retrieves the executable path and process ID associated with the given window handle.
 ///
@@ -130,37 +123,60 @@ pub fn get_product_name(full_exe: &Path) -> Result<String, WindowHelperError> {
         )?;
     }
 
-    // Safety: This query reads process-global locale information and requires no additional invariants.
-    let lang_id = unsafe { GetSystemDefaultLangID() };
-    let query_key: Vec<u16> = OsString::from(format!(
-        "\\{}\\{}{}\\{}",
-        SZ_STRING_FILE_INFO, lang_id, SZ_HEX_CODE_PAGE_ID_UNICODE, SZ_PRODUCT_NAME
-    ))
-    .encode_wide()
-    .collect();
-    let query_key = HSTRING::from_wide(&query_key);
-
-    let mut pages_ptr: *mut u16 = std::ptr::null_mut();
-    let mut pages_length = 0;
-
-    // Safety: `buffer` lives for the duration of the call; `pages_ptr` and `pages_length` are valid out
-    // parameters for the version query.
+    let mut translations_ptr: *mut u16 = std::ptr::null_mut();
+    let mut translations_bytes = 0;
+    // SAFETY: buffer contains the complete version block and remains alive. Both
+    // out parameters are writable; the returned range is validated before reading.
     unsafe {
         VerQueryValueW(
-            buffer.as_mut_ptr() as _,
-            &query_key,
-            &mut pages_ptr as *mut _ as _,
-            &mut pages_length,
+            buffer.as_ptr().cast(),
+            windows::core::w!("\\VarFileInfo\\Translation"),
+            &mut translations_ptr as *mut _ as _,
+            &mut translations_bytes,
         )
         .ok()?
     };
-
-    product_name_from_query(
+    let translations = utf16_range(
         &buffer,
         required_buffer_size as usize,
-        pages_ptr,
-        pages_length,
-    )
+        translations_ptr,
+        translations_bytes as usize,
+    )?;
+    let (translations, remainder) = translations.as_chunks::<2>();
+    if translations.is_empty() || !remainder.is_empty() {
+        return Err(WindowHelperError::InvalidState(
+            "Invalid version translations".into(),
+        ));
+    }
+    for translation in translations {
+        let query_key = HSTRING::from(format!(
+            "\\StringFileInfo\\{:04x}{:04x}\\ProductName",
+            translation[0], translation[1],
+        ));
+        let mut pages_ptr: *mut u16 = std::ptr::null_mut();
+        let mut pages_length = 0;
+        // SAFETY: The initialized version block is retained unchanged, query_key is
+        // NUL-terminated, and the out parameters are live. Validate before reading.
+        let found = unsafe {
+            VerQueryValueW(
+                buffer.as_ptr().cast(),
+                &query_key,
+                &mut pages_ptr as *mut _ as _,
+                &mut pages_length,
+            )
+        };
+        if found.as_bool() {
+            return product_name_from_query(
+                &buffer,
+                required_buffer_size as usize,
+                pages_ptr,
+                pages_length,
+            );
+        }
+    }
+    Err(WindowHelperError::InvalidState(
+        "Product name is unavailable".into(),
+    ))
 }
 
 fn product_name_from_query(
@@ -175,12 +191,10 @@ fn product_name_from_query(
         ));
     }
 
-    let product_name = utf16_range(
-        buffer,
-        valid_bytes,
-        pages_ptr,
-        pages_length as usize * size_of::<u16>(),
-    )?;
+    let byte_len = (pages_length as usize)
+        .checked_mul(size_of::<u16>())
+        .ok_or_else(|| WindowHelperError::InvalidState("Invalid product name length".into()))?;
+    let product_name = utf16_range(buffer, valid_bytes, pages_ptr, byte_len)?;
     let Some((&0, product_name)) = product_name.split_last() else {
         return Err(WindowHelperError::InvalidState(
             "Unterminated product name".into(),
@@ -370,6 +384,13 @@ mod safety_tests {
         assert!(product_name_from_query(&buffer, 6, ptr, 2).is_err());
         assert!(product_name_from_query(&buffer, 6, ptr.wrapping_add(1), 3).is_err());
         assert!(product_name_from_query(&buffer, 6, std::ptr::null(), 1).is_err());
+        assert!(product_name_from_query(&buffer, 6, ptr, u32::MAX).is_err());
+    }
+
+    #[test]
+    fn product_name_reads_system_executable_translations() {
+        let exe = PathBuf::from(std::env::var_os("SystemRoot").unwrap()).join("System32/cmd.exe");
+        assert!(!get_product_name(&exe).unwrap().is_empty());
     }
 
     #[test]
