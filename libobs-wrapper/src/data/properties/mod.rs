@@ -101,6 +101,8 @@ pub(crate) fn property_ptr_to_struct(
             libobs::obs_properties_first(properties_raw.get_ptr())
         };
         while !property.is_null() {
+            // SAFETY: property is an iterator borrow from properties_raw, whose lease
+            // retains the unchanged tree throughout this actor command.
             let name = unsafe { libobs::obs_property_name(property) };
             if name.is_null() {
                 let success = unsafe {
