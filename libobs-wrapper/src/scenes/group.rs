@@ -234,18 +234,17 @@ impl ObsSceneGroupRef {
             // item before it leaves the actor call.
             libobs::obs_sceneitem_group_ungroup2(group.get_ptr(), true);
 
-            let mut after = Vec::<usize>::new();
+            let mut after = Vec::<*mut libobs::obs_sceneitem_t>::new();
             libobs::obs_scene_enum_items(
                 scene.get_ptr(),
-                Some(collect_item_address),
-                (&mut after as *mut Vec<usize>).cast::<c_void>(),
+                Some(collect_item_pointer),
+                (&mut after as *mut Vec<*mut libobs::obs_sceneitem_t>).cast::<c_void>(),
             );
             let mut replacements = Vec::new();
-            for address in after {
-                if before.contains(&address) {
+            for item in after {
+                if before.contains(&(item as usize)) {
                     continue;
                 }
-                let item = address as *mut libobs::obs_sceneitem_t;
                 libobs::obs_sceneitem_addref(item);
                 replacements.push(Sendable(item));
             }
@@ -503,8 +502,9 @@ fn native_scene_item_addresses(
 }
 
 /// # Safety
-/// `param` must point to a live `Vec<usize>` for the full synchronous libobs enumeration.
+/// `param` must point to an exclusively borrowed live `Vec<usize>` for the synchronous enumeration.
 /// `item` must be the callback-borrowed scene item supplied by libobs for that invocation.
+/// Collected addresses are identity keys only; callers must never dereference them.
 unsafe extern "C" fn collect_item_address(
     _scene: *mut libobs::obs_scene_t,
     item: *mut libobs::obs_sceneitem_t,
@@ -517,6 +517,22 @@ unsafe extern "C" fn collect_item_address(
     } else {
         false
     }
+}
+
+/// # Safety
+/// `param` must exclusively borrow a live Vec of scene-item pointers. The enumerated
+/// scene must retain its items unchanged until the caller has acquired owned references.
+/// The pointers must stay on the actor and must not be used after scene mutation.
+unsafe extern "C" fn collect_item_pointer(
+    _scene: *mut libobs::obs_scene_t,
+    item: *mut libobs::obs_sceneitem_t,
+    param: *mut c_void,
+) -> bool {
+    // SAFETY: The synchronous enumeration in ungroup passes its exclusively borrowed
+    // Vec with this exact element type; the actor retains the scene throughout.
+    let result = unsafe { &mut *param.cast::<Vec<*mut libobs::obs_sceneitem_t>>() };
+    result.push(item);
+    true
 }
 
 fn map_native_order(

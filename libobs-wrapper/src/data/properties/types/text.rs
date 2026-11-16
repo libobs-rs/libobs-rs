@@ -36,11 +36,13 @@ impl TryFrom<PropertyCreationInfo> for ObsTextProperty {
             let text_type = get_enum!(pointer, text_type, ObsTextType)?;
 
             let monospace = unsafe {
-                // Safety: The caller must have ensured that the pointer is valid
+                // SAFETY: PropertyCreationInfo borrows an unchanged parent tree retained by
+                // property_ptr_to_struct throughout this inline actor conversion.
                 libobs::obs_property_text_monospace(pointer.0)
             };
             let word_wrap = unsafe {
-                // Safety: The caller must have ensured that the pointer is valid
+                // SAFETY: PropertyCreationInfo borrows an unchanged parent tree retained by
+                // property_ptr_to_struct throughout this inline actor conversion.
                 libobs::obs_property_text_info_word_wrap(pointer.0)
             };
 

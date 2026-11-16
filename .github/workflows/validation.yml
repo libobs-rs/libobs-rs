@@ -113,7 +113,7 @@ jobs:
       - uses: awalsh128/cache-apt-pkgs-action@v1.6.3
         if: matrix.os == 'ubuntu-latest'
         with:
-          packages: cmake ninja-build pkg-config clang clang-format build-essential curl ccache git zsh libavcodec-dev libavdevice-dev libavfilter-dev libavformat-dev libavutil-dev libswresample-dev libswscale-dev libx264-dev libcurl4-openssl-dev libmbedtls-dev libgl1-mesa-dev libjansson-dev libluajit-5.1-dev python3-dev libx11-dev libxcb-randr0-dev libxcb-shm0-dev libxcb-xinerama0-dev libxcb-composite0-dev libxcomposite-dev libxinerama-dev libxcb1-dev libx11-xcb-dev libxcb-xfixes0-dev swig libcmocka-dev libxss-dev libglvnd-dev libgles2-mesa-dev libwayland-dev librist-dev libsrt-openssl-dev libpci-dev libpipewire-0.3-dev libqrcodegencpp-dev uthash-dev libsimde-dev qt6-base-dev qt6-base-private-dev qt6-svg-dev qt6-wayland qt6-image-formats-plugins libasound2-dev libfdk-aac-dev libfontconfig-dev libfreetype6-dev libjack-jackd2-dev libpulse-dev libsndio-dev libspeexdsp-dev libudev-dev libv4l-dev libva-dev libvlc-dev libvpl-dev libdrm-dev nlohmann-json3-dev libwebsocketpp-dev libasio-dev libffmpeg-nvenc-dev xvfb ffmpeg libblas-dev libblas3 liblapack3
+          packages: cmake ninja-build pkg-config clang libclang-dev clang-format build-essential curl ccache git zsh libavcodec-dev libavdevice-dev libavfilter-dev libavformat-dev libavutil-dev libswresample-dev libswscale-dev libx264-dev libcurl4-openssl-dev libmbedtls-dev libgl1-mesa-dev libjansson-dev libluajit-5.1-dev python3-dev libx11-dev libxcb-randr0-dev libxcb-shm0-dev libxcb-xinerama0-dev libxcb-composite0-dev libxcomposite-dev libxinerama-dev libxcb1-dev libx11-xcb-dev libxcb-xfixes0-dev swig libcmocka-dev libxss-dev libglvnd-dev libgles2-mesa-dev libwayland-dev librist-dev libsrt-openssl-dev libpci-dev libpipewire-0.3-dev libqrcodegencpp-dev uthash-dev libsimde-dev qt6-base-dev qt6-base-private-dev qt6-svg-dev qt6-wayland qt6-image-formats-plugins libasound2-dev libfdk-aac-dev libfontconfig-dev libfreetype6-dev libjack-jackd2-dev libpulse-dev libsndio-dev libspeexdsp-dev libudev-dev libv4l-dev libva-dev libvlc-dev libvpl-dev libdrm-dev nlohmann-json3-dev libwebsocketpp-dev libasio-dev libffmpeg-nvenc-dev xvfb ffmpeg libblas-dev libblas3 liblapack3
           version: 1.0
       - name: Ensure OBS dependencies are installed
         if: matrix.os == 'ubuntu-latest'
@@ -126,6 +126,7 @@ jobs:
           sudo ldconfig
           runtime_ok() {
             test -d "$GITHUB_WORKSPACE/obs-install" || return 1
+            test -e "$(dirname "$(dirname "$(clang -print-resource-dir)")")/libclang.so" || return 1
             command -v Xvfb >/dev/null && command -v ffmpeg >/dev/null && command -v ffprobe >/dev/null || return 1
             obs_libs="$GITHUB_WORKSPACE/obs-install/lib:$GITHUB_WORKSPACE/obs-install/lib/x86_64-linux-gnu"
             missing=$(LD_LIBRARY_PATH="$obs_libs" find "$GITHUB_WORKSPACE/obs-install" -type f \( -name '*.so' -o -name '*.so.*' -o -path '*/bin/*' \) \
@@ -138,7 +139,7 @@ jobs:
           fi
           sudo apt-get update
           sudo apt-get install -y \
-            cmake ninja-build pkg-config clang clang-format build-essential curl ccache git zsh \
+            cmake ninja-build pkg-config clang libclang-dev clang-format build-essential curl ccache git zsh \
             libavcodec-dev libavdevice-dev libavfilter-dev libavformat-dev libavutil-dev \
             libswresample-dev libswscale-dev libx264-dev libcurl4-openssl-dev libmbedtls-dev \
             libgl1-mesa-dev libjansson-dev libluajit-5.1-dev python3-dev libx11-dev \
@@ -155,6 +156,16 @@ jobs:
           test -f /usr/share/ECM/cmake/ECMConfig.cmake
           test -f /usr/include/simde/simde-common.h
           pkg-config --atleast-version=6.1 libavcodec libavformat libavutil libswresample libswscale
+      - name: Select matching Clang headers and library (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          # Bindgen loads libclang and queries a clang executable for system headers.
+          # Keep both on the same installation when the runner has several LLVM versions.
+          clang_path=$(command -v clang)
+          libclang_dir=$(dirname "$(dirname "$("$clang_path" -print-resource-dir)")")
+          test -e "$libclang_dir/libclang.so"
+          echo "CLANG_PATH=$clang_path" >> "$GITHUB_ENV"
+          echo "LIBCLANG_PATH=$libclang_dir" >> "$GITHUB_ENV"
       - name: Symlink libraries
         if: matrix.os == 'ubuntu-latest'
         run: |
@@ -202,7 +213,21 @@ jobs:
         if: matrix.os == 'windows-latest'
         # Recording-verification tests shell out to ffmpeg/ffprobe. Installing them
         # up front avoids parallel test processes racing to download a copy.
-        run: choco install ffmpeg -y --no-progress
+        shell: pwsh
+        run: |
+          $ProgressPreference = "SilentlyContinue"
+          $archive = Join-Path $env:RUNNER_TEMP "ffmpeg.zip"
+          $installDir = Join-Path $env:RUNNER_TEMP "ffmpeg"
+          Invoke-WebRequest "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" -OutFile $archive -MaximumRetryCount 3 -RetryIntervalSec 5
+          Expand-Archive -LiteralPath $archive -DestinationPath $installDir -Force
+          $ffmpeg = Get-ChildItem -LiteralPath $installDir -Filter ffmpeg.exe -Recurse -File | Select-Object -First 1
+          if (!$ffmpeg) { throw "FFmpeg executable was not present in the archive" }
+          $ffprobe = Join-Path $ffmpeg.DirectoryName "ffprobe.exe"
+          & $ffmpeg.FullName -version
+          if ($LASTEXITCODE -ne 0) { throw "FFmpeg verification failed" }
+          & $ffprobe -version
+          if ($LASTEXITCODE -ne 0) { throw "FFprobe verification failed" }
+          $ffmpeg.DirectoryName >> $env:GITHUB_PATH
 
       - name: Set up virtual display for Linux
         if: matrix.os == 'ubuntu-latest'

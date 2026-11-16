@@ -26,9 +26,46 @@ static NEXT_RUNTIME_ID: AtomicU64 = AtomicU64::new(1);
 pub(crate) struct Sendable<T>(pub(crate) T);
 
 #[cfg(feature = "enable_runtime")]
-unsafe impl<T> Send for Sendable<T> {}
+mod transport {
+    /// Audited payloads for the crate-private actor transport.
+    ///
+    /// # Safety
+    /// Moving or sharing the payload must not itself access a native pointee or run
+    /// thread-affine destruction. Call sites must separately retain the pointee owner
+    /// through each synchronous call, or transfer ownership into an actor cleanup task.
+    /// Native access must follow the relevant OBS/OS thread and locking rules.
+    pub(super) unsafe trait ActorTransport {}
+
+    // SAFETY: Raw pointers have no destructor and copying them never accesses their
+    // pointees. This marker does not authorize dereferencing or extending a lifetime.
+    unsafe impl<T> ActorTransport for *mut T {}
+    // SAFETY: As above, transporting a const pointer does not read the pointee.
+    unsafe impl<T> ActorTransport for *const T {}
+    // SAFETY: gs_window contains only borrowed OS handles; it has no native destructor.
+    // Their owner/lifetime obligations are imposed by ObsWindowHandle's constructors.
+    unsafe impl ActorTransport for libobs::gs_window {}
+    // SAFETY: This is an owned copy of display configuration and borrowed window handles.
+    // obs_display_create consumes it synchronously; window lifetime is retained separately.
+    unsafe impl ActorTransport for crate::display::CloneableGsInitData {}
+    // SAFETY: The allocation owns plain C data; moving its Box keeps its address stable.
+    // ObsVideoInfo retains the graphics-module CString; raw access is actor-serialized.
+    unsafe impl ActorTransport for std::pin::Pin<Box<libobs::obs_video_info>> {}
+    // SAFETY: The pinned C struct has no Rust destructor for its native stack. CalldataWrapper
+    // transfers this entire allocation to free_owned_calldata for actor-thread native cleanup.
+    unsafe impl ActorTransport for std::pin::Pin<Box<libobs::calldata_t>> {}
+}
+
 #[cfg(feature = "enable_runtime")]
-unsafe impl<T> Sync for Sendable<T> {}
+use transport::ActorTransport;
+
+// SAFETY: Only the explicitly audited inert payloads above can cross the actor seam.
+// The wrapper is crate-private; all dereferences and native destruction remain explicit.
+#[cfg(feature = "enable_runtime")]
+unsafe impl<T: ActorTransport> Send for Sendable<T> {}
+// SAFETY: Sharing these payloads cannot access their pointees by itself. Native reads
+// and writes still require the ownership and synchronization specified by ActorTransport.
+#[cfg(feature = "enable_runtime")]
+unsafe impl<T: ActorTransport> Sync for Sendable<T> {}
 
 impl<T: Copy> Sendable<T> {
     /// Returns the transported value while keeping access to the audited transport wrapper
@@ -169,8 +206,8 @@ impl Drop for NativeHandleLease {
 
 /// A lifetime-carrying native handle backed by the runtime's object registry.
 ///
-/// The handle itself stores only an opaque ID and a lease. Calling `get_ptr()` resolves
-/// the address from the runtime registry; safe downstream code cannot construct a
+/// The handle itself stores only an opaque ID and a lease. Calling `get_ptr()` recovers
+/// the address retained by that lease; safe downstream code cannot construct a
 /// handle for arbitrary memory.
 pub struct SmartPointerSendable<P: NativePointer> {
     lease: Arc<NativeHandleLease>,
@@ -263,6 +300,25 @@ mod tests {
     #[derive(Debug)]
     struct NoopGuard;
     impl ObsDropGuard for NoopGuard {}
+
+    #[cfg(feature = "enable_runtime")]
+    #[test]
+    fn transport_does_not_make_arbitrary_values_send_or_sync() {
+        // If either auto-trait is implemented for this non-transport payload, inference
+        // becomes ambiguous and this regression test fails at compile time.
+        trait AmbiguousIfSend<A> {
+            fn check() {}
+        }
+        impl<T: ?Sized> AmbiguousIfSend<()> for T {}
+        impl<T: ?Sized + Send> AmbiguousIfSend<u8> for T {}
+        trait AmbiguousIfSync<A> {
+            fn check() {}
+        }
+        impl<T: ?Sized> AmbiguousIfSync<()> for T {}
+        impl<T: ?Sized + Sync> AmbiguousIfSync<u8> for T {}
+        let _ = <Sendable<std::rc::Rc<()>> as AmbiguousIfSend<_>>::check;
+        let _ = <Sendable<std::rc::Rc<()>> as AmbiguousIfSync<_>>::check;
+    }
 
     #[test]
     fn native_handle_registry_lives_until_last_clone() {

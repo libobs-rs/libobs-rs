@@ -65,7 +65,12 @@ pub(super) struct DisplayRenderState {
 #[allow(unknown_lints)]
 #[allow(ensure_obs_call_in_runtime)]
 /// # Safety
-/// Always call this function in the graphics/rendering thread of OBS, never call this function directly!
+/// libobs must invoke this on its graphics thread with its graphics context active.
+/// `data` must point to the DisplayRenderState retained by the display drop guard.
+/// That Arc outlives callback removal: obs_display_remove_draw_callback takes the
+/// same draw_callbacks_mutex held by the renderer, waiting for in-flight callbacks.
+/// Mutable state is protected by RwLocks; the target read guard retains the selected
+/// source/scene lease until rendering completes.
 unsafe extern "C" fn render_display(data: *mut c_void, width: u32, height: u32) {
     let Some(state) = (data as *const DisplayRenderState).as_ref() else {
         log::error!("Display render callback received null userdata");
@@ -178,6 +183,8 @@ impl ObsWindowHandle {
     }
 
     #[cfg(windows)]
+    /// Returns a borrowed OS handle without transferring ownership. Operations on it
+    /// must obey Win32 thread restrictions; destroy it only on its creating thread.
     pub fn get_hwnd(&self) -> windows::Win32::Foundation::HWND {
         windows::Win32::Foundation::HWND(self.window.0.hwnd)
     }
@@ -263,7 +270,9 @@ impl ObsDisplayRef {
         log::trace!("Creating obs display...");
         let display = run_with_obs!(runtime, (init_data), move || {
             let display_ptr = unsafe {
-                // Safety: All pointers are valid because we are keeping them in this scope and because we are cloning init_data into this scope
+                // SAFETY: The actor owns init_data through this synchronous call. Its
+                // borrowed window is retained by the child handler or by the caller's
+                // ObsWindowHandle contract for the complete display lifetime.
                 libobs::obs_display_create(&init_data.0 .0, background_color)
             };
 
@@ -487,7 +496,9 @@ impl_obs_drop!(
     (display, render_state),
     move || unsafe {
         // SAFETY: `render_state` remains alive through callback deregistration and display
-        // destruction, and the native pointer is leased by this drop guard.
+        // destruction, and the native pointer is owned by this drop guard. libobs takes
+        // draw_callbacks_mutex during both rendering and removal, so removal waits for
+        // an active callback before this task can release its Arc.
         log::trace!("Removing callback of display {:?}...", display);
         libobs::obs_display_remove_draw_callback(
             display.0,

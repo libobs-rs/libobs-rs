@@ -98,7 +98,8 @@ macro_rules! impl_custom_source {
     ]) => {
         paste::paste! {
             libobs_wrapper::impl_signal_manager!(|ptr: libobs_wrapper::unsafe_send::SmartPointerSendable<*mut libobs::obs_source>| unsafe {
-                    // Safety: This is a smart pointer, so it is fine
+                    // SAFETY: ptr retains the source reference through this actor call. The signal
+                    // manager keeps that lease through disconnect; the handler is source-owned.
                     libobs::obs_source_get_signal_handler(ptr.raw_ptr_unchecked())
                 }, [<$new_source_struct Signals>] for *mut libobs::obs_source, [
             $($(#[$attr])* $signal_name: { $($inner_def)* }),*

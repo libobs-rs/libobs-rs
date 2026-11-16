@@ -102,7 +102,8 @@ forward_obs_output_impl!(ObsReplayBufferOutputRef, output);
 
 impl_signal_manager!(|ptr: SmartPointerSendable<*mut libobs::obs_output>| {
     unsafe {
-        // Safety: Again, it carries a reference of the drop guard so we must have a valid pointer
+        // SAFETY: ptr retains the output reference through this actor call. The signal
+        // manager keeps that lease through disconnect; the handler is output-owned.
         libobs::obs_output_get_signal_handler(ptr.get_ptr())
     }
 }, ObsReplayOutputSignals for *mut libobs::obs_output, [

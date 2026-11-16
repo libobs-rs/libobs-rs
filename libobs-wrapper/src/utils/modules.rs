@@ -108,6 +108,10 @@ impl ObsModules {
                     let symbol_name = CString::new("obs_add_disabled_module").unwrap();
                     let func = libc::dlsym(libc::RTLD_DEFAULT, symbol_name.as_ptr());
                     if !func.is_null() {
+                        // SAFETY: dlsym found obs_add_disabled_module in the loaded libobs.
+                        // obs.h declares it as void(const char *), using the C ABI; POSIX
+                        // permits converting this symbol address to its function pointer type.
+                        // libobs remains loaded throughout this initialization call.
                         let add_disabled: extern "C" fn(*const std::os::raw::c_char) =
                             std::mem::transmute(func);
                         add_disabled(c_str.as_ptr());

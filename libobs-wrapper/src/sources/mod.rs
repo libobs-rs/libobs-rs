@@ -97,7 +97,9 @@ impl ObsSourceRef {
                 };
 
                 let source_ptr = unsafe {
-                    // Safety: Id, Name must be valid pointers because they are not dropped. Also the settings_ptr and hotkey_data_ptr may be null, its fine.
+                    // SAFETY: id/name own CStrings captured by this actor command. The settings and
+                    // hotkey leases retain their data through creation; libobs accepts null settings.
+                    // The returned owned reference is transferred into a native lease below.
                     libobs::obs_source_create(
                         id_ptr,
                         name_ptr,
@@ -271,7 +273,8 @@ impl ObsSourceTrait for ObsSourceRef {
 }
 
 impl_signal_manager!(|ptr: SmartPointerSendable<*mut libobs::obs_source_t>| unsafe {
-    // Safety: We are using a smart pointer, so it is fine
+    // SAFETY: ptr retains the source reference through this actor call. The signal
+    // manager keeps that lease through disconnect; the handler is source-owned.
     libobs::obs_source_get_signal_handler(ptr.get_ptr())
 }, ObsSourceSignals for *mut libobs::obs_source_t, [
     "destroy": {},

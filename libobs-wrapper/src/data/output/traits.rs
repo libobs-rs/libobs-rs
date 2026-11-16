@@ -555,7 +555,8 @@ pub trait ObsOutputTrait:
 
         run_with_obs!(runtime, (output_ptr, encoder_ptr), move || {
             unsafe {
-                // Safety: This is safe because we are only using smart pointers.
+                // SAFETY: This actor command captures both output and encoder leases; each
+                // retains its native reference until libobs finishes updating the attachment.
                 libobs::obs_output_set_video_encoder(output_ptr.get_ptr(), encoder_ptr.get_ptr());
             }
         })?;

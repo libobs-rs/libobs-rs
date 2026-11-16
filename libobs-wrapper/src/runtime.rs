@@ -717,7 +717,10 @@ impl ObsRuntime {
         }
 
         unsafe {
-            // Safety: We are in the OBS thread, so it's safe to call this here. Also by this time, we _should_ have dropped all OBS resources.
+            // SAFETY: Shutdown runs on the initializing thread after command processing stops
+            // and deferred cleanup is drained. Managed owners retain ObsRuntime until their
+            // releases are queued; global output references were cleared above. Panic recovery
+            // rejects pending work and drains cleanup before reaching here.
             libobs::obs_shutdown()
         }
 

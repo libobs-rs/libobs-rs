@@ -61,14 +61,16 @@ impl TryFrom<PropertyCreationInfo> for ObsListProperty {
             let format = get_enum!(pointer, list_format, ObsComboFormat)?;
 
             let count = unsafe {
-                // Safety: Safe because of smart pointer
+                // SAFETY: The type check established a list property in the parent tree
+                // retained unchanged by property_ptr_to_struct throughout this actor conversion.
                 libobs::obs_property_list_item_count(pointer.0)
             };
             let mut items = Vec::with_capacity(count);
 
             for i in 0..count {
                 let list_item_name = unsafe {
-                    // Safety: The caller must have ensured that the pointer is valid
+                    // SAFETY: PropertyCreationInfo borrows an unchanged parent tree retained by
+                    // property_ptr_to_struct throughout this inline actor conversion.
                     libobs::obs_property_list_item_name(pointer.0, i)
                 };
 
@@ -77,7 +79,8 @@ impl TryFrom<PropertyCreationInfo> for ObsListProperty {
                 }
 
                 let list_name = unsafe {
-                    // Safety: Safe because we did a null check
+                    // SAFETY: This is a tree-owned NUL-terminated string, copied while its parent
+                    // is retained on the actor.
                     CStr::from_ptr(list_item_name)
                         .to_str()
                         .unwrap_or_default()
@@ -85,28 +88,35 @@ impl TryFrom<PropertyCreationInfo> for ObsListProperty {
                 };
 
                 let is_disabled = unsafe {
-                    // Safety: Safe because of smart pointer
+                    // SAFETY: PropertyCreationInfo retains an unchanged parent-tree borrow on the
+                    // actor; list indices are below count.
                     libobs::obs_property_list_item_disabled(pointer.0, i)
                 };
                 let value = match format {
                     ObsComboFormat::Invalid => ObsListItemValue::Invalid,
                     ObsComboFormat::Int => {
                         let int_val = unsafe {
-                            // Safety: The caller must have ensured that the pointer is valid
+                            // SAFETY: PropertyCreationInfo borrows an unchanged parent tree
+                            // retained by
+                            // property_ptr_to_struct throughout this inline actor conversion.
                             libobs::obs_property_list_item_int(pointer.0, i)
                         };
                         ObsListItemValue::Int(int_val)
                     }
                     ObsComboFormat::Float => {
                         let float_val = unsafe {
-                            // Safety: The caller must have ensured that the pointer is valid
+                            // SAFETY: PropertyCreationInfo borrows an unchanged parent tree
+                            // retained by
+                            // property_ptr_to_struct throughout this inline actor conversion.
                             libobs::obs_property_list_item_float(pointer.0, i)
                         };
                         ObsListItemValue::Float(float_val)
                     }
                     ObsComboFormat::String => {
                         let item_string = unsafe {
-                            // Safety: The caller must have ensured that the pointer is valid
+                            // SAFETY: PropertyCreationInfo borrows an unchanged parent tree
+                            // retained by
+                            // property_ptr_to_struct throughout this inline actor conversion.
                             libobs::obs_property_list_item_string(pointer.0, i)
                         };
 
@@ -114,7 +124,8 @@ impl TryFrom<PropertyCreationInfo> for ObsListProperty {
                             ObsListItemValue::String(String::new())
                         } else {
                             let string_val = unsafe {
-                                // Safety: Safe because of null check
+                                // SAFETY: This is a tree-owned NUL-terminated string, copied while
+                                // its parent is retained on the actor.
                                 CStr::from_ptr(item_string).to_string_lossy().to_string()
                             };
                             ObsListItemValue::String(string_val)
@@ -122,7 +133,9 @@ impl TryFrom<PropertyCreationInfo> for ObsListProperty {
                     }
                     ObsComboFormat::Bool => {
                         let bool_val = unsafe {
-                            // Safety: The caller must have ensured that the pointer is valid
+                            // SAFETY: PropertyCreationInfo borrows an unchanged parent tree
+                            // retained by
+                            // property_ptr_to_struct throughout this inline actor conversion.
                             libobs::obs_property_list_item_bool(pointer.0, i)
                         };
                         ObsListItemValue::Bool(bool_val)

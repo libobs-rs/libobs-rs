@@ -21,8 +21,11 @@ pub(crate) struct PropertyCreationInfo {
 }
 
 impl PropertyCreationInfo {
-    // # Safety
-    // The caller must ensure that `pointer` is a valid pointer to an `obs_property
+    /// # Safety
+    /// `pointer` must be non-null and borrowed from a live obs_properties_t tree.
+    /// The caller must retain that tree, without mutation or destruction, until the
+    /// returned info has been consumed by its TryFrom conversion. All native access
+    /// and conversion must run on `runtime`'s actor (nested actor calls run inline).
     pub(crate) unsafe fn new(
         name: String,
         description: Option<String>,
@@ -53,9 +56,9 @@ use crate::{run_with_obs, runtime::ObsRuntime, unsafe_send::Sendable, utils::Obs
 use super::{macros::impl_general_property, ObsProperty, ObsPropertyType};
 
 impl ObsPropertyType {
-    /// Safety:
-    /// The caller must ensure that `pointer` is non-null and points to a valid
-    /// `libobs::obs_property` instance for the duration of this call.
+    /// # Safety
+    /// Run on `runtime`'s actor. `pointer` must belong to a live property tree retained
+    /// without mutation or destruction throughout this call and all nested conversions.
     unsafe fn inner_to_property_struct(
         &self,
         runtime: &ObsRuntime,
@@ -63,7 +66,7 @@ impl ObsPropertyType {
     ) -> Result<ObsProperty, ObsError> {
         let (name, description) = run_with_obs!(runtime, (pointer), move || {
             let name = unsafe {
-                // Safety: The pointer is valid because the caller ensured it.
+                // SAFETY: The caller retains the parent tree throughout this actor conversion.
                 libobs::obs_property_name(pointer.0)
             };
             if name.is_null() {
@@ -73,7 +76,8 @@ impl ObsPropertyType {
             }
 
             let name = unsafe {
-                // Safety: We made sure that the name pointer is valid because it is not null.
+                // SAFETY: obs_property_name returns a tree-owned NUL-terminated string;
+                // the caller retains the unchanged tree until this copy completes.
                 CStr::from_ptr(name)
             };
             let name = name.to_string_lossy().to_string();
@@ -83,7 +87,8 @@ impl ObsPropertyType {
                 None
             } else {
                 let description = unsafe {
-                    // Safety: We made sure that the description pointer is valid because it is not null.
+                    // SAFETY: The non-null description is a tree-owned NUL-terminated string;
+                    // the caller retains the unchanged tree until this copy completes.
                     CStr::from_ptr(description)
                 };
                 Some(description.to_string_lossy().to_string())
@@ -125,10 +130,9 @@ impl ObsPropertyType {
         Ok(data)
     }
 
-    /// Note to future self: I've tried to refactor this to use SmartPointerSendable directly, but the pointer of the
-    /// iteration class shouldn't be freed, so its better to just use the raw pointer directly.
     /// # Safety
-    /// You must make sure that `pointer` is a valid pointer to an `obs_property_t` struct.
+    /// Run on `runtime`'s actor. `pointer` is a non-null iterator borrow, not an owned
+    /// reference; retain its parent property tree unchanged until conversion finishes.
     pub(in crate::data::properties) unsafe fn get_property_struct(
         &self,
         runtime: &ObsRuntime,

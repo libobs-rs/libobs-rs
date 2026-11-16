@@ -4,7 +4,8 @@ macro_rules! unsafe_is_of_type_result {
             use crate::data::properties::ObsPropertyType;
 
             let p_type = unsafe {
-                // Safety: The caller must have ensured that the pointer is valid
+                // SAFETY: PropertyCreationInfo borrows an unchanged parent tree retained by
+                // property_ptr_to_struct throughout this inline actor conversion.
                 libobs::obs_property_get_type($name.0)
             };
             let p_type = crate::macros::enum_from_number!(ObsPropertyType, p_type);
@@ -57,7 +58,8 @@ macro_rules! get_enum {
         paste::paste! {
             {
                 let v = unsafe {
-                    // Safety: The caller must have ensured that the pointer is valid
+                    // SAFETY: PropertyCreationInfo borrows an unchanged parent tree retained by
+                    // property_ptr_to_struct throughout this inline actor conversion.
                     libobs::[<obs_property_ $name>]($pointer_name.0)
                 };
 
@@ -84,7 +86,8 @@ macro_rules! get_opt_str {
         } else {
             #[expect(unused_unsafe)]
             let v = unsafe {
-                // Safety: The function didn't return a null pointer, so it must be valid
+                // SAFETY: The getter returns a tree-owned NUL-terminated string. The parent
+                // tree remains retained and unchanged while this actor copies the string.
                 std::ffi::CStr::from_ptr(v as _)
             };
             let v = v.to_string_lossy().to_string();
