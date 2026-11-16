@@ -65,7 +65,8 @@ impl MonitorCaptureSource {
 fn is_thread_dpi_unaware(runtime: &ObsRuntime) -> Result<bool, ObsError> {
     run_with_obs!(runtime, (), move || {
         unsafe {
-            // Safety: This function can be called from any thread.
+            // SAFETY: This actor command queries its own thread DPI context. The opaque
+            // context is passed directly to the awareness query, never dereferenced.
             let ctx = GetThreadDpiAwarenessContext();
             GetAwarenessFromDpiAwarenessContext(ctx) == DPI_AWARENESS_UNAWARE
         }
@@ -82,7 +83,8 @@ fn set_dpi_awareness_if_needed(runtime: &ObsRuntime) -> Result<(), ObsError> {
     }
 
     let set_result = unsafe {
-        // Safety: The call is safe and does not require synchronization.
+        // SAFETY: PER_MONITOR_AWARE_V2 is a documented pseudo-handle. Windows arbitrates
+        // this process-wide setting; manifest/concurrent initialization errors are handled below.
         SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)
     };
 

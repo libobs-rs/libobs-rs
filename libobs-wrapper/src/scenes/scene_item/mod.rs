@@ -213,7 +213,8 @@ impl<T: ObsSourceTrait + Clone> ObsSceneItemRef<T> {
 
         let scene_item_ptr = run_with_obs!(runtime, (scene_ptr, source_ptr), move || {
             let ptr = unsafe {
-                // Safety: The pointers are valid as they are safe pointers
+                // SAFETY: This actor command captures scene/source leases, retaining both
+                // native references through the synchronous scene insertion.
                 libobs::obs_scene_add(scene_ptr.get_ptr(), source_ptr.get_ptr())
             };
 
@@ -388,7 +389,8 @@ trait_with_optional_send_sync! {
                 let position: libobs::vec2 = position.into();
 
                 unsafe {
-                    // Safety: The pointer is valid as it is a safe pointer
+                    // SAFETY: self_ptr retains the native scene-item reference through this actor
+                    // call.
                     libobs::obs_sceneitem_set_pos(self_ptr.get_ptr(), &position);
                 }
             })?;
@@ -399,14 +401,15 @@ trait_with_optional_send_sync! {
         /// Sets the transform info of the given source in this scene.
         /// The `ObsTransformInfo` can be built by using the `ObsTransformInfoBuilder`.
         fn set_transform_info(&self, info: &ObsTransformInfo) -> Result<(), ObsError> {
-            let item_info = Sendable(info.clone());
+            let item_info = info.clone();
             let self_ptr = self.__native_handle().clone();
 
             run_with_obs!(self.runtime(), (self_ptr, item_info), move || {
-                let item_info = item_info.0 .0;
+                let item_info = item_info.0;
 
                 unsafe {
-                    // Safety: The pointers are valid as they are safe pointers
+                    // SAFETY: self_ptr retains the item on the actor; item_info is a live local
+                    // input copied synchronously by libobs.
                     libobs::obs_sceneitem_set_info2(self_ptr.get_ptr(), &item_info);
                 }
             })?;
@@ -422,7 +425,8 @@ trait_with_optional_send_sync! {
             let self_ptr = self.__native_handle().clone();
             let is_locked = {
                 run_with_obs!(self.runtime(), (self_ptr), move || unsafe {
-                    // Safety: The pointer is valid as it is a safe pointer
+                    // SAFETY: self_ptr retains the native scene-item reference through this actor
+                    // call.
                     libobs::obs_sceneitem_locked(self_ptr.get_ptr())
                 })?
             };
@@ -431,7 +435,7 @@ trait_with_optional_send_sync! {
                 return Ok(false);
             }
 
-            let ovi = run_with_obs!(self.runtime(), (), move || {
+            let (base_width, base_height) = run_with_obs!(self.runtime(), (), move || {
                 let mut ovi = std::mem::MaybeUninit::<obs_video_info>::uninit();
                 let success = unsafe {
                     // Safety: This is safe because we are providing a valid pointer to be filled
@@ -444,7 +448,7 @@ trait_with_optional_send_sync! {
                         ovi.assume_init()
                     };
 
-                    Ok(Sendable(res))
+                    Ok((res.base_width, res.base_height))
                 } else {
                     Err(ObsError::NullPointer(Some(
                         "Failed to get video info".to_string(),
@@ -454,7 +458,8 @@ trait_with_optional_send_sync! {
 
             let bounds_crop = run_with_obs!(self.runtime(), (self_ptr), move || {
                 unsafe {
-                    // Safety: The pointer is valid as it is a safe pointer
+                    // SAFETY: self_ptr retains the native scene-item reference through this actor
+                    // call.
                     libobs::obs_sceneitem_get_bounds_crop(self_ptr.get_ptr())
                 }
             })?;
@@ -463,7 +468,7 @@ trait_with_optional_send_sync! {
             let item_info = ObsTransformInfoBuilder::new()
                 .set_bounds_type(ObsBoundsType::ScaleInner)
                 .set_crop_to_bounds(bounds_crop)
-                .build(ovi.0.base_width, ovi.0.base_height);
+                .build(base_width, base_height);
 
             self.set_transform_info(&item_info)?;
             Ok(true)
@@ -742,7 +747,8 @@ trait_with_optional_send_sync! {
                 let scale: libobs::vec2 = scale.into();
 
                 unsafe {
-                    // Safety: The pointer is valid as it is a safe pointer
+                    // SAFETY: self_ptr retains the native scene-item reference through this actor
+                    // call.
                     libobs::obs_sceneitem_set_scale(self_ptr.get_ptr(), &scale);
                 }
             })?;

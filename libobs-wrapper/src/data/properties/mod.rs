@@ -96,14 +96,16 @@ pub(crate) fn property_ptr_to_struct(
     run_with_obs!(runtime, (properties_raw, runtime_clone), move || {
         let mut result = HashMap::new();
         let mut property = unsafe {
-            // Safety: Safe because of smart pointer
+            // SAFETY: properties_raw retains the entire tree throughout this actor command;
+            // iteration and nested conversions copy data without modifying the tree.
             libobs::obs_properties_first(properties_raw.get_ptr())
         };
         while !property.is_null() {
             let name = unsafe { libobs::obs_property_name(property) };
             if name.is_null() {
                 let success = unsafe {
-                    // Safety: Safe because property is not null and we are just moving forward.
+                    // SAFETY: property is an iterator borrow from the retained tree; next only
+                    // updates the local cursor and the tree is not modified.
                     libobs::obs_property_next(&mut property)
                 };
 
@@ -114,13 +116,15 @@ pub(crate) fn property_ptr_to_struct(
             }
 
             let name = unsafe {
-                // Safety: Safe because of we did a null check
+                // SAFETY: The name is a tree-owned NUL-terminated string; properties_raw
+                // retains the unchanged tree until the copy completes.
                 CStr::from_ptr(name as _)
             };
             let name = name.to_string_lossy().to_string();
 
             let p_type = unsafe {
-                // Safety: Safe because we just got the property pointer
+                // SAFETY: property is borrowed from properties_raw, whose lease retains
+                // the unchanged tree throughout this inline actor conversion.
                 libobs::obs_property_get_type(property)
             };
 
@@ -130,7 +134,8 @@ pub(crate) fn property_ptr_to_struct(
             match p_type {
                 Some(p_type) => {
                     let prop_struct = unsafe {
-                        // Safety: Safe because we just got the property pointer
+                        // SAFETY: property is borrowed from properties_raw, whose lease retains
+                        // the unchanged tree throughout this inline actor conversion.
                         p_type.get_property_struct(&runtime_clone, Sendable(property))
                     };
                     if let Ok(r) = prop_struct {
@@ -144,7 +149,8 @@ pub(crate) fn property_ptr_to_struct(
 
             // Move to the next property
             let has_next = unsafe {
-                // Safety: We didn't drop the property, so it is still valid and we can proceed
+                // SAFETY: properties_raw still retains the unchanged tree; next updates
+                // only this local iterator cursor.
                 libobs::obs_property_next(&mut property)
             };
 

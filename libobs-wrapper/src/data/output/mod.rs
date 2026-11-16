@@ -57,7 +57,9 @@ struct _ObsOutputDropGuard {
 impl ObsDropGuard for _ObsOutputDropGuard {}
 
 impl_obs_drop!(_ObsOutputDropGuard, (output), move || unsafe {
-    // Safety: We are in the runtime and drop guards are always constructed from valid output pointers. Also this guard should be in an Arc, so no double free should happen.
+    // SAFETY: This guard owns the reference returned by obs_output_create. The shared
+    // native lease drops it once, queuing this release on the OBS actor. The cleanup
+    // task retains the owned reference until this call completes.
     libobs::obs_output_release(output.0);
 });
 

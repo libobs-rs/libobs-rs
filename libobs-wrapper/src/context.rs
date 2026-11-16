@@ -215,7 +215,8 @@ impl ObsContext {
     /// Checks if the installed OBS version matches the expected version.
     /// Returns true if the major version matches, false otherwise.
     pub fn check_version_compatibility() -> bool {
-        // Safety: This is fine, we are just getting a version string, which doesn't allocate any memory or have side effects.
+        // SAFETY: libobs returns a static NUL-terminated version string independent of
+        // initialization. The loaded library retains it; the null check precedes CStr access.
         unsafe {
             #[allow(unknown_lints)]
             #[allow(ensure_obs_call_in_runtime)]

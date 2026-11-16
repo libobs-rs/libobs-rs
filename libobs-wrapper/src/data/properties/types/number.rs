@@ -35,22 +35,30 @@ macro_rules! impl_from_property {
                         use crate::data::properties::ObsNumberType;
 
                         let min = unsafe {
-                            // Safety: The caller must have ensured that the pointer is valid
+                            // SAFETY: PropertyCreationInfo borrows an unchanged parent tree
+                            // retained by
+                            // property_ptr_to_struct throughout this inline actor conversion.
                             libobs::[<obs_property_ $obs_number_name _min>](pointer.0)
                         };
 
                         let max = unsafe {
-                            // Safety: The caller must have ensured that the pointer is valid
+                            // SAFETY: PropertyCreationInfo borrows an unchanged parent tree
+                            // retained by
+                            // property_ptr_to_struct throughout this inline actor conversion.
                             libobs::[<obs_property_ $obs_number_name _max>](pointer.0)
                         };
 
                         let step = unsafe {
-                            // Safety: The caller must have ensured that the pointer is valid
+                            // SAFETY: PropertyCreationInfo borrows an unchanged parent tree
+                            // retained by
+                            // property_ptr_to_struct throughout this inline actor conversion.
                             libobs::[<obs_property_ $obs_number_name _step>](pointer.0)
                         };
 
                         let suffix = unsafe {
-                            // Safety: The caller must have ensured that the pointer is valid
+                            // SAFETY: PropertyCreationInfo borrows an unchanged parent tree
+                            // retained by
+                            // property_ptr_to_struct throughout this inline actor conversion.
                             libobs::[<obs_property_ $obs_number_name _suffix>](pointer.0)
                         };
 
@@ -58,7 +66,9 @@ macro_rules! impl_from_property {
                             String::new()
                         } else {
                             let suffix = unsafe {
-                                // Safety: Safe because of we did a null check
+                                // SAFETY: The getter returns a tree-owned NUL-terminated string,
+                                // copied
+                                // while the parent tree is still retained and unchanged on the actor.
                                 std::ffi::CStr::from_ptr(suffix)
                             };
 
@@ -67,7 +77,9 @@ macro_rules! impl_from_property {
                         };
 
                         let number_type = unsafe {
-                            // Safety: The caller must have ensured that the pointer is valid
+                            // SAFETY: PropertyCreationInfo borrows an unchanged parent tree
+                            // retained by
+                            // property_ptr_to_struct throughout this inline actor conversion.
                             libobs::[<obs_property_ $obs_number_name _type >](pointer.0)
                         };
 

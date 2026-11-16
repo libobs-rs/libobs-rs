@@ -16,8 +16,8 @@ use windows::{
         Graphics::Dwm::DwmIsCompositionEnabled,
         System::LibraryLoader::{GetModuleHandleA, GetModuleHandleW},
         UI::WindowsAndMessaging::{
-            CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, GetWindowLongPtrW,
-            LoadCursorW, PostMessageW, PostQuitMessage, RegisterClassExW,
+            CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW,
+            GetWindowLongPtrW, LoadCursorW, PostMessageW, PostQuitMessage, RegisterClassExW,
             SetLayeredWindowAttributes, SetParent, SetWindowLongPtrW, TranslateMessage, CS_HREDRAW,
             CS_NOCLOSE, CS_OWNDC, CS_VREDRAW, GWLP_USERDATA, GWL_EXSTYLE, GWL_STYLE, HTTRANSPARENT,
             IDC_ARROW, LWA_ALPHA, MSG, WM_DISPLAYCHANGE, WM_MOVE, WM_NCHITTEST,
@@ -32,10 +32,65 @@ const WM_DESTROY_WINDOW: u32 = 0x8001; // Custom message
 #[derive(Debug, Clone, Copy)]
 struct MessageThreadHwnd(HWND);
 
-// HWND is an opaque OS handle. It is only used through Win32 APIs, and the window
-// itself is owned by the dedicated message thread until teardown completes.
+// SAFETY: This transports only an opaque borrowed HWND, with no Rust pointee or
+// destructor. The creating message thread owns/destroys the window; other threads
+// only use Win32 operations permitted across threads, such as PostMessageW.
 unsafe impl Send for MessageThreadHwnd {}
+// SAFETY: Sharing this handle does not share Rust memory or authorize thread-affine
+// operations. WindowUserData is separately retained and synchronized by its mutex.
 unsafe impl Sync for MessageThreadHwnd {}
+
+/// Created and dropped entirely on the window's owning message thread.
+struct MessageThreadWindow(HWND);
+
+impl Drop for MessageThreadWindow {
+    fn drop(&mut self) {
+        // SAFETY: This thread created the window and retains WindowUserData until
+        // after this guard drops, including any synchronous destruction messages.
+        unsafe {
+            SetWindowLongPtrW(self.0, GWLP_USERDATA, 0);
+            if let Err(error) = DestroyWindow(self.0) {
+                log::warn!("Failed to destroy preview window: {error}");
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use windows::Win32::UI::WindowsAndMessaging::IsWindow;
+
+    #[test]
+    fn message_thread_guard_destroys_its_window_on_scope_exit() {
+        // SAFETY: STATIC is a built-in window class; no userdata is passed. No
+        // WS_VISIBLE style is set, and this test thread owns the window throughout.
+        let window = unsafe {
+            CreateWindowExW(
+                Default::default(),
+                w!("STATIC"),
+                w!(""),
+                Default::default(),
+                0,
+                0,
+                0,
+                0,
+                None,
+                None,
+                None,
+                None,
+            )
+        }
+        .unwrap();
+        {
+            let _guard = MessageThreadWindow(window);
+            // SAFETY: IsWindow only checks this opaque OS handle.
+            assert!(unsafe { IsWindow(Some(window)) }.as_bool());
+        }
+        // SAFETY: IsWindow accepts stale handles; we do not dereference the destroyed window.
+        assert!(!unsafe { IsWindow(Some(window)) }.as_bool());
+    }
+}
 
 #[derive(Debug, Default)]
 struct WindowUserData {
@@ -202,7 +257,7 @@ impl WindowsPreviewChildWindowHandler {
                 .unwrap_or_else(|poisoned| poisoned.into_inner())
                 .0;
             // We have to have the whole window creation stuff here as well so the message loop functions
-            let create = move || -> Result<MessageThreadHwnd, ObsError> {
+            let create = move || -> Result<MessageThreadWindow, ObsError> {
                 log::trace!("Registering class...");
                 try_register_class().map_err(|e| ObsError::DisplayCreationError(e.to_string()))?;
                 let enabled = unsafe {
@@ -255,6 +310,7 @@ impl WindowsPreviewChildWindowHandler {
                     .map_err(|e| ObsError::DisplayCreationError(e.to_string()))?
                 };
 
+                let window_guard = MessageThreadWindow(window);
                 log::trace!("HWND is {:?}", window);
                 if !enabled {
                     log::trace!("Setting attributes alpha...");
@@ -298,10 +354,17 @@ impl WindowsPreviewChildWindowHandler {
                     SetWindowLongPtrW(window, GWL_EXSTYLE, ex_style);
                 }
 
-                Ok(MessageThreadHwnd(window))
+                Ok(window_guard)
             };
 
-            let r = create();
+            // Declared after thread_user_data so destruction runs before its Arc drops,
+            // including when the receiver disappears before creation completes.
+            let mut _window_guard = None;
+            let r = create().map(|owned| {
+                let borrowed = MessageThreadHwnd(owned.0);
+                _window_guard = Some(owned);
+                borrowed
+            });
             let window = r.as_ref().ok().map(|r| r.0);
             if let Some(window) = window {
                 unsafe {
@@ -327,11 +390,21 @@ impl WindowsPreviewChildWindowHandler {
             log::trace!("Starting up message thread...");
             let mut msg = MSG::default();
             unsafe {
-                // Safety: I've seen this plenty of times, and this is the correct way to run a message loop.
-                while !tmp.load(Ordering::Relaxed)
-                    && GetMessageW(&mut msg, Some(window), 0, 0).as_bool()
-                {
-                    //TODO check if this can really be ignored
+                // SAFETY: This thread owns window and its live userdata; msg is a
+                // writable MSG. Dispatch only after GetMessageW returns a positive
+                // result: zero is WM_QUIT, and -1 is an error, not a message.
+                while !tmp.load(Ordering::Relaxed) {
+                    let result = GetMessageW(&mut msg, Some(window), 0, 0).0;
+                    if result <= 0 {
+                        if result < 0 {
+                            log::warn!(
+                                "Preview message query failed: {}",
+                                std::io::Error::last_os_error()
+                            );
+                        }
+                        break;
+                    }
+                    // A false result only means no character message was generated.
                     let _ = TranslateMessage(&msg);
                     DispatchMessageW(&msg);
                 }

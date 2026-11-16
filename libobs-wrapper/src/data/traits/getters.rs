@@ -30,13 +30,15 @@ pub trait ObsDataGetters: ObsDataPointers {
 
         run_with_obs!(self.runtime(), (data_ptr, key), move || {
             let has_value = unsafe {
-                // Safety: We are running on the OBS runtime.
+                // SAFETY: data_ptr retains the native data; key owns its CString throughout this
+                // actor call.
                 has_value(data_ptr.clone(), &key)
             };
 
             if has_value {
                 let result = unsafe {
-                    // Safety: The pointer is valid because we are using a smart pointer
+                    // SAFETY: data_ptr retains the data reference on the actor; key owns a live
+                    // CString through this synchronous lookup.
                     libobs::obs_data_get_string(data_ptr.get_ptr(), key.as_ptr().0)
                 };
 
@@ -44,7 +46,8 @@ pub trait ObsDataGetters: ObsDataPointers {
                     Err(ObsError::NullPointer(None))
                 } else {
                     let result = unsafe {
-                        // Safety: The pointer is valid because OBS returned it and we are still in runtime.
+                        // SAFETY: libobs returns a data-owned NUL-terminated string; data_ptr
+                        // retains it and the actor copies it before any mutation.
                         CStr::from_ptr(result)
                     };
                     let result = result
@@ -65,13 +68,15 @@ pub trait ObsDataGetters: ObsDataPointers {
 
         run_with_obs!(self.runtime(), (data_ptr, key), move || {
             let has_value = unsafe {
-                // Safety: We are running on the OBS runtime.
+                // SAFETY: data_ptr retains the native data; key owns its CString throughout this
+                // actor call.
                 has_value(data_ptr.clone(), &key)
             };
 
             if has_value {
                 Some(unsafe {
-                    // Safety: The pointer is valid because we are using a smart pointer
+                    // SAFETY: data_ptr retains the data reference on the actor; key owns a live
+                    // CString through this synchronous lookup.
                     libobs::obs_data_get_int(data_ptr.get_ptr(), key.as_ptr().0)
                 })
             } else {
@@ -86,13 +91,15 @@ pub trait ObsDataGetters: ObsDataPointers {
 
         run_with_obs!(self.runtime(), (data_ptr, key), move || {
             let has_value = unsafe {
-                // Safety: We are running on the OBS runtime.
+                // SAFETY: data_ptr retains the native data; key owns its CString throughout this
+                // actor call.
                 has_value(data_ptr.clone(), &key)
             };
 
             if has_value {
                 Some(unsafe {
-                    // Safety: The pointer is valid because we are using a smart pointer
+                    // SAFETY: data_ptr retains the data reference on the actor; key owns a live
+                    // CString through this synchronous lookup.
                     libobs::obs_data_get_bool(data_ptr.get_ptr(), key.as_ptr().0)
                 })
             } else {
@@ -109,13 +116,15 @@ pub trait ObsDataGetters: ObsDataPointers {
 
         let result = run_with_obs!(self.runtime(), (key, data_ptr), move || {
             let has_value = unsafe {
-                // Safety: We are running on the OBS runtime.
+                // SAFETY: data_ptr retains the native data; key owns its CString throughout this
+                // actor call.
                 has_value(data_ptr.clone(), &key)
             };
 
             if has_value {
                 Some(unsafe {
-                    // Safety: The pointer is valid because we are using a smart pointer
+                    // SAFETY: data_ptr retains the data reference on the actor; key owns a live
+                    // CString through this synchronous lookup.
                     libobs::obs_data_get_double(data_ptr.get_ptr(), key.as_ptr().0)
                 })
             } else {
@@ -130,7 +139,8 @@ pub trait ObsDataGetters: ObsDataPointers {
         let data_ptr = self.as_ptr();
         run_with_obs!(self.runtime(), (data_ptr), move || {
             let json_ptr = unsafe {
-                // Safety: The pointer is valid because we are using a smart pointer
+                // SAFETY: data_ptr retains the data reference throughout actor-side JSON
+                // serialization.
                 libobs::obs_data_get_json(data_ptr.get_ptr())
             };
 
@@ -141,7 +151,8 @@ pub trait ObsDataGetters: ObsDataPointers {
             }
 
             let json = unsafe {
-                // Safety: The pointer is valid because OBS returned it and we are still in runtime.
+                // SAFETY: libobs returns a data-owned NUL-terminated string; data_ptr retains it
+                // and the actor copies it before any mutation.
                 CStr::from_ptr(json_ptr)
             }
             .to_str()

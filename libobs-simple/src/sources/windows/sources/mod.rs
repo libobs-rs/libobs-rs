@@ -36,7 +36,8 @@ pub(super) fn audio_capture_available(runtime: &ObsRuntime) -> Result<bool, ObsE
 }
 
 impl_signal_manager!(|ptr: SmartPointerSendable<*mut libobs::obs_source>| unsafe {
-    // Safety: We are using a smart pointer, so it is fine
+    // SAFETY: ptr retains the source reference through this actor call. The signal
+    // manager keeps that lease through disconnect; the handler is source-owned.
     libobs::obs_source_get_signal_handler(ptr.raw_ptr_unchecked())
 }, ObsHookableSourceSignals for *mut libobs::obs_source, [
     "hooked": {struct HookedSignal {

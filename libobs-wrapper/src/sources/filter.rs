@@ -59,7 +59,9 @@ impl _ObsRemoveFilterOnDrop {
 
 impl ObsDropGuard for _ObsRemoveFilterOnDrop {}
 impl_obs_drop!(_ObsRemoveFilterOnDrop, (source, filter), move || unsafe {
-    // Safety: This is safe because both pointers still exist because of the SmartPointers.
+    // SAFETY: The actor cleanup task retains both leases until removal finishes.
+    // libobs releases the attachment reference; the leases release their own native
+    // references separately when this task drops them.
     libobs::obs_source_filter_remove(source.get_ptr(), filter.get_ptr());
 });
 

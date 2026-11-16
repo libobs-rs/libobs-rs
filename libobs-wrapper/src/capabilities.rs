@@ -1286,19 +1286,20 @@ type DefaultsFn = unsafe extern "C" fn(*const c_char) -> *mut libobs::obs_data_t
 #[allow(unknown_lints)]
 #[allow(ensure_obs_call_in_runtime)]
 /// # Safety
-/// This helper may only be called from an `ObsRuntime` actor command. All native pointers
-/// supplied to it must remain valid for the duration of the call.
+/// Run on the OBS actor with an initialized registry. `enum_fn` must be a libobs type
+/// enumerator returning null or registry-owned NUL-terminated IDs.
 unsafe fn enum_ids_on_actor(enum_fn: EnumTypeFn) -> Vec<String> {
     let mut result = Vec::new();
     let mut index = 0;
     loop {
         let mut id = ptr::null();
-        // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+        // SAFETY: The libobs enumerator runs on the actor; id is a live writable out pointer.
         if !unsafe { enum_fn(index, &mut id) } {
             break;
         }
         index += 1;
-        // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+        // SAFETY: Enumeration returns a registry-owned NUL-terminated ID; copy it before leaving
+        // the actor.
         if let Some(id) = unsafe { cstr_owned(id) } {
             result.push(id);
         }
@@ -1310,7 +1311,8 @@ unsafe fn enum_ids_on_actor(enum_fn: EnumTypeFn) -> Vec<String> {
 
 fn discover_sources(runtime: &ObsRuntime) -> Result<Vec<SourceTypeInfo>, ObsError> {
     let runtime_for_result = runtime.clone();
-    // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+    // SAFETY: run_with_obs retains the initialized runtime on its owner thread; local C IDs outlive
+    // lookups and registry strings are copied before returning.
     let rows = run_with_obs!(runtime, move || unsafe {
         let inputs: HashSet<_> = enum_ids_on_actor(libobs::obs_enum_input_types)
             .into_iter()
@@ -1358,7 +1360,8 @@ fn discover_source_category(
     enum_fn: EnumTypeFn,
 ) -> Result<Vec<SourceTypeInfo>, ObsError> {
     let runtime_for_result = runtime.clone();
-    // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+    // SAFETY: run_with_obs retains the initialized runtime on its owner thread; local C IDs outlive
+    // lookups and registry strings are copied before returning.
     let rows = run_with_obs!(runtime, move || unsafe {
         enum_ids_on_actor(enum_fn)
             .into_iter()
@@ -1386,7 +1389,8 @@ fn discover_source_category(
 
 fn discover_outputs(runtime: &ObsRuntime) -> Result<Vec<OutputTypeInfo>, ObsError> {
     let runtime_for_result = runtime.clone();
-    // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+    // SAFETY: run_with_obs retains the initialized runtime on its owner thread; local C IDs outlive
+    // lookups and registry strings are copied before returning.
     let rows = run_with_obs!(runtime, move || unsafe {
         let ids = enum_ids_on_actor(libobs::obs_enum_output_types);
         let mut protocols_by_output = HashMap::<String, Vec<String>>::new();
@@ -1466,7 +1470,8 @@ unsafe extern "C" fn collect_output_type_id(data: *mut c_void, id: *const c_char
 
 fn discover_encoders(runtime: &ObsRuntime) -> Result<Vec<EncoderTypeInfo>, ObsError> {
     let runtime_for_result = runtime.clone();
-    // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+    // SAFETY: run_with_obs retains the initialized runtime on its owner thread; local C IDs outlive
+    // lookups and registry strings are copied before returning.
     let rows = run_with_obs!(runtime, move || unsafe {
         enum_ids_on_actor(libobs::obs_enum_encoder_types)
             .into_iter()
@@ -1507,7 +1512,8 @@ fn discover_encoders(runtime: &ObsRuntime) -> Result<Vec<EncoderTypeInfo>, ObsEr
 
 fn discover_services(runtime: &ObsRuntime) -> Result<Vec<ServiceTypeInfo>, ObsError> {
     let runtime_for_result = runtime.clone();
-    // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+    // SAFETY: run_with_obs retains the initialized runtime on its owner thread; local C IDs outlive
+    // lookups and registry strings are copied before returning.
     let rows = run_with_obs!(runtime, move || unsafe {
         enum_ids_on_actor(libobs::obs_enum_service_types)
             .into_iter()
@@ -1531,7 +1537,8 @@ fn discover_services(runtime: &ObsRuntime) -> Result<Vec<ServiceTypeInfo>, ObsEr
 }
 
 fn discover_protocols(runtime: &ObsRuntime) -> Result<Vec<String>, ObsError> {
-    // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+    // SAFETY: The actor retains the initialized output registry; protocol is a live
+    // out pointer, and returned NUL-terminated protocol strings are copied immediately.
     run_with_obs!(runtime, move || unsafe {
         let mut result = Vec::new();
         let mut index = 0;
@@ -1557,26 +1564,35 @@ fn discover_modules(runtime: &ObsRuntime) -> Result<Vec<ModuleInfo>, ObsError> {
     /// # Safety
     /// Called synchronously by `obs_enum_modules` on the OBS actor. `param` points to the
     /// live `Vec<ModuleInfo>` owned by `discover_modules` for the complete enumeration.
+    /// `module` must be the live module lent by libobs for this callback.
     unsafe extern "C" fn collect(param: *mut std::ffi::c_void, module: *mut libobs::obs_module_t) {
-        // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+        // SAFETY: obs_enum_modules synchronously passes our exclusively borrowed Vec; no reference
+        // escapes.
         let rows = unsafe { &mut *(param as *mut Vec<ModuleInfo>) };
         rows.push(ModuleInfo {
-            // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+            // SAFETY: obs_enum_modules lends a live module; its NUL-terminated metadata strings are
+            // copied during this callback.
             file_name: unsafe { cstr_owned(libobs::obs_get_module_file_name(module)) },
-            // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+            // SAFETY: obs_enum_modules lends a live module; its NUL-terminated metadata strings are
+            // copied during this callback.
             name: unsafe { cstr_owned(libobs::obs_get_module_name(module)) },
-            // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+            // SAFETY: obs_enum_modules lends a live module; its NUL-terminated metadata strings are
+            // copied during this callback.
             author: unsafe { cstr_owned(libobs::obs_get_module_author(module)) },
-            // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+            // SAFETY: obs_enum_modules lends a live module; its NUL-terminated metadata strings are
+            // copied during this callback.
             description: unsafe { cstr_owned(libobs::obs_get_module_description(module)) },
-            // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+            // SAFETY: obs_enum_modules lends a live module; its NUL-terminated metadata strings are
+            // copied during this callback.
             binary_path: unsafe { cstr_owned(libobs::obs_get_module_binary_path(module)) },
-            // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+            // SAFETY: obs_enum_modules lends a live module; its NUL-terminated metadata strings are
+            // copied during this callback.
             data_path: unsafe { cstr_owned(libobs::obs_get_module_data_path(module)) },
         });
     }
 
-    // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+    // SAFETY: This actor command retains the initialized module registry while
+    // synchronous enumeration passes the live local Vec to collect.
     run_with_obs!(runtime, move || unsafe {
         let mut rows: Vec<ModuleInfo> = Vec::new();
         // SAFETY: obs_enum_modules is synchronous; the Vec address remains valid for the
@@ -1593,7 +1609,8 @@ fn type_properties(
     getter: PropertiesFn,
 ) -> Result<Vec<PropertyMetadata>, ObsError> {
     let id = ObsString::new(id);
-    // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+    // SAFETY: The id CString lives through the actor call; getter transfers an owned tree, which is
+    // copied and destroyed by snapshot_owned_properties.
     run_with_obs!(runtime, (id), move || unsafe {
         // SAFETY: The property tree is created, fully copied, and destroyed on the actor.
         let properties = getter(id.as_ptr().0);
@@ -1640,7 +1657,8 @@ fn default_settings(
     getter: DefaultsFn,
 ) -> Result<Option<ImmutableObsData>, ObsError> {
     let id = ObsString::new(id);
-    // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+    // SAFETY: The id CString lives through the actor call; getter transfers an owned data reference
+    // into ImmutableObsData below.
     let ptr = run_with_obs!(runtime, (id), move || unsafe {
         // SAFETY: Type-default lookup runs on the OBS actor and returns an owned obs_data_t.
         Sendable(getter(id.as_ptr().0))
@@ -1694,17 +1712,18 @@ fn capability_kind_mismatch(id: &str, expected: &str, actual: &str) -> ObsError 
 #[allow(unknown_lints)]
 #[allow(ensure_obs_call_in_runtime)]
 /// # Safety
-/// This helper may only be called from an `ObsRuntime` actor command. All native pointers
-/// supplied to it must remain valid for the duration of the call.
+/// Run on the OBS actor. Transfer sole ownership of `properties` (or null) to this
+/// helper, which destroys it. No other code may mutate or destroy it during copying.
 pub(crate) unsafe fn snapshot_owned_properties(
     properties: *mut libobs::obs_properties_t,
 ) -> Vec<PropertyMetadata> {
     if properties.is_null() {
         return Vec::new();
     }
-    // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+    // SAFETY: This helper owns the tree until copying finishes on the actor.
     let result = unsafe { snapshot_properties(properties) };
-    // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+    // SAFETY: The tree was transferred here; copying is finished and no borrowed property or string
+    // escapes.
     unsafe { libobs::obs_properties_destroy(properties) };
     result
 }
@@ -1712,27 +1731,31 @@ pub(crate) unsafe fn snapshot_owned_properties(
 #[allow(unknown_lints)]
 #[allow(ensure_obs_call_in_runtime)]
 /// # Safety
-/// This helper may only be called from an `ObsRuntime` actor command. All native pointers
-/// supplied to it must remain valid for the duration of the call.
+/// Run on the OBS actor. Retain the live property tree without mutation or destruction
+/// throughout this call, including recursive snapshots of its child groups.
 unsafe fn snapshot_properties(properties: *mut libobs::obs_properties_t) -> Vec<PropertyMetadata> {
     let mut result = Vec::new();
-    // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+    // SAFETY: The caller retains this property tree without mutation throughout the actor snapshot.
     let mut property = unsafe { libobs::obs_properties_first(properties) };
     while !property.is_null() {
-        // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+        // SAFETY: property is borrowed from the retained tree on the actor; returned NUL-terminated
+        // strings are copied before mutation or destruction.
         let name = unsafe { cstr_owned(libobs::obs_property_name(property)) }.unwrap_or_default();
-        // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+        // SAFETY: property is borrowed from the retained tree on the actor; returned NUL-terminated
+        // strings are copied before mutation or destruction.
         let description = unsafe { cstr_owned(libobs::obs_property_description(property)) };
         let long_description =
-            // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+            // SAFETY: property is borrowed from the retained tree on the actor; returned
+            // NUL-terminated strings are copied before mutation or destruction.
             unsafe { cstr_owned(libobs::obs_property_long_description(property)) };
-        // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+        // SAFETY: property is an iterator borrow from the tree retained unchanged on the actor.
         let enabled = unsafe { libobs::obs_property_enabled(property) };
-        // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+        // SAFETY: property is an iterator borrow from the tree retained unchanged on the actor.
         let visible = unsafe { libobs::obs_property_visible(property) };
-        // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+        // SAFETY: property is an iterator borrow from the tree retained unchanged on the actor.
         let raw_type = unsafe { libobs::obs_property_get_type(property) } as i64;
-        // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+        // SAFETY: property belongs to the retained tree and raw_type was queried from this same
+        // property on the actor.
         let kind = unsafe { snapshot_property_kind(property, raw_type) };
         result.push(PropertyMetadata {
             name,
@@ -1742,7 +1765,8 @@ unsafe fn snapshot_properties(properties: *mut libobs::obs_properties_t) -> Vec<
             visible,
             kind,
         });
-        // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+        // SAFETY: property is borrowed from the retained tree; next writes the local cursor and
+        // does not mutate the tree.
         if !unsafe { libobs::obs_property_next(&mut property) } {
             break;
         }
@@ -1753,8 +1777,8 @@ unsafe fn snapshot_properties(properties: *mut libobs::obs_properties_t) -> Vec<
 #[allow(unknown_lints)]
 #[allow(ensure_obs_call_in_runtime)]
 /// # Safety
-/// This helper may only be called from an `ObsRuntime` actor command. All native pointers
-/// supplied to it must remain valid for the duration of the call.
+/// Run on the OBS actor. `property` must belong to a retained, unchanged tree, and
+/// `raw_type` must be the type returned by obs_property_get_type for this property.
 unsafe fn snapshot_property_kind(
     property: *mut libobs::obs_property_t,
     raw_type: i64,
@@ -1765,84 +1789,109 @@ unsafe fn snapshot_property_kind(
         PropertyKind::Bool
     } else if raw_type == libobs::obs_property_type_OBS_PROPERTY_INT as i64 {
         PropertyKind::Integer {
-            // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+            // SAFETY: raw_type selects matching typed getters on the retained, unchanged tree on
+            // the actor; borrowed strings are copied immediately.
             min: unsafe { libobs::obs_property_int_min(property) },
-            // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+            // SAFETY: raw_type selects matching typed getters on the retained, unchanged tree on
+            // the actor; borrowed strings are copied immediately.
             max: unsafe { libobs::obs_property_int_max(property) },
-            // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+            // SAFETY: raw_type selects matching typed getters on the retained, unchanged tree on
+            // the actor; borrowed strings are copied immediately.
             step: unsafe { libobs::obs_property_int_step(property) },
-            // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+            // SAFETY: raw_type selects matching typed getters on the retained, unchanged tree on
+            // the actor; borrowed strings are copied immediately.
             suffix: unsafe { cstr_owned(libobs::obs_property_int_suffix(property)) },
             control: NumberControl::from_raw(
-                // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+                // SAFETY: raw_type selects matching typed getters on the retained, unchanged tree
+                // on the actor; borrowed strings are copied immediately.
                 unsafe { libobs::obs_property_int_type(property) } as i64,
             ),
         }
     } else if raw_type == libobs::obs_property_type_OBS_PROPERTY_FLOAT as i64 {
         PropertyKind::Float {
-            // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+            // SAFETY: raw_type selects matching typed getters on the retained, unchanged tree on
+            // the actor; borrowed strings are copied immediately.
             min: unsafe { libobs::obs_property_float_min(property) },
-            // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+            // SAFETY: raw_type selects matching typed getters on the retained, unchanged tree on
+            // the actor; borrowed strings are copied immediately.
             max: unsafe { libobs::obs_property_float_max(property) },
-            // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+            // SAFETY: raw_type selects matching typed getters on the retained, unchanged tree on
+            // the actor; borrowed strings are copied immediately.
             step: unsafe { libobs::obs_property_float_step(property) },
-            // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+            // SAFETY: raw_type selects matching typed getters on the retained, unchanged tree on
+            // the actor; borrowed strings are copied immediately.
             suffix: unsafe { cstr_owned(libobs::obs_property_float_suffix(property)) },
             control: NumberControl::from_raw(
-                // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+                // SAFETY: raw_type selects matching typed getters on the retained, unchanged tree
+                // on the actor; borrowed strings are copied immediately.
                 unsafe { libobs::obs_property_float_type(property) } as i64,
             ),
         }
     } else if raw_type == libobs::obs_property_type_OBS_PROPERTY_TEXT as i64 {
         PropertyKind::Text {
             text_type: TextType::from_raw(
-                // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+                // SAFETY: raw_type selects matching typed getters on the retained, unchanged tree
+                // on the actor; borrowed strings are copied immediately.
                 unsafe { libobs::obs_property_text_type(property) } as i64,
             ),
-            // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+            // SAFETY: raw_type selects matching typed getters on the retained, unchanged tree on
+            // the actor; borrowed strings are copied immediately.
             monospace: unsafe { libobs::obs_property_text_monospace(property) },
-            // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+            // SAFETY: raw_type selects matching typed getters on the retained, unchanged tree on
+            // the actor; borrowed strings are copied immediately.
             info_type: TextInfoType::from_raw(unsafe {
                 libobs::obs_property_text_info_type(property)
             } as i64),
-            // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+            // SAFETY: raw_type selects matching typed getters on the retained, unchanged tree on
+            // the actor; borrowed strings are copied immediately.
             word_wrap: unsafe { libobs::obs_property_text_info_word_wrap(property) },
         }
     } else if raw_type == libobs::obs_property_type_OBS_PROPERTY_PATH as i64 {
         PropertyKind::Path {
             path_type: PathType::from_raw(
-                // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+                // SAFETY: raw_type selects matching typed getters on the retained, unchanged tree
+                // on the actor; borrowed strings are copied immediately.
                 unsafe { libobs::obs_property_path_type(property) } as i64,
             ),
-            // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+            // SAFETY: raw_type selects matching typed getters on the retained, unchanged tree on
+            // the actor; borrowed strings are copied immediately.
             filter: unsafe { cstr_owned(libobs::obs_property_path_filter(property)) },
-            // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+            // SAFETY: raw_type selects matching typed getters on the retained, unchanged tree on
+            // the actor; borrowed strings are copied immediately.
             default_path: unsafe { cstr_owned(libobs::obs_property_path_default_path(property)) },
         }
     } else if raw_type == libobs::obs_property_type_OBS_PROPERTY_LIST as i64 {
-        // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+        // SAFETY: raw_type selects matching typed getters on the retained, unchanged tree on the
+        // actor; borrowed strings are copied immediately.
         let format_raw = unsafe { libobs::obs_property_list_format(property) } as i64;
-        // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+        // SAFETY: raw_type selects matching typed getters on the retained, unchanged tree on the
+        // actor; borrowed strings are copied immediately.
         let count = unsafe { libobs::obs_property_list_item_count(property) };
         let mut items = Vec::with_capacity(count);
         for index in 0..count {
-            // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+            // SAFETY: The type/format branch matches this getter; index is below the queried count
+            // and the tree is unchanged. Borrowed strings are copied immediately.
             let name = unsafe { cstr_owned(libobs::obs_property_list_item_name(property, index)) }
                 .unwrap_or_default();
             let value = if format_raw == libobs::obs_combo_format_OBS_COMBO_FORMAT_STRING as i64 {
                 ListValue::String(
-                    // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+                    // SAFETY: The type/format branch matches this getter; index is below the
+                    // queried count and the tree is unchanged. Borrowed strings are copied
+                    // immediately.
                     unsafe { cstr_owned(libobs::obs_property_list_item_string(property, index)) }
                         .unwrap_or_default(),
                 )
             } else if format_raw == libobs::obs_combo_format_OBS_COMBO_FORMAT_INT as i64 {
-                // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+                // SAFETY: The type/format branch matches this getter; index is below the queried
+                // count and the tree is unchanged. Borrowed strings are copied immediately.
                 ListValue::Int(unsafe { libobs::obs_property_list_item_int(property, index) })
             } else if format_raw == libobs::obs_combo_format_OBS_COMBO_FORMAT_FLOAT as i64 {
-                // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+                // SAFETY: The type/format branch matches this getter; index is below the queried
+                // count and the tree is unchanged. Borrowed strings are copied immediately.
                 ListValue::Float(unsafe { libobs::obs_property_list_item_float(property, index) })
             } else if format_raw == libobs::obs_combo_format_OBS_COMBO_FORMAT_BOOL as i64 {
-                // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+                // SAFETY: The type/format branch matches this getter; index is below the queried
+                // count and the tree is unchanged. Borrowed strings are copied immediately.
                 ListValue::Bool(unsafe { libobs::obs_property_list_item_bool(property, index) })
             } else {
                 ListValue::UnknownFormat(format_raw)
@@ -1850,13 +1899,15 @@ unsafe fn snapshot_property_kind(
             items.push(ListItem {
                 name,
                 value,
-                // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+                // SAFETY: The type/format branch matches this getter; index is below the queried
+                // count and the tree is unchanged. Borrowed strings are copied immediately.
                 disabled: unsafe { libobs::obs_property_list_item_disabled(property, index) },
             });
         }
         PropertyKind::List {
             list_type: ListType::from_raw(
-                // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+                // SAFETY: raw_type selects matching typed getters on the retained, unchanged tree
+                // on the actor; borrowed strings are copied immediately.
                 unsafe { libobs::obs_property_list_type(property) } as i64,
             ),
             format: ListFormat::from_raw(format_raw),
@@ -1867,38 +1918,46 @@ unsafe fn snapshot_property_kind(
     } else if raw_type == libobs::obs_property_type_OBS_PROPERTY_BUTTON as i64 {
         PropertyKind::Button {
             button_type: ButtonType::from_raw(
-                // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+                // SAFETY: raw_type selects matching typed getters on the retained, unchanged tree
+                // on the actor; borrowed strings are copied immediately.
                 unsafe { libobs::obs_property_button_type(property) } as i64,
             ),
-            // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+            // SAFETY: raw_type selects matching typed getters on the retained, unchanged tree on
+            // the actor; borrowed strings are copied immediately.
             url: unsafe { cstr_owned(libobs::obs_property_button_url(property)) },
         }
     } else if raw_type == libobs::obs_property_type_OBS_PROPERTY_FONT as i64 {
         PropertyKind::Font
     } else if raw_type == libobs::obs_property_type_OBS_PROPERTY_EDITABLE_LIST as i64 {
         PropertyKind::EditableList {
-            // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+            // SAFETY: raw_type selects matching typed getters on the retained, unchanged tree on
+            // the actor; borrowed strings are copied immediately.
             list_type: EditableListType::from_raw(unsafe {
                 libobs::obs_property_editable_list_type(property)
             } as i64),
-            // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+            // SAFETY: raw_type selects matching typed getters on the retained, unchanged tree on
+            // the actor; borrowed strings are copied immediately.
             filter: unsafe { cstr_owned(libobs::obs_property_editable_list_filter(property)) },
-            // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+            // SAFETY: raw_type selects matching typed getters on the retained, unchanged tree on
+            // the actor; borrowed strings are copied immediately.
             default_path: unsafe {
                 cstr_owned(libobs::obs_property_editable_list_default_path(property))
             },
         }
     } else if raw_type == libobs::obs_property_type_OBS_PROPERTY_FRAME_RATE as i64 {
-        // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+        // SAFETY: raw_type selects matching typed getters on the retained, unchanged tree on the
+        // actor; borrowed strings are copied immediately.
         let option_count = unsafe { libobs::obs_property_frame_rate_options_count(property) };
         let mut options = Vec::with_capacity(option_count);
         for index in 0..option_count {
             options.push(FrameRateOption {
-                // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+                // SAFETY: The type/format branch matches this getter; index is below the queried
+                // count and the tree is unchanged. Borrowed strings are copied immediately.
                 name: unsafe {
                     cstr_owned(libobs::obs_property_frame_rate_option_name(property, index))
                 },
-                // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+                // SAFETY: The type/format branch matches this getter; index is below the queried
+                // count and the tree is unchanged. Borrowed strings are copied immediately.
                 description: unsafe {
                     cstr_owned(libobs::obs_property_frame_rate_option_description(
                         property, index,
@@ -1906,13 +1965,16 @@ unsafe fn snapshot_property_kind(
                 },
             });
         }
-        // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+        // SAFETY: raw_type selects matching typed getters on the retained, unchanged tree on the
+        // actor; borrowed strings are copied immediately.
         let range_count = unsafe { libobs::obs_property_frame_rate_fps_ranges_count(property) };
         let mut ranges = Vec::with_capacity(range_count);
         for index in 0..range_count {
-            // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+            // SAFETY: The type/format branch matches this getter; index is below the queried count
+            // and the tree is unchanged. Borrowed strings are copied immediately.
             let min = unsafe { libobs::obs_property_frame_rate_fps_range_min(property, index) };
-            // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+            // SAFETY: The type/format branch matches this getter; index is below the queried count
+            // and the tree is unchanged. Borrowed strings are copied immediately.
             let max = unsafe { libobs::obs_property_frame_rate_fps_range_max(property, index) };
             ranges.push(FrameRateRange {
                 min: FrameRate {
@@ -1927,17 +1989,20 @@ unsafe fn snapshot_property_kind(
         }
         PropertyKind::FrameRate { options, ranges }
     } else if raw_type == libobs::obs_property_type_OBS_PROPERTY_GROUP as i64 {
-        // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+        // SAFETY: raw_type selects matching typed getters on the retained, unchanged tree on the
+        // actor; borrowed strings are copied immediately.
         let content = unsafe { libobs::obs_property_group_content(property) };
         PropertyKind::Group {
             group_type: GroupType::from_raw(
-                // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+                // SAFETY: raw_type selects matching typed getters on the retained, unchanged tree
+                // on the actor; borrowed strings are copied immediately.
                 unsafe { libobs::obs_property_group_type(property) } as i64,
             ),
             properties: if content.is_null() {
                 Vec::new()
             } else {
-                // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+                // SAFETY: content is a non-null child tree borrowed from the retained parent;
+                // recursive copying does not destroy it.
                 unsafe { snapshot_properties(content) }
             },
         }
@@ -1955,7 +2020,8 @@ unsafe fn cstr_owned(ptr: *const c_char) -> Option<String> {
         None
     } else {
         Some(
-            // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+            // SAFETY: The unsafe caller guarantees readable storage through the terminating NUL;
+            // the result is copied into owned Rust storage.
             unsafe { CStr::from_ptr(ptr) }
                 .to_string_lossy()
                 .into_owned(),
@@ -1963,8 +2029,6 @@ unsafe fn cstr_owned(ptr: *const c_char) -> Option<String> {
     }
 }
 
-/// # Safety
-/// A non-null `ptr` must address a NUL-terminated C string that is readable for this call.
 fn capability_list_supports(values: &[String], requested: &str) -> bool {
     values.is_empty()
         || values
@@ -1972,8 +2036,11 @@ fn capability_list_supports(values: &[String], requested: &str) -> bool {
             .any(|value| value.eq_ignore_ascii_case(requested))
 }
 
-fn split_capability_string(ptr: *const c_char) -> Vec<String> {
-    // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
+/// # Safety
+/// A non-null `ptr` must be readable through its terminating NUL for this call.
+unsafe fn split_capability_string(ptr: *const c_char) -> Vec<String> {
+    // SAFETY: The unsafe caller guarantees readable storage through the terminating NUL; the result
+    // is copied into owned Rust storage.
     let Some(value) = (unsafe { cstr_owned(ptr) }) else {
         return Vec::new();
     };
@@ -2000,8 +2067,8 @@ mod tests {
     #[test]
     fn capability_string_parser_is_owned_and_tolerant() {
         let text = std::ffi::CString::new("h264, hevc;av1").unwrap();
-        // SAFETY: The surrounding actor/helper contract guarantees native pointer validity for this call.
-        let parsed = split_capability_string(text.as_ptr());
+        // SAFETY: text owns a NUL-terminated CString that remains live throughout parsing.
+        let parsed = unsafe { split_capability_string(text.as_ptr()) };
         assert_eq!(parsed, ["h264", "hevc", "av1"]);
     }
 }
